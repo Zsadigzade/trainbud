@@ -27,6 +27,8 @@
     <string id="PairingInstructions">Open dashboard &amp; enter code:</string>
     <string id="PairingPolling">Waiting for approval...</string>
     <string id="PairingError">Pairing failed. Tap to retry.</string>
+    <string id="ErrorCodePrefix">Error</string>
+    <string id="NoPhoneHint">Phone not connected</string>
     <string id="AiThinking">Asking AI...</string>
     <string id="AiError">AI unavailable</string>
     <string id="AiNoInsight">No insight today</string>

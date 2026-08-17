@@ -34,6 +34,17 @@ class TrainBudApp extends Application.AppBase {
     private var _cachedAt   as Number or Null = null;
 
     // Pairing state
+    // Last transport/HTTP code from a failed pairing attempt. Without this every
+    // failure rendered the same "Pairing failed" screen, so a phone that was not
+    // connected looked identical to a server that was down.
+    private var _pairErrorCode as Number or Null = null;
+
+    // First slice of the response body when pairing fails with a 2xx. A 200 with
+    // an unexpected body means something answered that is not our server — a
+    // proxy, a captive portal, or an error page — and the only way to identify
+    // it from the wrist is to show what actually came back.
+    private var _pairErrorBody as String or Null = null;
+
     private var _pairCode      as String or Null = null;
     private var _pairExpiresAt as Number or Null = null;
     private var _pairTimer     as Timer.Timer or Null = null;
@@ -317,9 +328,21 @@ class TrainBudApp extends Application.AppBase {
                 return;
             }
         }
+        _pairErrorCode = responseCode;
+
+        if (data == null) {
+            _pairErrorBody = "<null body>";
+        } else {
+            var text = data.toString();
+            _pairErrorBody = text.length() > 90 ? text.substring(0, 90) : text;
+        }
+
         setStatus("pairing_error");
         WatchUi.requestUpdate();
     }
+
+    function getPairErrorCode() as Number or Null { return _pairErrorCode; }
+    function getPairErrorBody() as String or Null { return _pairErrorBody; }
 
     private function stopPairTimer() as Void {
         if (_pairTimer != null) {

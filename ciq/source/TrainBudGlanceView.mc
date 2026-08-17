@@ -26,6 +26,15 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
     // Must match STORAGE_SUMMARY_KEY in TrainBudApp.
     private const STORAGE_SUMMARY_KEY = "summary";
 
+    // Literals, not Rez lookups. The glance runs in its own build scope where
+    // the Rez module is not accessible: calling WatchUi.loadResource here throws
+    // "Illegal Access (Out of Bounds) - Could not access symbol 'Rez'" and takes
+    // the whole glance down. The app is English-only, so nothing is lost.
+    private const TITLE       = "TrainBud";
+    private const NO_DATA     = "Open to sync";
+    private const LABEL_REC   = "Rec";
+    private const LABEL_SLEEP = "Sleep";
+
     function initialize() {
         GlanceView.initialize();
     }
@@ -41,7 +50,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         dc.drawText(
             0, 0,
             Graphics.FONT_GLANCE,
-            WatchUi.loadResource(Rez.Strings.GlanceTitle) as String,
+            TITLE,
             Graphics.TEXT_JUSTIFY_LEFT
         );
 
@@ -51,7 +60,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             dc.drawText(
                 0, height / 2,
                 Graphics.FONT_GLANCE,
-                WatchUi.loadResource(Rez.Strings.GlanceNoData) as String,
+                NO_DATA,
                 Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
             );
             return;
@@ -67,7 +76,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             dc,
             0,
             baseline,
-            WatchUi.loadResource(Rez.Strings.LabelRecovery) as String,
+            LABEL_REC,
             recovery == null ? "--" : recovery.toString(),
             recoveryColor(recovery)
         );
@@ -77,7 +86,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             dc,
             width / 2,
             baseline,
-            WatchUi.loadResource(Rez.Strings.LabelSleep) as String,
+            LABEL_SLEEP,
             sleepH == null ? "--" : sleepH.toString() + "h",
             Graphics.COLOR_WHITE
         );

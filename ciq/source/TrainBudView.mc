@@ -34,7 +34,7 @@ class TrainBudView extends WatchUi.View {
         }
 
         if (status.equals("pairing_error")) {
-            drawMessage(dc, WatchUi.loadResource(Rez.Strings.PairingError) as String);
+            drawPairingError(dc, app);
             return;
         }
 
@@ -220,6 +220,47 @@ class TrainBudView extends WatchUi.View {
 
     private function isRoundScreen(dc as Dc) as Boolean {
         return dc.getWidth() == dc.getHeight() && dc.getWidth() >= 240;
+    }
+
+    // Shows the transport/HTTP code alongside the message. Connect IQ reports
+    // "no phone connection" as -104 and a request timeout as -400, and without
+    // the number on screen those are indistinguishable from a server fault.
+    private function drawPairingError(dc as Dc, app as TrainBudApp) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, cy - 22, Graphics.FONT_SMALL,
+            WatchUi.loadResource(Rez.Strings.PairingError) as String,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        var code = app.getPairErrorCode();
+        if (code != null) {
+            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, cy + 10, Graphics.FONT_XTINY,
+                (WatchUi.loadResource(Rez.Strings.ErrorCodePrefix) as String) + " " + code.toString(),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+            if (code == -104) {
+                dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(cx, cy + 34, Graphics.FONT_XTINY,
+                    WatchUi.loadResource(Rez.Strings.NoPhoneHint) as String,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            } else {
+                // A 2xx with an unexpected body: show what actually arrived.
+                var body = app.getPairErrorBody();
+                if (body != null) {
+                    dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+                    var lines = wrapText(body as String, 24);
+                    var shown = lines.size() > 4 ? 4 : lines.size();
+                    for (var i = 0; i < shown; i += 1) {
+                        dc.drawText(cx, cy + 32 + (i * 15), Graphics.FONT_XTINY,
+                            lines[i] as String,
+                            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+                    }
+                }
+            }
+        }
     }
 
     private function drawMessage(dc as Dc, message as String) as Void {
