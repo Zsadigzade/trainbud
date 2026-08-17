@@ -24,13 +24,13 @@ function mapActivity(activity: IActivity): ActivitySummary {
     name: activity.activityName,
     type: activity.activityType.typeKey,
     startTimeLocal: activity.startTimeLocal,
-    distanceMeters: activity.distance,
-    durationSeconds: activity.duration,
+    distanceMeters: activity.distance ?? null,
+    durationSeconds: activity.duration ?? null,
     averageHeartRate: activity.averageHR ?? null,
     maxHeartRate: activity.maxHR ?? null,
-    elevationGainMeters: activity.elevationGain,
-    calories: activity.calories,
-    averageSpeedMps: activity.averageSpeed,
+    elevationGainMeters: activity.elevationGain ?? null,
+    calories: activity.calories ?? null,
+    averageSpeedMps: activity.averageSpeed ?? null,
   };
 }
 
@@ -44,8 +44,8 @@ export function formatActivitySummary(activity: ActivitySummary): string {
     `Pace: ${formatPaceMetersPerSecond(activity.averageSpeedMps)}`,
     `Avg HR: ${activity.averageHeartRate ?? "n/a"} bpm`,
     `Max HR: ${activity.maxHeartRate ?? "n/a"} bpm`,
-    `Elevation gain: ${activity.elevationGainMeters.toFixed(0)} m`,
-    `Calories: ${activity.calories}`,
+    `Elevation gain: ${activity.elevationGainMeters === null ? "n/a" : `${activity.elevationGainMeters.toFixed(0)} m`}`,
+    `Calories: ${activity.calories ?? "n/a"}`,
   ].join("\n");
 }
 

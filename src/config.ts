@@ -7,7 +7,7 @@ import {
   dataPath,
   getProjectRoot,
   readRenamedEnv,
-  resolveFromRoot,
+  remapLegacyPath,
 } from "./paths.js";
 
 const projectRoot = getProjectRoot();
@@ -59,7 +59,7 @@ function readNumber(name: string, fallback: number): number {
 }
 
 export function getSessionPath(): string {
-  return resolveFromRoot(readEnv("TRAINBUD_SESSION_PATH") ?? dataPath("session.json"));
+  return remapLegacyPath(readEnv("TRAINBUD_SESSION_PATH") ?? dataPath("session.json"));
 }
 
 export { getProjectRoot };
@@ -122,10 +122,10 @@ export const appConfig = {
     return getSessionPath();
   },
   get logPath(): string {
-    return resolveFromRoot(readEnv("TRAINBUD_LOG_PATH") ?? dataPath("server.log"));
+    return remapLegacyPath(readEnv("TRAINBUD_LOG_PATH") ?? dataPath("server.log"));
   },
   get cachePath(): string {
-    return resolveFromRoot(readEnv("TRAINBUD_CACHE_PATH") ?? dataPath("cache.db"));
+    return remapLegacyPath(readEnv("TRAINBUD_CACHE_PATH") ?? dataPath("cache.db"));
   },
   get cacheTtlActivities(): number {
     return readNumber("CACHE_TTL_ACTIVITIES", 1800);

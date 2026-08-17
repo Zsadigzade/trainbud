@@ -120,14 +120,21 @@ function buildDefaultToolChecks(): ToolCheckCase[] {
   ];
 }
 
-function summarizeToolResult(name: string, text: string): { ok: boolean; summary: string } {
+function summarizeToolResult(
+  name: string,
+  text: string
+): { ok: boolean; summary: string; warning?: boolean } {
   const normalized = text.trim();
   const noDataPattern = /^No .+ found/i;
 
+  // "No VO2 max data found" means the watch does not record that metric, not
+  // that the tool is broken. Reporting it as a failure made `check` exit 1 for a
+  // perfectly healthy setup, so it is advisory instead.
   if (noDataPattern.test(normalized)) {
     return {
-      ok: false,
-      summary: normalized.split("\n")[0] ?? normalized,
+      ok: true,
+      warning: true,
+      summary: `${normalized.split("\n")[0] ?? normalized} (not a fault — this metric is absent)`,
     };
   }
 
@@ -222,8 +229,8 @@ function summarizeToolResult(name: string, text: string): { ok: boolean; summary
 async function runToolCheck(check: ToolCheckCase): Promise<ToolCheckResult> {
   try {
     const result = await executeTool(check.name, check.args);
-    const { ok, summary } = summarizeToolResult(check.name, result.text);
-    return { name: check.name, ok, summary };
+    const { ok, summary, warning } = summarizeToolResult(check.name, result.text);
+    return { name: check.name, ok, summary, warning };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return {

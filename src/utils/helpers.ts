@@ -85,7 +85,11 @@ export function filterActivitiesByRange(
   });
 }
 
-export function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
+    return "n/a";
+  }
+
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = Math.floor(seconds % 60);
@@ -101,7 +105,11 @@ export function formatDuration(seconds: number): string {
   return `${remainingSeconds}s`;
 }
 
-export function formatDistanceMeters(meters: number): string {
+export function formatDistanceMeters(meters: number | null | undefined): string {
+  if (meters === null || meters === undefined || !Number.isFinite(meters)) {
+    return "n/a";
+  }
+
   if (meters >= 1000) {
     return `${(meters / 1000).toFixed(2)} km`;
   }
@@ -109,8 +117,13 @@ export function formatDistanceMeters(meters: number): string {
   return `${meters.toFixed(0)} m`;
 }
 
-export function formatPaceMetersPerSecond(metersPerSecond: number): string {
-  if (metersPerSecond <= 0) {
+export function formatPaceMetersPerSecond(metersPerSecond: number | null | undefined): string {
+  if (
+    metersPerSecond === null ||
+    metersPerSecond === undefined ||
+    !Number.isFinite(metersPerSecond) ||
+    metersPerSecond <= 0
+  ) {
     return "n/a";
   }
 

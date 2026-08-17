@@ -24,6 +24,27 @@ export function resolveFromRoot(target: string): string {
   return path.isAbsolute(target) ? target : path.resolve(projectRoot, target);
 }
 
+/**
+ * Point a configured path at the new data directory when it still names the old
+ * one.
+ *
+ * An existing .env keeps values like `GARMIN_SESSION_PATH=.garmin/session.json`.
+ * Migrating the directory alone was not enough: the app read those settings and
+ * wrote state straight back into `.garmin/`, recreating it and leaving two
+ * copies drifting apart. Anything under the legacy directory is remapped to the
+ * same relative location under the new one.
+ */
+export function remapLegacyPath(target: string): string {
+  const resolved = resolveFromRoot(target);
+  const legacyDir = getLegacyDataDir();
+  const relative = path.relative(legacyDir, resolved);
+
+  const insideLegacyDir =
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+
+  return insideLegacyDir ? path.join(getDataDir(), relative) : resolved;
+}
+
 export function getDataDir(): string {
   return path.join(projectRoot, DATA_DIR_NAME);
 }

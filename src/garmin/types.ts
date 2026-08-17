@@ -7,13 +7,17 @@ export interface ActivitySummary {
   name: string;
   type: string;
   startTimeLocal: string;
-  distanceMeters: number;
-  durationSeconds: number;
+  // Connect omits these for activities where they do not apply — strength
+  // training reports no distance or pace, indoor rides no elevation. They were
+  // typed as plain numbers, which type-checked while crashing at runtime on
+  // `undefined.toFixed`.
+  distanceMeters: number | null;
+  durationSeconds: number | null;
   averageHeartRate: number | null;
   maxHeartRate: number | null;
-  elevationGainMeters: number;
-  calories: number;
-  averageSpeedMps: number;
+  elevationGainMeters: number | null;
+  calories: number | null;
+  averageSpeedMps: number | null;
 }
 
 export interface SleepNightSummary {

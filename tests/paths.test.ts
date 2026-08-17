@@ -3,7 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { migrateLegacyDataDir, readRenamedEnv } from "../src/paths.js";
+import {
+  getDataDir,
+  getLegacyDataDir,
+  migrateLegacyDataDir,
+  readRenamedEnv,
+  remapLegacyPath,
+} from "../src/paths.js";
 
 describe("legacy data directory migration", () => {
   let root = "";
@@ -76,6 +82,46 @@ describe("legacy data directory migration", () => {
     migrateLegacyDataDir({ legacyDir, dataDir });
 
     assert.equal(fs.readFileSync(path.join(dataDir, "nested", "inner.txt"), "utf8"), "deep");
+  });
+});
+
+describe("legacy path remapping", () => {
+  // An existing .env still says GARMIN_SESSION_PATH=.garmin/session.json, so
+  // moving the directory alone let the app write state straight back into it.
+  it("remaps a path inside the legacy directory to the new one", () => {
+    assert.equal(
+      remapLegacyPath(".garmin/session.json"),
+      path.join(getDataDir(), "session.json")
+    );
+  });
+
+  it("remaps nested legacy paths", () => {
+    assert.equal(
+      remapLegacyPath(".garmin/nested/cache.db"),
+      path.join(getDataDir(), "nested", "cache.db")
+    );
+  });
+
+  it("remaps an absolute path inside the legacy directory", () => {
+    assert.equal(
+      remapLegacyPath(path.join(getLegacyDataDir(), "cache.db")),
+      path.join(getDataDir(), "cache.db")
+    );
+  });
+
+  it("leaves paths already in the new directory alone", () => {
+    const target = path.join(getDataDir(), "session.json");
+    assert.equal(remapLegacyPath(target), target);
+  });
+
+  it("leaves unrelated paths alone", () => {
+    const target = path.join(os.tmpdir(), "elsewhere", "session.json");
+    assert.equal(remapLegacyPath(target), target);
+  });
+
+  it("does not remap a sibling directory with the legacy name as a prefix", () => {
+    const target = `${getLegacyDataDir()}-backup${path.sep}session.json`;
+    assert.equal(remapLegacyPath(target), target);
   });
 });
 
