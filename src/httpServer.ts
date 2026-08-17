@@ -84,6 +84,48 @@ async function getCachedWatchSummary(): Promise<WatchSummary> {
   return summary;
 }
 
+/** Drain the request body once, as text. */
+async function readRawBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+
+    if (total > MAX_BODY_BYTES) {
+      throw new Error("Request body too large");
+    }
+
+    chunks.push(buffer);
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * Pull a field from a body that may be JSON or URL-encoded, without re-reading
+ * the stream. The dashboard posts URL-encoded; API clients post JSON.
+ */
+export function readFormOrJsonField(raw: string, field: string): string | null {
+  if (!raw) {
+    return null;
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const value = parsed[field];
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return new URLSearchParams(raw).get(field);
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -290,30 +332,21 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
 
-          let formCode: string | null = null;
-          try {
-            const raw = await readJsonBody(req) as Record<string, string> | undefined;
-            if (raw && typeof raw["code"] === "string") {
-              formCode = raw["code"];
-            }
-          } catch {
-            // Try reading as URL-encoded form
-          }
+          // Read the body exactly once. The previous version called
+          // readJsonBody() first, which drains the stream, and on a JSON parse
+          // failure tried to read the stream a second time for URL-encoded
+          // data — by then it was empty, so `code` was always null and every
+          // form post answered "Missing code parameter". Dashboard pairing
+          // approval could never have succeeded.
+          const formCode = readFormOrJsonField(await readRawBody(req), "code");
 
           if (!formCode) {
-            // Read as URL-encoded form
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            if (wantsJson(req)) {
+              sendJson(res, 400, { error: "Missing code parameter." });
+              return;
             }
-            const raw = Buffer.concat(chunks).toString("utf8");
-            const params = new URLSearchParams(raw);
-            formCode = params.get("code");
-          }
-
-          if (!formCode) {
             res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-            res.end(renderPairError("Missing code parameter."));
+            res.end(renderPairError("Missing code parameter.", queryToken));
             return;
           }
 
@@ -344,13 +377,9 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
 
-          const chunks: Buffer[] = [];
-          for await (const chunk of req) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          const raw = Buffer.concat(chunks).toString("utf8");
-          const params = new URLSearchParams(raw);
-          const key = params.get("anthropic_api_key")?.trim();
+          // Unbounded before: the body was read with no size cap, unlike every
+          // other endpoint. readRawBody enforces MAX_BODY_BYTES.
+          const key = readFormOrJsonField(await readRawBody(req), "anthropic_api_key")?.trim();
 
           if (key && key.length > 0) {
             setSetting("anthropic_api_key", key);
