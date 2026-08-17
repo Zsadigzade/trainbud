@@ -80,3 +80,69 @@ describe("http MCP server", () => {
     assert.ok(response.status >= 200 && response.status < 500);
   });
 });
+
+describe("request log redaction", () => {
+  it("redacts the dashboard token from a logged query string", async () => {
+    const { redactQuery } = await import("../src/httpServer.js");
+    assert.equal(redactQuery("?token=supersecret"), "?token=<redacted>");
+  });
+
+  it("redacts credential-ish parameters but keeps diagnostics readable", async () => {
+    const { redactQuery } = await import("../src/httpServer.js");
+    const out = redactQuery("?build=b3&api_key=abc&attempts=4");
+    assert.ok(out.includes("build=b3"));
+    assert.ok(out.includes("attempts=4"));
+    assert.ok(!out.includes("abc"));
+  });
+
+  it("leaves a query without secrets untouched", async () => {
+    const { redactQuery } = await import("../src/httpServer.js");
+    assert.equal(redactQuery("?build=b3&attempts=4"), "?build=b3&attempts=4");
+  });
+
+  it("handles an absent or empty query", async () => {
+    const { redactQuery } = await import("../src/httpServer.js");
+    assert.equal(redactQuery(""), "");
+    assert.equal(redactQuery("?"), "");
+    assert.equal(redactQuery(undefined), "");
+  });
+});
+
+describe("public URL resolution for pairing", () => {
+  const makeReq = (headers: Record<string, string>) =>
+    ({ headers }) as unknown as import("node:http").IncomingMessage;
+
+  it("uses the tunnel host the request actually arrived on", async () => {
+    const { resolvePublicUrl } = await import("../src/httpServer.js");
+    delete process.env.TRAINBUD_PUBLIC_URL;
+    const url = resolvePublicUrl(makeReq({ host: "abc.ngrok-free.dev", "x-forwarded-proto": "https" }));
+    assert.equal(url, "https://abc.ngrok-free.dev");
+  });
+
+  it("prefers x-forwarded-host when a proxy sets it", async () => {
+    const { resolvePublicUrl } = await import("../src/httpServer.js");
+    delete process.env.TRAINBUD_PUBLIC_URL;
+    const url = resolvePublicUrl(
+      makeReq({ host: "127.0.0.1:3847", "x-forwarded-host": "abc.ngrok-free.dev" })
+    );
+    assert.equal(url, "https://abc.ngrok-free.dev");
+  });
+
+  it("lets an explicit TRAINBUD_PUBLIC_URL win", async () => {
+    const { resolvePublicUrl } = await import("../src/httpServer.js");
+    process.env.TRAINBUD_PUBLIC_URL = "https://configured.example.com";
+    try {
+      const url = resolvePublicUrl(makeReq({ host: "abc.ngrok-free.dev" }));
+      assert.equal(url, "https://configured.example.com");
+    } finally {
+      delete process.env.TRAINBUD_PUBLIC_URL;
+    }
+  });
+
+  it("does not hand a watch a loopback address it can never reach", async () => {
+    const { resolvePublicUrl } = await import("../src/httpServer.js");
+    delete process.env.TRAINBUD_PUBLIC_URL;
+    const url = resolvePublicUrl(makeReq({ host: "127.0.0.1:3847" }));
+    assert.notEqual(url, "https://127.0.0.1:3847");
+  });
+});

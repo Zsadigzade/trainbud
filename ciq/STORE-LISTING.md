@@ -129,8 +129,18 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 ## Developer account checklist
 
 1. Developer account at https://developer.garmin.com, agreement signed
-2. Existing app registration `e9204b53-2eea-4851-9071-8ce7e6839589` — rename the listing
-   in place; do **not** register a new ID
+2. **Two IDs exist — do not confuse them.**
+   - `e9204b53-2eea-4851-9071-8ce7e6839589` is the **manifest** UUID in `manifest.xml`,
+     compiled into every binary. Leave it alone; changing it orphans the store entry.
+   - `303bda81-2851-44b3-8550-a6fa5923f427` is the **store listing** created when
+     TrainBud 1.2.0 was submitted and approved on 2026-08-17:
+     <https://apps.garmin.com/en-US/apps/303bda81-2851-44b3-8550-a6fa5923f427>
+
+   An earlier draft of this file said to rename the existing listing in place and never
+   register a new ID. That turned out to be wrong: the upload produced a **new** store
+   entry with its own ID while the binary kept the old manifest UUID. If a listing under
+   the old GarminBud name still exists in the developer dashboard, unpublish it — two
+   listings for one app confuses users and invites a takedown.
 3. Build the store package. `-d all` is **not** a valid device id in SDK 9.x — the
    export build (`-e`) is what compiles every product in the manifest:
 

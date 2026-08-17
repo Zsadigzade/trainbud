@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <properties>
-    <property id="ServerUrl" type="string"></property>
+    <!-- Default server. This was empty, which meant a fresh install had nowhere
+         to talk to: getServerUrl() returned null, fetchSummary() bailed to the
+         "config" screen, and pairing could never start. The URL only looked
+         present because the simulator's own settings file under bin/ still held
+         a value typed in by hand months ago; a clean build regenerates that file
+         with an empty default and the app goes dead.
+
+         Sideloaded installs have no settings screen at all, so a build with no
+         default is unusable there by construction. -->
+    <property id="ServerUrl" type="string">https://backpedal-immorally-cathouse.ngrok-free.dev</property>
 </properties>

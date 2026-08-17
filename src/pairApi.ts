@@ -23,7 +23,11 @@ export function requestPairing(): PairRequestResult {
   };
 }
 
-export function checkPairStatus(code: string): PairStatusResult | null {
+// publicUrl is the address the watch should use from now on. It is passed in by
+// the HTTP layer, derived from the host the poll actually arrived on, because
+// the configured value is a stale file on disk more often than not — see
+// resolvePublicUrl in httpServer.ts.
+export function checkPairStatus(code: string, publicUrl?: string): PairStatusResult | null {
   const token = getPairToken(code);
   if (!token) return null;
 
@@ -35,7 +39,7 @@ export function checkPairStatus(code: string): PairStatusResult | null {
     return {
       approved: true,
       api_key: appConfig.mcpApiKey,
-      server_url: appConfig.publicUrl,
+      server_url: publicUrl || appConfig.publicUrl,
     };
   }
 

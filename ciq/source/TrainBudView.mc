@@ -113,8 +113,15 @@ class TrainBudView extends WatchUi.View {
             WatchUi.loadResource(Rez.Strings.PairingInstructions) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
+        // Poll telemetry: attempts made and the last response code. A stalled
+        // pairing otherwise looks the same whether the poll is being refused on
+        // the device or the code simply has not been approved yet.
+        var attempts = app.getPairPollAttempts();
+        var polls = app.getPairPollCount();
+        var pollCode = app.getPairPollCode();
         dc.drawText(cx, dc.getHeight() - 8, Graphics.FONT_XTINY,
-            "/dashboard",
+            attempts.toString() + "/" + polls.toString()
+                + (pollCode == null ? "" : " " + pollCode.toString()),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
@@ -229,10 +236,15 @@ class TrainBudView extends WatchUi.View {
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
 
+        // Wrapped: unwrapped, this rendered as "airing failed. Tap to retr" on a
+        // round screen, losing both ends of the only instruction it gives.
+        var titleLines = wrapText(WatchUi.loadResource(Rez.Strings.PairingError) as String, 18);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, cy - 22, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.PairingError) as String,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        for (var i = 0; i < titleLines.size(); i += 1) {
+            dc.drawText(cx, cy - 40 + (i * 20), Graphics.FONT_SMALL,
+                titleLines[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
 
         var code = app.getPairErrorCode();
         if (code != null) {
@@ -246,6 +258,19 @@ class TrainBudView extends WatchUi.View {
                 dc.drawText(cx, cy + 34, Graphics.FONT_XTINY,
                     WatchUi.loadResource(Rez.Strings.NoPhoneHint) as String,
                     Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            } else if (code == -1001) {
+                // SECURE_CONNECTION_REQUIRED. Show the URL actually in use: the
+                // baked default and a value stored from an earlier pairing are
+                // different sources, and only one of them is visible in the build.
+                var serverUrl = app.getServerUrl();
+                dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+                var urlLines = wrapText(serverUrl == null ? "<no url>" : serverUrl as String, 26);
+                var urlShown = urlLines.size() > 3 ? 3 : urlLines.size();
+                for (var u = 0; u < urlShown; u += 1) {
+                    dc.drawText(cx, cy + 32 + (u * 14), Graphics.FONT_XTINY,
+                        urlLines[u] as String,
+                        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+                }
             } else {
                 // A 2xx with an unexpected body: show what actually arrived.
                 var body = app.getPairErrorBody();
@@ -263,13 +288,22 @@ class TrainBudView extends WatchUi.View {
         }
     }
 
+    // Wraps rather than drawing one long line. "Pairing failed. Tap to retry."
+    // ran off both edges of a round screen and rendered as "airing failed. Tap
+    // to retr", which loses the instruction the message exists to give.
     private function drawMessage(dc as Dc, message as String) as Void {
+        var lines  = wrapText(message, 20);
+        var lineH  = 22;
+        var startY = (dc.getHeight() / 2) - (((lines.size() - 1) * lineH) / 2);
+
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            dc.getWidth() / 2, dc.getHeight() / 2,
-            Graphics.FONT_SMALL, message,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        for (var i = 0; i < lines.size(); i += 1) {
+            dc.drawText(
+                dc.getWidth() / 2, startY + (i * lineH),
+                Graphics.FONT_SMALL, lines[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+        }
     }
 
     private function drawHint(dc as Dc) as Void {

@@ -199,6 +199,62 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
   }
 }
 
+// Query-string parameters whose values must never be written to the log.
+// The dashboard authenticates with ?token=<API key>, so request logging was
+// persisting a live credential to .trainbud/mcp.log on every dashboard hit.
+const REDACTED_QUERY_KEYS = new Set(["token", "api_key", "apikey", "key", "secret", "password"]);
+
+export function redactQuery(search: string | null | undefined): string {
+  if (!search || search === "?") return "";
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let changed = false;
+  for (const name of [...params.keys()]) {
+    if (REDACTED_QUERY_KEYS.has(name.toLowerCase())) {
+      params.set(name, "<redacted>");
+      changed = true;
+    }
+  }
+  if (!changed) return search;
+  return "?" + params.toString().replace(/%3Credacted%3E/gi, "<redacted>");
+}
+
+// The public URL to hand a watch during pairing.
+//
+// This used to come solely from appConfig.publicUrl, which falls back to
+// .trainbud/watch-setup.json — a file written once by `trainbud setup` and
+// never updated when the tunnel changes. A watch that paired successfully was
+// therefore told to switch to a tunnel that had been dead for weeks, so pairing
+// "worked" and the app went blank on the very next request. Deriving it from
+// the host the request actually arrived on is correct by construction for any
+// tunnel; an explicit TRAINBUD_PUBLIC_URL still wins, since that is deliberate.
+export function resolvePublicUrl(req: http.IncomingMessage): string {
+  const configured = (process.env["TRAINBUD_PUBLIC_URL"] ?? "").replace(/\/$/, "");
+  if (configured) return configured;
+
+  const forwardedHost = firstHeaderValue(req.headers["x-forwarded-host"]);
+  const host = forwardedHost ?? req.headers.host;
+  if (host && !isLocalHost(host)) {
+    const proto = firstHeaderValue(req.headers["x-forwarded-proto"]) ?? "https";
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+
+  return appConfig.publicUrl;
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.split(",")[0]?.trim() || undefined;
+}
+
+// A watch can never reach the server on a loopback address, and Connect IQ
+// refuses plain http:// outright, so a local Host header means the request came
+// in directly rather than through the tunnel the watch would need.
+function isLocalHost(host: string): boolean {
+  const name = host.split(":")[0]?.toLowerCase() ?? "";
+  return name === "localhost" || name === "127.0.0.1" || name === "::1" || name === "0.0.0.0";
+}
+
 export function createHttpMcpServer(): HttpMcpServer {
   let httpServer: http.Server | null = null;
 
@@ -224,7 +280,12 @@ export function createHttpMcpServer(): HttpMcpServer {
         logger.info(
           {
             method: req.method,
-            path: pathname,
+            // Full path including the query string. Logging url.pathname alone
+            // silently dropped every query parameter, which hid diagnostics the
+            // watch app was deliberately sending for exactly this purpose.
+            // Redacted, because the dashboard passes the API key as ?token= and
+            // this line was writing it to the log file in plaintext.
+            path: pathname + redactQuery(url.search),
             ua: req.headers["user-agent"] ?? "(none)",
             accept: req.headers["accept"] ?? "(none)",
             encoding: req.headers["accept-encoding"] ?? "(none)",
@@ -263,7 +324,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname.startsWith("/api/pair/") && pathname.endsWith("/status") && req.method === "GET") {
           const code = pathname.slice("/api/pair/".length, -"/status".length);
-          const status = checkPairStatus(code);
+          const status = checkPairStatus(code, resolvePublicUrl(req));
           if (!status) {
             sendJson(res, 404, { error: "Pair code not found or expired" });
           } else {

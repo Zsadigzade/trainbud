@@ -1,0 +1,14 @@
+# Debug-only overlay: build the app with its glance view compiled out.
+#
+# The simulator renders the glance for any app that has one and gives no way to
+# step from the glance into the widget itself, so a normal build can only ever
+# be watched sitting in the glance list -- useless for exercising pairing, which
+# lives entirely in the widget view. Excluding the (:glance) annotation removes
+# getGlanceView(), and the simulator then has no choice but to run the widget.
+#
+# Debug only. Never build the store package with this: an app with no glance
+# view does not appear in the device's glance list at all on API 4.0.0+.
+#
+# Usage:
+#   monkeyc -f "monkey.jungle;monkey-noglance.jungle" -o bin\TrainBud-noglance.prg ...
+base.excludeAnnotations = glance
