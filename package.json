@@ -1,7 +1,7 @@
 {
-  "name": "garmin-bud",
-  "version": "0.2.0",
-  "description": "GarminBud — talk to your Garmin Connect data through Claude and other MCP clients",
+  "name": "trainbud",
+  "version": "0.3.0",
+  "description": "TrainBud — talk to your Connect fitness data through Claude and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
   "files": [
@@ -13,7 +13,7 @@
     ".env.example"
   ],
   "bin": {
-    "garmin-bud": "dist/index.js"
+    "trainbud": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -35,17 +35,17 @@
     "claude",
     "fitness",
     "health",
-    "garminbud"
+    "trainbud"
   ],
   "author": "Zsadigzade",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Zsadigzade/garmin-bud.git"
+    "url": "git+https://github.com/Zsadigzade/trainbud.git"
   },
-  "homepage": "https://github.com/Zsadigzade/garmin-bud#readme",
+  "homepage": "https://github.com/Zsadigzade/trainbud#readme",
   "bugs": {
-    "url": "https://github.com/Zsadigzade/garmin-bud/issues"
+    "url": "https://github.com/Zsadigzade/trainbud/issues"
   },
   "engines": {
     "node": ">=20.0.0"

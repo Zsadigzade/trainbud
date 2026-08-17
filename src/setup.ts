@@ -11,7 +11,7 @@ import {
 } from "./config.js";
 import { configureLogger } from "./utils/logger.js";
 import {
-  configureGarminBudForClient,
+  configureTrainBudForClient,
   detectMcpClients,
   type DetectedMcpClient,
 } from "./mcpConfig.js";
@@ -80,9 +80,9 @@ async function promptCredentials(): Promise<{ email: string; password: string }>
   const rl = createInterface({ input, output });
 
   try {
-    output.write("\nGarminBud setup\n");
+    output.write("\nTrainBud setup\n");
     output.write("This wizard will save credentials locally, authenticate with Garmin Connect,\n");
-    output.write("and optionally connect GarminBud to Cursor or Claude Desktop.\n\n");
+    output.write("and optionally connect TrainBud to Cursor or Claude Desktop.\n\n");
     output.write("Note: MFA must be disabled on your Garmin Connect account.\n\n");
 
     let email = "";
@@ -122,7 +122,7 @@ async function promptCredentials(): Promise<{ email: string; password: string }>
 async function promptMcpClients(clients: DetectedMcpClient[]): Promise<DetectedMcpClient[]> {
   if (clients.length === 0) {
     output.write("\nNo supported MCP clients were detected on this machine.\n");
-    output.write("You can add GarminBud manually later using QUICKSTART.md.\n");
+    output.write("You can add TrainBud manually later using QUICKSTART.md.\n");
     return [];
   }
 
@@ -189,7 +189,7 @@ export async function runSetup(): Promise<void> {
     output.write("\nCommon fixes:\n");
     output.write("- Verify your email and password\n");
     output.write("- Disable MFA at connect.garmin.com → Account Settings → Security\n");
-    output.write("- Run `garmin-bud setup` again after fixing credentials\n");
+    output.write("- Run `trainbud setup` again after fixing credentials\n");
     process.exitCode = 1;
     return;
   }
@@ -205,19 +205,19 @@ export async function runSetup(): Promise<void> {
   const selectedClients = await promptMcpClients(detectedClients);
 
   for (const client of selectedClients) {
-    configureGarminBudForClient(client, {
+    configureTrainBudForClient(client, {
       email: credentials.email,
       password: credentials.password,
       distIndexPath,
     });
-    output.write(`Configured GarminBud in ${client.label} (${client.configPath})\n`);
+    output.write(`Configured TrainBud in ${client.label} (${client.configPath})\n`);
   }
 
   output.write("\nSetup complete.\n");
 
   output.write("\nWeb AI connector (claude.ai, ChatGPT):\n");
-  output.write(`- API key saved to .env as GARMIN_MCP_API_KEY\n`);
-  output.write(`- Run: garmin-bud serve\n`);
+  output.write(`- API key saved to .env as TRAINBUD_API_KEY\n`);
+  output.write(`- Run: trainbud serve\n`);
   output.write(`- See docs/WEB-MCP.md for Cloudflare Tunnel + claude.ai setup\n`);
   output.write(`- Your API key: ${appConfig.mcpApiKey}\n`);
 
@@ -227,7 +227,7 @@ export async function runSetup(): Promise<void> {
     output.write("- Ask things like \"What was my last workout?\" or \"How did I sleep this week?\"\n");
   } else {
     output.write("\nNext steps:\n");
-    output.write("- Run `garmin-bud start` for manual MCP usage, or follow QUICKSTART.md to connect a client\n");
+    output.write("- Run `trainbud start` for manual MCP usage, or follow QUICKSTART.md to connect a client\n");
   }
 
   if (await promptRunLiveCheck()) {

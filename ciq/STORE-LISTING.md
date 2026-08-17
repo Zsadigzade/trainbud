@@ -1,59 +1,84 @@
-# GarminBud — Connect IQ Store Listing
+# TrainBud — Connect IQ Store Listing
 
-Use this document when submitting the widget to the [Garmin Developer Portal](https://developer.garmin.com/connect-iq/submit-an-app/).
+Submission copy for the [Connect IQ developer portal](https://developer.garmin.com/connect-iq/submit-an-app/).
+
+> **Naming rule — do not undo this.** A previous submission was rejected because the
+> app was called *GarminBud*. Per the Connect IQ Developer Agreement §VIII.a, a
+> developer "shall not include any marketing of Garmin's name, logo or other
+> trademarks in your Application or in any other materials without Garmin's prior
+> written consent," and §II.a.2 requires a branded username to be changed unless
+> authorised. The word **Garmin does not appear in the app name, the listing copy,
+> the on-watch strings, the icon, or the screenshots**. The narrow exception in
+> §VIII.a — accurate statements of *compatibility* — only applies **after** an app is
+> approved, so it is deliberately not used here. Once approved, compatibility
+> wording may be added to the description.
 
 ## App name
 
-GarminBud
+TrainBud
 
 ## Category
 
-Health & Fitness → Widget
+Health & Fitness
 
 ## Version
 
-1.1.0
+1.2.0
 
 ## Short description
 
-Your Garmin Connect data and Claude AI on your wrist — recovery, sleep, activity, stress, VO2 max, and more.
+Your training and recovery data on your wrist, with optional AI answers — recovery, sleep, activity, stress, VO2 max.
 
 ## Full description
 
-GarminBud shows your Garmin Connect data directly on your watch — and lets you ask Claude AI questions about your health, right from your wrist.
+TrainBud puts your training and recovery numbers on your watch face, and lets you ask an AI assistant about them without reaching for your phone.
 
-Open the widget for a compact daily overview, then swipe or tap through 9 cards:
-• Daily overview — recovery, sleep, stress, VO2 max at a glance
-• Recovery — score with color-coded progress ring
+Open the widget for a compact daily overview, then swipe or tap through the cards:
+• Overview — recovery, sleep, stress and VO2 max at a glance
+• Recovery — score with a colour-coded progress ring
 • Sleep — hours and quality score
-• Activity — latest workout with duration, distance, and avg heart rate
+• Activity — latest workout with duration, distance and average heart rate
 • Stress — daily average
 • VO2 max — value and trend
-• Heart rate — resting HR and max
-• AI Insight — a daily one-line tip from Claude based on your health data
-• Ask AI — pick from preset questions and get a response from Claude on your watch
+• Heart rate — resting and maximum
+• AI Insight — a daily one-line tip generated from your own numbers
+• Ask AI — pick a preset question and read the answer on your watch
 
-Color-coded values make your status easy to scan. If your server is temporarily unreachable, the widget shows your last cached summary.
+Values are colour-coded so status is readable at a glance. If the server is briefly
+unreachable, the widget shows your last cached summary with an "updated X ago" marker.
 
-SETUP REQUIRED
-GarminBud connects to your own self-hosted server (free, open source):
-1. Install garmin-bud on your PC or Mac
-2. Run: garmin-bud serve
-3. Expose it over HTTPS (e.g. Cloudflare Tunnel)
-4. In Garmin Connect → Connect IQ → GarminBud settings, enter your HTTPS tunnel URL
-5. Open the dashboard link printed by the server — pair your watch with one tap and optionally add your Anthropic API key to unlock AI features
+SETUP REQUIRED — THIS APP NEEDS YOUR OWN SERVER
+TrainBud is the watch front end for a free, open-source companion server that you run
+yourself. It does not work standalone.
 
-No API key required for health data. Claude AI features require a free Anthropic account (bring your own key).
+1. Install the `trainbud` companion server on your PC or Mac (Node.js 20+)
+2. Run: `trainbud serve`
+3. Expose it over HTTPS with a tunnel (Cloudflare Tunnel or ngrok both work)
+4. In the Connect IQ app settings for TrainBud, enter that HTTPS URL
+5. Open the dashboard link the server prints, and approve the six-digit code shown on
+   your watch — this pairs the watch, so no API key is ever typed on the device
 
-GarminBud does not run AI on your watch. It sends your prompt to your local server, which calls Claude on your behalf and returns the response.
+AI features are optional and off by default. They require your own Anthropic API key,
+entered once in the companion dashboard. No AI runs on the watch: your question is sent
+to your own server, which calls the AI provider on your behalf and returns the text.
 
-Unofficial community project — not affiliated with Garmin Ltd.
+HEALTH DISCLAIMER
+TrainBud is for general wellness and training information only. It is not a medical
+device, it does not diagnose, treat or prevent any condition, and its output — including
+AI-generated text — is not medical advice. Consult a qualified professional before
+making decisions about your health or training load.
 
-Setup guide: https://github.com/Zsadigzade/garmin-bud
+TrainBud is an independent open-source project, not affiliated with, endorsed by or
+sponsored by any device or platform vendor.
+
+Setup guide and source: https://github.com/Zsadigzade/trainbud
 
 ## Privacy policy URL
 
-`https://github.com/Zsadigzade/Garmin-Bud/blob/main/docs/PRIVACY-POLICY.md`
+https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
+
+> Verify this resolves **before** submitting. The previous listing pointed at
+> `Zsadigzade/Garmin-Bud`, which no longer matches the repository name.
 
 ## Required assets
 
@@ -61,47 +86,60 @@ Setup guide: https://github.com/Zsadigzade/garmin-bud
 |-------|------|------|
 | Launcher icon | `ciq/resources/drawables/launcher_icon.png` | 40×40 |
 | Store icon | `ciq/store/store_icon.png` | 130×130 |
-| Screenshots | Capture from Connect IQ simulator | 1–3 per supported device family |
+| Cover | `ciq/store/cover_500.png` | 500×500 |
+| Screenshots | `ciq/store/screenshots/` | 1–3 per device family |
 
-## Developer account checklist
-
-1. Create a Garmin developer account at https://developer.garmin.com
-2. Sign the Connect IQ developer agreement
-3. App registered at https://apps.garmin.com/apps/e9204b53-2eea-4851-9071-8ce7e6839589
-4. Build a release binary:
-
-```powershell
-cd ciq
-.\build.ps1 -Device fr70
-# After testing individual devices:
-monkeyc -f monkey.jungle -o bin/GarminBud.prg -y developer_key.der -d all -w
-```
-
-6. Upload the `.prg`, icons, screenshots, and listing copy
-7. Include setup instructions in review notes
+> Icons were redesigned for this submission. The previous set was a large letter **G**
+> on teal, which reads as a vendor monogram — regenerate with `scripts/generate-icons.ps1`
+> rather than restoring the old files.
 
 ## Review notes for Garmin
 
-- The app requires a user-provided Server URL in Connect IQ settings; the API key is obtained automatically via an on-watch pairing flow (no manual entry)
-- The widget only calls the user-configured HTTPS endpoint
-- No Garmin Connect credentials are stored on the watch
-- Claude AI features require the user to supply their own Anthropic API key via the companion web dashboard; AI is optional
-- Only the Communications permission is used
-- The companion server is open source and user-hosted
+- **Reviewer test server.** A live instance is available for the review period —
+  URL and pre-approved pairing details are supplied in the submission form's private
+  notes field. The widget shows a pairing screen until a server is configured; this is
+  expected first-run behaviour, not a fault.
+- The widget only contacts the HTTPS endpoint the user enters in settings. No other
+  network destination is hard-coded.
+- No account credentials are entered or stored on the watch. Pairing is a six-digit
+  code approved in the companion dashboard; the watch stores only the resulting token.
+- AI features are optional, user-funded (the user supplies their own provider API key
+  in the companion dashboard), and disabled unless that key is set.
+- AI output carries an on-watch wellness disclaimer (`AiDisclaimer` string) and a
+  matching disclaimer in this listing. The app makes no diagnostic or medical claims.
+- Only the `Communications` permission is requested.
+- The companion server is open source (MIT) and self-hosted by the user.
+
+## Developer account checklist
+
+1. Developer account at https://developer.garmin.com, agreement signed
+2. Existing app registration `e9204b53-2eea-4851-9071-8ce7e6839589` — rename the listing
+   in place; do **not** register a new ID
+3. Build a release binary:
+
+```powershell
+cd ciq
+.\build.ps1 -Device fr70          # single-device smoke test
+monkeyc -f monkey.jungle -o bin/TrainBud.prg -y developer_key.der -d all -w
+```
+
+4. Export the `.iq` via **Monkey C: Export Project** in VS Code
+5. Upload `.iq`, icons, screenshots and this copy
+6. Paste the reviewer test-server details into the private review notes
 
 ## Supported devices
 
-See `ciq/manifest.xml` for the current product list, including Forerunner 70 (`fr70`), Forerunner 570 (`fr57042mm`, `fr57047mm`), Fenix, Epix, Venu, vivoactive, MARQ, and Instinct 3 families.
+See `ciq/manifest.xml`. Covers Forerunner (70, 570, 55, 265s, 645, 745, 955, 965, 970),
+fenix 7/8/E, epix 2 and Pro, Venu 2/3, vivoactive 5/6, MARQ 2 and Instinct 3 families.
 
 ## Setup summary for users
 
-1. Install and configure `garmin-bud` on a computer
-2. Run `garmin-bud serve` (or `.\scripts\start-watch-stack.ps1` to also start the tunnel)
-3. Start an HTTPS tunnel to port 3847 (Cloudflare Tunnel recommended)
-4. In Garmin Connect Mobile → Connect IQ → GarminBud settings:
-   - **Server URL:** your HTTPS tunnel URL (only field required)
-5. Open the dashboard URL printed by the server — approve the pairing code shown on the watch
-6. Optionally add an Anthropic API key in the dashboard to enable AI features
-7. Sync the watch and add the widget to your widget loop
+1. Install and configure `trainbud` on a computer
+2. Run `trainbud serve` (or `.\scripts\start-watch-stack.ps1` to start the tunnel too)
+3. Start an HTTPS tunnel to port 3847
+4. Connect IQ app → TrainBud settings → **Server URL:** your HTTPS URL
+5. Open the dashboard URL the server prints, approve the code shown on the watch
+6. Optionally add an AI provider API key in the dashboard
+7. Sync the watch and add TrainBud to your widget loop
 
 See also: [ciq/README.md](README.md), [docs/WEB-MCP.md](../docs/WEB-MCP.md)

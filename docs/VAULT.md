@@ -1,8 +1,8 @@
 # Project vault (Obsidian)
 
-GarminBud project knowledge lives in an external Obsidian vault, not in this repository.
+TrainBud project knowledge lives in an external Obsidian vault, not in this repository.
 
-**Location:** `C:\Users\zsadi\Desktop\Vault\First Vault\05-Projects\garmin-bud\`
+**Location:** `C:\Users\zsadi\Desktop\Vault\First Vault\05-Projects\trainbud\`
 
 **Current release:** v0.2.0 (publish-ready)
 
@@ -18,6 +18,6 @@ GarminBud project knowledge lives in an external Obsidian vault, not in this rep
 | Privacy policy (store) | repo `docs/PRIVACY-POLICY.md` |
 | Connect IQ Store listing | repo `ciq/STORE-LISTING.md` |
 
-Open the vault in Obsidian and start at `05-Projects/garmin-bud/HOME.md`.
+Open the vault in Obsidian and start at `05-Projects/trainbud/HOME.md`.
 
 User-facing setup docs remain in this repo: [README.md](../README.md), [QUICKSTART.md](../QUICKSTART.md), [WEB-MCP.md](./WEB-MCP.md).

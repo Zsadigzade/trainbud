@@ -6,9 +6,9 @@ describe("http MCP server", () => {
   const originalEnv = {
     email: process.env.GARMIN_EMAIL,
     password: process.env.GARMIN_PASSWORD,
-    apiKey: process.env.GARMIN_MCP_API_KEY,
-    port: process.env.GARMIN_MCP_PORT,
-    host: process.env.GARMIN_MCP_HOST,
+    apiKey: process.env.TRAINBUD_API_KEY,
+    port: process.env.TRAINBUD_PORT,
+    host: process.env.TRAINBUD_HOST,
   };
 
   let server: HttpMcpServer;
@@ -17,9 +17,9 @@ describe("http MCP server", () => {
   before(async () => {
     process.env.GARMIN_EMAIL = process.env.GARMIN_EMAIL ?? "test@example.com";
     process.env.GARMIN_PASSWORD = process.env.GARMIN_PASSWORD ?? "test-password";
-    process.env.GARMIN_MCP_API_KEY = "test-api-key-123";
-    process.env.GARMIN_MCP_PORT = "3848";
-    process.env.GARMIN_MCP_HOST = "127.0.0.1";
+    process.env.TRAINBUD_API_KEY = "test-api-key-123";
+    process.env.TRAINBUD_PORT = "3848";
+    process.env.TRAINBUD_HOST = "127.0.0.1";
 
     const { createHttpMcpServer } = await import("../src/httpServer.js");
     server = createHttpMcpServer();
@@ -31,9 +31,9 @@ describe("http MCP server", () => {
 
     process.env.GARMIN_EMAIL = originalEnv.email;
     process.env.GARMIN_PASSWORD = originalEnv.password;
-    process.env.GARMIN_MCP_API_KEY = originalEnv.apiKey;
-    process.env.GARMIN_MCP_PORT = originalEnv.port;
-    process.env.GARMIN_MCP_HOST = originalEnv.host;
+    process.env.TRAINBUD_API_KEY = originalEnv.apiKey;
+    process.env.TRAINBUD_PORT = originalEnv.port;
+    process.env.TRAINBUD_HOST = originalEnv.host;
   });
 
   it("returns health without authentication", async () => {

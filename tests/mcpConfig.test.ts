@@ -4,30 +4,30 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  buildGarminBudServerEntry,
-  mergeGarminBudConfig,
+  buildTrainBudServerEntry,
+  mergeTrainBudConfig,
   readMcpConfig,
   writeMcpConfig,
 } from "../src/mcpConfig.js";
 
 describe("mcpConfig", () => {
   it("builds a stdio server entry with normalized paths", () => {
-    const entry = buildGarminBudServerEntry({
+    const entry = buildTrainBudServerEntry({
       email: "runner@example.com",
       password: "secret",
-      distIndexPath: "C:\\Projects\\garmin-bud\\dist\\index.js",
+      distIndexPath: "C:\\Projects\\trainbud\\dist\\index.js",
     });
 
     assert.equal(entry.command, "node");
-    assert.deepEqual(entry.args, ["C:/Projects/garmin-bud/dist/index.js", "start"]);
+    assert.deepEqual(entry.args, ["C:/Projects/trainbud/dist/index.js", "start"]);
     assert.deepEqual(entry.env, {
       GARMIN_EMAIL: "runner@example.com",
       GARMIN_PASSWORD: "secret",
     });
   });
 
-  it("merges garmin-bud into an existing MCP config without removing other servers", () => {
-    const merged = mergeGarminBudConfig(
+  it("merges trainbud into an existing MCP config without removing other servers", () => {
+    const merged = mergeTrainBudConfig(
       {
         mcpServers: {
           existing: {
@@ -39,30 +39,30 @@ describe("mcpConfig", () => {
       {
         email: "runner@example.com",
         password: "secret",
-        distIndexPath: "/tmp/garmin-bud/dist/index.js",
+        distIndexPath: "/tmp/trainbud/dist/index.js",
       }
     );
 
     assert.ok(merged.mcpServers.existing);
-    assert.ok(merged.mcpServers["garmin-bud"]);
-    assert.equal(merged.mcpServers["garmin-bud"]?.args?.[0], "/tmp/garmin-bud/dist/index.js");
+    assert.ok(merged.mcpServers["trainbud"]);
+    assert.equal(merged.mcpServers["trainbud"]?.args?.[0], "/tmp/trainbud/dist/index.js");
   });
 
   it("reads and writes MCP config files", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "garminbud-mcp-"));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-mcp-"));
     const configPath = path.join(tempDir, "mcp.json");
 
     writeMcpConfig(configPath, {
       mcpServers: {
-        "garmin-bud": buildGarminBudServerEntry({
+        "trainbud": buildTrainBudServerEntry({
           email: "runner@example.com",
           password: "secret",
-          distIndexPath: "/tmp/garmin-bud/dist/index.js",
+          distIndexPath: "/tmp/trainbud/dist/index.js",
         }),
       },
     });
 
     const parsed = readMcpConfig(configPath);
-    assert.ok(parsed.mcpServers["garmin-bud"]);
+    assert.ok(parsed.mcpServers["trainbud"]);
   });
 });

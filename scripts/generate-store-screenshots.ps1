@@ -8,12 +8,12 @@ Set-Location $RepoRoot
 Add-Type -AssemblyName System.Drawing
 
 function Get-WatchSummary {
-    $setup = Get-Content ".garmin\watch-setup.json" | ConvertFrom-Json
-    $apiKeyLine = Get-Content ".env" | Where-Object { $_ -match "^GARMIN_MCP_API_KEY=" }
-    $apiKey = $apiKeyLine -replace "^GARMIN_MCP_API_KEY=", ""
+    $setup = Get-Content ".trainbud\watch-setup.json" | ConvertFrom-Json
+    $apiKeyLine = Get-Content ".env" | Where-Object { $_ -match "^TRAINBUD_API_KEY=" }
+    $apiKey = $apiKeyLine -replace "^TRAINBUD_API_KEY=", ""
 
     if (-not $setup.serverUrl) {
-        throw "Missing serverUrl in .garmin/watch-setup.json. Run .\scripts\start-watch-stack.ps1 first."
+        throw "Missing serverUrl in .trainbud/watch-setup.json. Run .\scripts\start-watch-stack.ps1 first."
     }
 
     return Invoke-RestMethod -Uri "$($setup.serverUrl)/api/watch" -Headers @{

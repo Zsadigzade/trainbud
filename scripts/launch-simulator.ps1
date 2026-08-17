@@ -1,10 +1,10 @@
-# Start Connect IQ simulator and load GarminBud on fr70.
+# Start Connect IQ simulator and load TrainBud on fr70.
 # Usage: .\scripts\launch-simulator.ps1
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $CiqRoot = Join-Path $RepoRoot "ciq"
-$PrgPath = Join-Path $CiqRoot "bin\GarminBud.prg"
+$PrgPath = Join-Path $CiqRoot "bin\TrainBud.prg"
 $Device = "fr70"
 
 $SdkRoot = (Get-Content "$env:APPDATA\Garmin\ConnectIQ\current-sdk.cfg" -Raw).TrimEnd('\')
@@ -41,7 +41,7 @@ if (-not $sim) {
     Write-Host "Simulator already running (PID $($sim.Id))."
 }
 
-Write-Host "Loading GarminBud on $Device..."
+Write-Host "Loading TrainBud on $Device..."
 Push-Location $CiqRoot
 
 $monkeyJob = Start-Job -ScriptBlock {
@@ -69,7 +69,7 @@ if ($output) {
 
 Write-Host ""
 Write-Host "Widget loaded. Configure settings in the simulator:"
-Write-Host "  Simulation -> App Settings -> GarminBud"
-$setup = Get-Content (Join-Path $RepoRoot ".garmin\watch-setup.json") | ConvertFrom-Json
+Write-Host "  Simulation -> App Settings -> TrainBud"
+$setup = Get-Content (Join-Path $RepoRoot ".trainbud\watch-setup.json") | ConvertFrom-Json
 Write-Host "  Server URL: $($setup.serverUrl)"
-Write-Host "  API Key:    GARMIN_MCP_API_KEY from .env"
+Write-Host "  API Key:    TRAINBUD_API_KEY from .env"

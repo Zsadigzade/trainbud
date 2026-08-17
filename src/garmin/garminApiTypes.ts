@@ -1,4 +1,4 @@
-// Minimal Garmin Connect API shapes used by GarminBud (avoids importing garmin-connect/dist internals).
+// Minimal Garmin Connect API shapes used by TrainBud (avoids importing garmin-connect/dist internals).
 
 export interface GarminOAuth1 {
   oauth_token: string;

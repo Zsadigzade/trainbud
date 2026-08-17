@@ -11,8 +11,8 @@ import {
 } from "../src/garmin/auth.js";
 
 describe("auth session persistence", () => {
-  let tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "garmin-bud-auth-"));
-  const previousSessionPath = process.env.GARMIN_SESSION_PATH;
+  let tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-auth-"));
+  const previousSessionPath = process.env.TRAINBUD_SESSION_PATH;
 
   function sessionPath(): string {
     return path.join(tempDir, "session.json");
@@ -20,20 +20,20 @@ describe("auth session persistence", () => {
 
   afterEach(() => {
     if (previousSessionPath === undefined) {
-      delete process.env.GARMIN_SESSION_PATH;
+      delete process.env.TRAINBUD_SESSION_PATH;
     } else {
-      process.env.GARMIN_SESSION_PATH = previousSessionPath;
+      process.env.TRAINBUD_SESSION_PATH = previousSessionPath;
     }
 
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
 
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "garmin-bud-auth-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-auth-"));
   });
 
   it("writes and reads a stored session", () => {
-    process.env.GARMIN_SESSION_PATH = sessionPath();
+    process.env.TRAINBUD_SESSION_PATH = sessionPath();
 
     writeStoredSession({
       oauth1: {
@@ -61,7 +61,7 @@ describe("auth session persistence", () => {
   });
 
   it("clears a stored session", () => {
-    process.env.GARMIN_SESSION_PATH = sessionPath();
+    process.env.TRAINBUD_SESSION_PATH = sessionPath();
 
     writeStoredSession({
       oauth1: {

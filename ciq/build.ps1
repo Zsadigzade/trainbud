@@ -1,4 +1,4 @@
-# Build GarminBud Connect IQ widget (Windows)
+# Build TrainBud Connect IQ widget (Windows)
 # Usage: .\ciq\build.ps1 [-Device fenix847mm]
 
 param(
@@ -10,7 +10,7 @@ $CiqRoot = $PSScriptRoot
 $SdkRoot = Get-Content "$env:APPDATA\Garmin\ConnectIQ\current-sdk.cfg" -Raw
 $SdkBin = Join-Path $SdkRoot.TrimEnd('\') "bin"
 $KeyPath = Join-Path $CiqRoot "developer_key.der"
-$OutPath = Join-Path $CiqRoot "bin\GarminBud.prg"
+$OutPath = Join-Path $CiqRoot "bin\TrainBud.prg"
 
 if (-not (Test-Path $SdkBin)) {
     throw "Connect IQ SDK not found. Install SDK Manager and set active SDK."

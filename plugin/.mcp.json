@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "garmin-bud": {
-      "command": "garmin-bud",
+    "trainbud": {
+      "command": "trainbud",
       "args": ["start"],
       "env": {
         "GARMIN_EMAIL": "${GARMIN_EMAIL}",

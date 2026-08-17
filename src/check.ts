@@ -170,7 +170,7 @@ export async function runLiveCheck(): Promise<ToolCheckResult[]> {
 }
 
 export function printLiveCheckResults(results: ToolCheckResult[]): void {
-  console.log("GarminBud live check");
+  console.log("TrainBud live check");
   console.log("");
 
   for (const result of results) {
@@ -185,7 +185,7 @@ export function printLiveCheckResults(results: ToolCheckResult[]): void {
   const total = results.length;
 
   if (passed === total) {
-    console.log(`All ${total} checks passed. GarminBud is ready to use.`);
+    console.log(`All ${total} checks passed. TrainBud is ready to use.`);
     return;
   }
 

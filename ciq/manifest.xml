@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
-<!-- GarminBud watch widget — requires garmin-bud serve + HTTPS tunnel -->
+<!-- TrainBud watch widget — requires trainbud serve + HTTPS tunnel -->
 <iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
     <iq:application
-        entry="GarminBudApp"
+        entry="TrainBudApp"
         id="e9204b53-2eea-4851-9071-8ce7e6839589"
         launcherIcon="@Drawables.LauncherIcon"
         minSdkVersion="3.2.0"
         name="@Strings.AppName"
         type="widget"
-        version="1.1.0">
+        version="1.2.0">
 
         <iq:products>
             <iq:product id="epix2"/>

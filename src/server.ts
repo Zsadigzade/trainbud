@@ -57,7 +57,7 @@ export function registerGarminTools(mcpServer: McpServer): void {
 
 export function createMcpServerInstance(): McpServer {
   const mcpServer = new McpServer({
-    name: "garmin-bud",
+    name: "trainbud",
     version: packageVersion,
   });
 
@@ -74,7 +74,7 @@ export function createMcpServer(): GarminMcpServer {
       mcpServer = createMcpServerInstance();
       transport = new StdioServerTransport();
       await mcpServer.connect(transport);
-      logger.info("GarminBud server started on stdio transport");
+      logger.info("TrainBud server started on stdio transport");
     },
     async close(): Promise<void> {
       await mcpServer.close();

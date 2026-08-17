@@ -1,12 +1,12 @@
-# GarminBud
+# TrainBud
 
-**Talk to your Garmin data.**
+**Talk to your training data.**
 
-GarminBud is an open-source MCP server that connects your Garmin Connect fitness data to Claude, Cursor, and other AI assistants. Ask about workouts, sleep, heart rate, recovery, and body composition in plain English — privately, on your machine.
+TrainBud is an open-source MCP server that connects your Garmin Connect fitness data to Claude, Cursor, and other AI assistants. Ask about workouts, sleep, heart rate, recovery, and body composition in plain English — privately, on your machine.
 
-> **Disclaimer:** GarminBud is an unofficial community project. It is not affiliated with, endorsed by, or sponsored by Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
+> **Disclaimer:** TrainBud is an unofficial community project. It is not affiliated with, endorsed by, or sponsored by Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 
-[![CI](https://github.com/Zsadigzade/garmin-bud/actions/workflows/ci.yml/badge.svg)](https://github.com/Zsadigzade/garmin-bud/actions/workflows/ci.yml)
+[![CI](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml/badge.svg)](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node 20+](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](.nvmrc)
 
@@ -21,10 +21,10 @@ Once connected to your MCP client, ask things like:
 
 See [examples/prompts.md](./examples/prompts.md) for more ideas.
 
-## Why GarminBud
+## Why TrainBud
 
 - **Private** — credentials stay in your local `.env`; data is cached on your machine
-- **Local-first** — SQLite cache, session tokens in `.garmin/`
+- **Local-first** — SQLite cache, session tokens in `.trainbud/`
 - **Works everywhere** — Windows, macOS, Linux (Node.js 20+)
 - **Any MCP client** — Claude Desktop, Cursor, and other stdio-compatible clients
 - **Smart fetching** — batched API calls and automatic re-auth when sessions expire
@@ -32,11 +32,11 @@ See [examples/prompts.md](./examples/prompts.md) for more ideas.
 ## Quick start
 
 ```bash
-git clone https://github.com/Zsadigzade/garmin-bud.git
-cd garmin-bud
+git clone https://github.com/Zsadigzade/trainbud.git
+cd trainbud
 npm install
 npm run build
-npx garmin-bud setup
+npx trainbud setup
 ```
 
 The setup wizard walks you through credentials, authentication, and connecting Cursor or Claude Desktop — no MCP config editing required.
@@ -48,8 +48,8 @@ Full walkthrough: [QUICKSTART.md](./QUICKSTART.md)
 Install as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) — skills **and** MCP server in one step:
 
 ```bash
-/plugin marketplace add Zsadigzade/garmin-bud
-/plugin install garmin-bud@garmin-bud
+/plugin marketplace add Zsadigzade/trainbud
+/plugin install trainbud@trainbud
 ```
 
 Set credentials, then restart Claude Code:
@@ -61,8 +61,8 @@ export GARMIN_PASSWORD="yourpassword"
 
 | Command | What it does |
 |---------|----------------|
-| `/garmin-bud:garmin-bud-setup` | First-time setup and diagnostics |
-| `/garmin-bud:garmin-bud` | Ask about workouts, sleep, recovery, HR, stress, VO2 max |
+| `/trainbud:trainbud-setup` | First-time setup and diagnostics |
+| `/trainbud:trainbud` | Ask about workouts, sleep, recovery, HR, stress, VO2 max |
 
 Plugin files live in [`plugin/`](./plugin/). See [`plugin/README.md`](./plugin/README.md).
 
@@ -72,28 +72,28 @@ This repo also ships project skills in [`.claude/skills/`](./.claude/skills/) fo
 
 | Command | What it does |
 |---------|----------------|
-| `/garmin-bud-setup` | Install, authenticate, configure MCP, run live check |
-| `/garmin-bud` | Ask about workouts, sleep, recovery, HR, stress, VO2 max |
+| `/trainbud-setup` | Install, authenticate, configure MCP, run live check |
+| `/trainbud` | Ask about workouts, sleep, recovery, HR, stress, VO2 max |
 
 Open the repo in **Claude Code** (`claude` in this directory) — skills load automatically.
 
 To use skills in **every** project without the plugin, copy them to `~/.claude/skills/`.
 
-After setup, restart your MCP client and try `/garmin-bud` with *"What did I do today?"*
+After setup, restart your MCP client and try `/trainbud` with *"What did I do today?"*
 
 ## Garmin watch widget (Connect IQ)
 
 View recovery, sleep, activity, stress, and VO2 max on your Garmin watch via a Connect IQ widget in [`ciq/`](./ciq/).
 
-**Requires:** `garmin-bud serve` running + HTTPS tunnel (same setup as web AI).
+**Requires:** `trainbud serve` running + HTTPS tunnel (same setup as web AI).
 
 1. Start the server and tunnel:
    ```bash
-   garmin-bud serve
+   trainbud serve
    cloudflared tunnel --url http://127.0.0.1:3847
    ```
 2. Build and sideload the widget — see [ciq/README.md](./ciq/README.md)
-3. In **Garmin Connect Mobile** → Connect IQ → GarminBud settings, set:
+3. In **Garmin Connect Mobile** → Connect IQ → TrainBud settings, set:
    - **Server URL** — your tunnel URL (e.g. `https://abc.trycloudflare.com`)
 4. Open the widget on your watch — it shows a pairing code. Approve it in the dashboard (`/dashboard?token=YOUR_API_KEY`) to complete setup.
 
@@ -109,9 +109,9 @@ Edit `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "garmin-bud": {
+    "trainbud": {
       "command": "node",
-      "args": ["C:/path/to/garmin-bud/dist/index.js", "start"],
+      "args": ["C:/path/to/trainbud/dist/index.js", "start"],
       "env": {
         "GARMIN_EMAIL": "your@email.com",
         "GARMIN_PASSWORD": "yourpassword"
@@ -126,8 +126,8 @@ After `npm link`, you can use the CLI directly:
 ```json
 {
   "mcpServers": {
-    "garmin-bud": {
-      "command": "garmin-bud",
+    "trainbud": {
+      "command": "trainbud",
       "args": ["start"]
     }
   }
@@ -153,14 +153,14 @@ Restart your MCP client, then start asking questions.
 ## CLI
 
 ```bash
-garmin-bud setup          # Interactive first-time setup (recommended)
-garmin-bud serve          # Remote HTTP MCP for web AI (claude.ai, ChatGPT)
-garmin-bud check          # Live diagnostics against all tools
-garmin-bud start          # Start the MCP server (stdio)
-garmin-bud auth           # Force re-authentication
-garmin-bud cache clear    # Clear cached data
-garmin-bud status         # Show session and cache status
-garmin-bud --version      # Print version
+trainbud setup          # Interactive first-time setup (recommended)
+trainbud serve          # Remote HTTP MCP for web AI (claude.ai, ChatGPT)
+trainbud check          # Live diagnostics against all tools
+trainbud start          # Start the MCP server (stdio)
+trainbud auth           # Force re-authentication
+trainbud cache clear    # Clear cached data
+trainbud status         # Show session and cache status
+trainbud --version      # Print version
 ```
 
 ## Configuration
@@ -169,20 +169,20 @@ garmin-bud --version      # Print version
 |----------|---------|-------------|
 | `GARMIN_EMAIL` | — | Garmin Connect email |
 | `GARMIN_PASSWORD` | — | Garmin Connect password |
-| `GARMIN_SESSION_PATH` | `.garmin/session.json` | Session token storage |
-| `GARMIN_LOG_PATH` | `.garmin/mcp.log` | Log file path |
-| `GARMIN_CACHE_PATH` | `.garmin/cache.db` | SQLite cache database |
+| `TRAINBUD_SESSION_PATH` | `.trainbud/session.json` | Session token storage |
+| `TRAINBUD_LOG_PATH` | `.trainbud/mcp.log` | Log file path |
+| `TRAINBUD_CACHE_PATH` | `.trainbud/cache.db` | SQLite cache database |
 | `CACHE_TTL_ACTIVITIES` | `1800` | Activity cache TTL (seconds) |
 | `CACHE_TTL_SLEEP` | `7200` | Sleep cache TTL (seconds) |
 | `CACHE_TTL_STATS` | `3600` | Stats cache TTL (seconds) |
-| `GARMIN_MCP_API_KEY` | auto-generated | Bearer token for HTTP MCP (`garmin-bud serve`) |
-| `GARMIN_MCP_HOST` | `127.0.0.1` | Bind host for HTTP server |
-| `GARMIN_MCP_PORT` | `3847` | Bind port for HTTP server |
+| `TRAINBUD_API_KEY` | auto-generated | Bearer token for HTTP MCP (`trainbud serve`) |
+| `TRAINBUD_HOST` | `127.0.0.1` | Bind host for HTTP server |
+| `TRAINBUD_PORT` | `3847` | Bind port for HTTP server |
 
 ## Security & privacy
 
 - Credentials live only in your local `.env` file — never sent to a third party
-- Session tokens in `.garmin/session.json` are as sensitive as a password
+- Session tokens in `.trainbud/session.json` are as sensitive as a password
 - Tool errors are sanitized before reaching the AI client
 - Uses the unofficial [`garmin-connect`](https://www.npmjs.com/package/garmin-connect) npm package (not Garmin's enterprise OAuth API)
 - **MFA is not supported** by the underlying library — disable MFA or use an app-specific password
@@ -191,9 +191,9 @@ garmin-bud --version      # Print version
 
 | Issue | Fix |
 |-------|-----|
-| Authentication failed | Verify `.env` credentials, run `garmin-bud auth` |
+| Authentication failed | Verify `.env` credentials, run `trainbud auth` |
 | MFA enabled on account | Disable MFA or use an app-specific password |
-| Stale data | Run `garmin-bud cache clear` |
+| Stale data | Run `trainbud cache clear` |
 | Rate limited | Wait 60 seconds; cached responses are used when available |
 | No sleep/HR data | Ensure your Garmin device has synced to Garmin Connect |
 | Server won't start | Check that `GARMIN_EMAIL` and `GARMIN_PASSWORD` are set in `.env` |

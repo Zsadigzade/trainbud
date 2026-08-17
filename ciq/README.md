@@ -1,14 +1,14 @@
-# GarminBud Connect IQ Widget
+# TrainBud Connect IQ Widget
 
-Display GarminBud recovery, sleep, activity, stress, and VO2 max on your Garmin watch.
+Display TrainBud recovery, sleep, activity, stress, and VO2 max on your Garmin watch.
 
-The widget calls `GET /api/watch` on your running `garmin-bud serve` instance (via HTTPS tunnel). It does **not** run AI on the watch — it shows a compact summary from your local GarminBud server.
+The widget calls `GET /api/watch` on your running `trainbud serve` instance (via HTTPS tunnel). It does **not** run AI on the watch — it shows a compact summary from your local TrainBud server.
 
 ## Prerequisites
 
-1. **GarminBud server running**
+1. **TrainBud server running**
    ```bash
-   garmin-bud serve
+   trainbud serve
    ```
 
 2. **HTTPS tunnel** (required — watches need HTTPS)
@@ -19,7 +19,7 @@ The widget calls `GET /api/watch` on your running `garmin-bud serve` instance (v
 
 3. **API key** from your `.env`:
    ```env
-   GARMIN_MCP_API_KEY=your-key-here
+   TRAINBUD_API_KEY=your-key-here
    ```
 
 4. **[Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/)** installed
@@ -28,7 +28,7 @@ The widget calls `GET /api/watch` on your running `garmin-bud serve` instance (v
 
 ## Configure the widget
 
-After sideloading, open **Garmin Connect Mobile** → your device → **Connect IQ** → **GarminBud** → settings:
+After sideloading, open **Garmin Connect Mobile** → your device → **Connect IQ** → **TrainBud** → settings:
 
 | Setting | Value |
 |---------|-------|
@@ -41,7 +41,7 @@ Sync the watch. On first open the widget will display a pairing code — approve
 **Quick build** (uses active SDK from Garmin Connect IQ SDK Manager):
 
 ```powershell
-cd <path-to-garmin-bud>\ciq
+cd <path-to-trainbud>\ciq
 .\build.ps1
 # Default device: fenix847mm (Fenix 8 47mm)
 ```
@@ -49,7 +49,7 @@ cd <path-to-garmin-bud>\ciq
 **Manual build:**
 
 ```powershell
-monkeyc -f monkey.jungle -o bin/GarminBud.prg -y developer_key.der -d fenix847mm -w
+monkeyc -f monkey.jungle -o bin/TrainBud.prg -y developer_key.der -d fenix847mm -w
 ```
 
 First run generates `developer_key.der` via OpenSSL if missing.
@@ -57,13 +57,13 @@ First run generates `developer_key.der` via OpenSSL if missing.
 **Simulator:**
 
 ```powershell
-monkeydo bin/GarminBud.prg fenix847mm
+monkeydo bin/TrainBud.prg fenix847mm
 connectiq
 ```
 
 ## Using the widget
 
-1. Add the **GarminBud** widget to your watch face widget loop
+1. Add the **TrainBud** widget to your watch face widget loop
 2. Open it — it fetches fresh data from your server
 3. **Tap** or **swipe left/right** to cycle through cards:
    - **Overview** — recovery, sleep, stress, and VO2 max at a glance
@@ -86,7 +86,7 @@ The server exposes:
 
 ```http
 GET /api/watch
-Authorization: Bearer YOUR_GARMIN_MCP_API_KEY
+Authorization: Bearer YOUR_TRAINBUD_API_KEY
 ```
 
 Example response:
@@ -117,8 +117,8 @@ Each field is `null` if that metric is unavailable — the widget shows "No data
 | Issue | Fix |
 |-------|-----|
 | "Set URL + API key..." | Configure settings in Garmin Connect Mobile and sync |
-| "Could not reach GarminBud" | Ensure `garmin-bud serve` and tunnel are running; URL must be HTTPS |
-| -400 on device | Response must be JSON object with `Content-Type: application/json` (GarminBud handles this) |
+| "Could not reach TrainBud" | Ensure `trainbud serve` and tunnel are running; URL must be HTTPS |
+| -400 on device | Response must be JSON object with `Content-Type: application/json` (TrainBud handles this) |
 | Stale data | Re-open the widget to fetch again; cached data shows with a yellow "Updated Xm ago" banner |
 
 ## Connect IQ Store

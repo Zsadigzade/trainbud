@@ -22,7 +22,7 @@ export function renderDashboard(): string {
   const serverUrl = appConfig.publicUrl || `http://localhost:${appConfig.mcpPort}`;
 
   const pairingSection = pendingPairs.length === 0
-    ? `<p class="muted">No pending pairing requests. Open GarminBud on your watch to generate a code.</p>`
+    ? `<p class="muted">No pending pairing requests. Open TrainBud on your watch to generate a code.</p>`
     : pendingPairs.map((t) => `
         <div class="pair-card">
           <div class="code">${escapeHtml(t.code)}</div>
@@ -38,7 +38,7 @@ export function renderDashboard(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GarminBud Dashboard</title>
+  <title>TrainBud Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; padding: 24px; }
@@ -62,13 +62,13 @@ export function renderDashboard(): string {
   </style>
 </head>
 <body>
-  <h1>GarminBud</h1>
+  <h1>TrainBud</h1>
   <p class="subtitle">Dashboard · ${escapeHtml(serverUrl)}</p>
 
   <div class="section">
     <h2>Watch Pairing</h2>
     ${pairingSection}
-    <div class="alert">Open GarminBud on your watch → it shows a 6-digit code → approve it here.</div>
+    <div class="alert">Open TrainBud on your watch → it shows a 6-digit code → approve it here.</div>
   </div>
 
   <div class="section">
@@ -89,7 +89,7 @@ export function renderDashboard(): string {
   <div class="section">
     <h2>Server Info</h2>
     <p style="font-size:0.85rem;">Public URL: <code style="color:#60a5fa">${escapeHtml(serverUrl)}</code></p>
-    <p class="info" style="margin-top:6px;">Set GARMIN_PUBLIC_URL in .env to your Cloudflare Tunnel URL for watch pairing.</p>
+    <p class="info" style="margin-top:6px;">Set TRAINBUD_PUBLIC_URL in .env to your Cloudflare Tunnel URL for watch pairing.</p>
   </div>
 
   <script>

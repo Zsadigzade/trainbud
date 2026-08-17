@@ -1,17 +1,17 @@
 {
-  "name": "garmin-bud",
+  "name": "trainbud",
   "owner": {
     "name": "Zsadigzade"
   },
   "metadata": {
-    "description": "GarminBud — unofficial Garmin Connect MCP for Claude Code",
-    "homepage": "https://github.com/Zsadigzade/garmin-bud"
+    "description": "TrainBud — unofficial Garmin Connect MCP for Claude Code",
+    "homepage": "https://github.com/Zsadigzade/trainbud"
   },
   "plugins": [
     {
-      "name": "garmin-bud",
+      "name": "trainbud",
       "source": "./plugin",
-      "description": "9 MCP tools for workouts, sleep, HR, recovery, stress, VO2 max, and training insights — plus /garmin-bud setup and coach skills"
+      "description": "9 MCP tools for workouts, sleep, HR, recovery, stress, VO2 max, and training insights — plus /trainbud setup and coach skills"
     }
   ]
 }

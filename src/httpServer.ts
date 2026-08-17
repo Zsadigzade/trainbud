@@ -3,7 +3,7 @@ import http from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { closeCache } from "./garmin/cache.js";
 import { closeAppDb, setSetting } from "./appDb.js";
-import { assertGarminCredentials, assertMcpApiKey, appConfig } from "./config.js";
+import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
 import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
 import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
@@ -101,7 +101,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!isAuthorized(req)) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+    res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
     sendJson(res, 401, {
       error: "Unauthorized",
       message: "Missing or invalid Authorization: Bearer token.",
@@ -155,7 +155,7 @@ export function createHttpMcpServer(): HttpMcpServer {
   return {
     async start(): Promise<void> {
       assertGarminCredentials();
-      assertMcpApiKey();
+      assertApiKey();
       configureLogger(appConfig.logPath);
 
       // Load Claude key saved via dashboard into process.env if not already set
@@ -170,7 +170,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname === "/" || pathname === "") {
           sendJson(res, 200, {
-            service: "garmin-bud",
+            service: "trainbud",
             endpoints: {
               health: "/health",
               watch: "/api/watch",
@@ -185,7 +185,7 @@ export function createHttpMcpServer(): HttpMcpServer {
         }
 
         if (pathname === "/health") {
-          sendJson(res, 200, { status: "ok", service: "garmin-bud" });
+          sendJson(res, 200, { status: "ok", service: "trainbud" });
           return;
         }
 
@@ -212,7 +212,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname === "/api/prompt" && req.method === "POST") {
           if (!isAuthorized(req)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             sendJson(res, 401, { error: "Unauthorized" });
             return;
           }
@@ -243,7 +243,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname.startsWith("/api/prompt/") && req.method === "GET") {
           if (!isAuthorized(req)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             sendJson(res, 401, { error: "Unauthorized" });
             return;
           }
@@ -264,7 +264,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname === "/dashboard") {
           if (!isAuthorized(req, queryToken)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             res.writeHead(401, { "Content-Type": "text/html" });
             res.end("<h1>401 Unauthorized</h1><p>Add <code>Authorization: Bearer YOUR_API_KEY</code> header, or use the URL <code>/dashboard?token=YOUR_API_KEY</code></p>");
             return;
@@ -276,7 +276,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname === "/dashboard/pair/approve" && req.method === "POST") {
           if (!isAuthorized(req, queryToken)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             res.writeHead(401, { "Content-Type": "text/html" });
             res.end("<h1>401 Unauthorized</h1>");
             return;
@@ -317,7 +317,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         if (pathname === "/dashboard/settings" && req.method === "POST") {
           if (!isAuthorized(req, queryToken)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             res.writeHead(401, { "Content-Type": "text/html" });
             res.end("<h1>401 Unauthorized</h1>");
             return;
@@ -348,7 +348,7 @@ export function createHttpMcpServer(): HttpMcpServer {
           }
 
           if (!isAuthorized(req)) {
-            res.setHeader("WWW-Authenticate", 'Bearer realm="garmin-bud"');
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             sendJson(res, 401, {
               error: "Unauthorized",
               message: "Missing or invalid Authorization: Bearer token.",
@@ -401,7 +401,7 @@ export function createHttpMcpServer(): HttpMcpServer {
 
       logger.info(
         { host: appConfig.mcpHost, port: appConfig.mcpPort },
-        "GarminBud HTTP MCP server listening"
+        "TrainBud HTTP MCP server listening"
       );
     },
     async close(): Promise<void> {
@@ -431,19 +431,19 @@ export function getRemoteConnectorInstructions(publicUrl: string): string {
   return [
     "Remote MCP connector setup:",
     "",
-    `1. Start the server: garmin-bud serve`,
+    `1. Start the server: trainbud serve`,
     `2. Expose HTTPS (e.g. Cloudflare Tunnel): cloudflared tunnel --url http://127.0.0.1:${appConfig.mcpPort}`,
     `3. Use your public URL + /mcp as the connector endpoint`,
     "",
     "Claude.ai:",
     "- Settings → Connectors → Add custom connector",
     `- URL: ${publicUrl.replace(/\/$/, "")}/mcp`,
-    "- Authentication: Bearer token (your GARMIN_MCP_API_KEY from .env)",
+    "- Authentication: Bearer token (your TRAINBUD_API_KEY from .env)",
     "",
     "ChatGPT (Developer Mode):",
     "- Settings → Connectors → create MCP connector",
     `- Server URL: ${publicUrl.replace(/\/$/, "")}/mcp`,
-    "- Auth: Bearer token with GARMIN_MCP_API_KEY",
+    "- Auth: Bearer token with TRAINBUD_API_KEY",
     "- Note: ChatGPT MCP auth behavior may differ; test after Claude.ai works",
     "",
     `Health check: ${publicUrl.replace(/\/$/, "")}/health`,

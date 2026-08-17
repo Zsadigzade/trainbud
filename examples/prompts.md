@@ -1,6 +1,6 @@
 # Example Prompts
 
-Use these prompts after connecting **GarminBud** in your MCP client (Cursor, Claude Desktop, or claude.ai via remote connector).
+Use these prompts after connecting **TrainBud** in your MCP client (Cursor, Claude Desktop, or claude.ai via remote connector).
 
 ## Activities
 
@@ -37,7 +37,7 @@ Use these prompts after connecting **GarminBud** in your MCP client (Cursor, Cla
 16. What's my VO2 max trend over the last month?
 17. Is my fitness improving based on VO2 max?
 
-## Compound questions (multi-tool — the best use of GarminBud)
+## Compound questions (multi-tool — the best use of TrainBud)
 
 18. I played tennis yesterday — how was my sleep after, and am I recovered today?
 19. Give me a weekly training summary: activities, sleep average, recovery trend.
@@ -48,9 +48,9 @@ Use these prompts after connecting **GarminBud** in your MCP client (Cursor, Cla
 
 ## Desktop clients
 
-- **Cursor / VS Code / Windsurf:** run `garmin-bud setup` and choose your editor.
-- **Claude Desktop:** run `garmin-bud setup` and choose Claude Desktop (or `A` for all).
+- **Cursor / VS Code / Windsurf:** run `trainbud setup` and choose your editor.
+- **Claude Desktop:** run `trainbud setup` and choose Claude Desktop (or `A` for all).
 
 ## Web AI (claude.ai, ChatGPT)
 
-After running `garmin-bud serve` and exposing it via HTTPS tunnel, add the remote URL in your AI platform's MCP connector settings. See [docs/WEB-MCP.md](../docs/WEB-MCP.md).
+After running `trainbud serve` and exposing it via HTTPS tunnel, add the remote URL in your AI platform's MCP connector settings. See [docs/WEB-MCP.md](../docs/WEB-MCP.md).

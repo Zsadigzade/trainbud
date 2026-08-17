@@ -27,12 +27,12 @@ All notable changes to this project will be documented in this file.
 - `configureLogger()` for lazy log file initialization
 - `.nvmrc` (Node 20)
 - `.github/workflows/publish.yml` for npm + GitHub Releases on version tags
-- Project knowledge base moved to Obsidian vault (`05-Projects/garmin-bud/`); see `docs/VAULT.md`
+- Project knowledge base moved to Obsidian vault (`05-Projects/trainbud/`); see `docs/VAULT.md`
 - 11 new tests (32 total): cache key stability, date filtering, recovery scoring, error sanitization
 
 ### Changed
 
-- **Rebranded** from garmin-mcp to **GarminBud** (package `garmin-bud`, CLI `garmin-bud`)
+- **Rebranded** from garmin-mcp to **TrainBud** (package `trainbud`, CLI `trainbud`)
 - README rewritten as product page with disclaimer, badges, and security section
 - Added CONTRIBUTING.md; updated vault docs and examples
 - Removed imports from internal `garmin-connect/dist/` paths
@@ -44,7 +44,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Initial MCP server exposing 6 Garmin Connect tools
-- Email/password authentication with session persistence (`.garmin/session.json`)
+- Email/password authentication with session persistence (`.trainbud/session.json`)
 - SQLite caching layer with configurable TTL per resource type
 - CLI commands: `start`, `auth`, `cache clear`, `status`
 - Unit and integration tests using Node test runner

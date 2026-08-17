@@ -4,11 +4,49 @@ import { closeCache, getCache } from "./garmin/cache.js";
 import { resetGarminClient } from "./garmin/client.js";
 import { createMcpServer } from "./server.js";
 import { createHttpMcpServer, getRemoteConnectorInstructions } from "./httpServer.js";
-import { assertGarminCredentials, appConfig, assertMcpApiKey } from "./config.js";
+import { assertGarminCredentials, appConfig, assertApiKey, deprecatedEnvNames } from "./config.js";
+import { DATA_DIR_NAME, LEGACY_DATA_DIR_NAME, migrateLegacyDataDir } from "./paths.js";
 import { configureLogger, logger } from "./utils/logger.js";
 import { packageVersion } from "./version.js";
 import { runSetup } from "./setup.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
+
+// SECTION: Bootstrap
+//
+// Runs before every command. Moves pre-0.3.0 state out of `.garmin/` and warns
+// once about renamed environment variables, so an existing install keeps its
+// session, cache and watch pairing across the rename.
+
+function bootstrap(): void {
+  // stdio transport speaks MCP on stdout — never print there.
+  const notify = (message: string): void => {
+    process.stderr.write(`${message}\n`);
+  };
+
+  try {
+    const result = migrateLegacyDataDir();
+    if (result.migrated) {
+      notify(
+        `Migrated ${result.movedEntries?.length ?? 0} item(s) from ${LEGACY_DATA_DIR_NAME}/ to ${DATA_DIR_NAME}/.`
+      );
+    }
+  } catch (error) {
+    notify(
+      `Could not migrate ${LEGACY_DATA_DIR_NAME}/ to ${DATA_DIR_NAME}/: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    notify(`Move the directory manually, or run "trainbud setup" to start fresh.`);
+  }
+
+  const deprecated = deprecatedEnvNames();
+  if (deprecated.length > 0) {
+    notify(
+      `Deprecated environment variable(s) in use: ${deprecated.join(", ")}. ` +
+        `These still work but were renamed to TRAINBUD_*; run "trainbud setup" to rewrite .env.`
+    );
+  }
+}
 
 // SECTION: CLI Commands
 
@@ -19,7 +57,7 @@ async function runStart(): Promise<void> {
   const server = createMcpServer();
 
   const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ signal }, "Shutting down GarminBud server");
+    logger.info({ signal }, "Shutting down TrainBud server");
     await server.close();
     closeCache();
     process.exit(0);
@@ -56,7 +94,7 @@ async function runStatus(): Promise<void> {
   const cache = getCache();
   const cacheStats = cache.stats();
 
-  console.log("GarminBud status");
+  console.log("TrainBud status");
   console.log(`Session: ${sessionExists() ? "present" : "missing"}`);
   console.log(`Cache entries: ${cacheStats.entries}`);
   console.log(`Expired cache entries: ${cacheStats.expiredEntries}`);
@@ -73,12 +111,12 @@ async function runCheck(): Promise<void> {
 
 async function runServe(): Promise<void> {
   assertGarminCredentials();
-  assertMcpApiKey();
+  assertApiKey();
 
   const server = createHttpMcpServer();
 
   const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ signal }, "Shutting down GarminBud HTTP server");
+    logger.info({ signal }, "Shutting down TrainBud HTTP server");
     await server.close();
     process.exit(0);
   };
@@ -92,7 +130,7 @@ async function runServe(): Promise<void> {
 
   await server.start();
 
-  console.log(`GarminBud HTTP MCP server running at http://${appConfig.mcpHost}:${appConfig.mcpPort}/mcp`);
+  console.log(`TrainBud HTTP MCP server running at http://${appConfig.mcpHost}:${appConfig.mcpPort}/mcp`);
   console.log(`Health check: http://${appConfig.mcpHost}:${appConfig.mcpPort}/health`);
   console.log("");
   console.log(getRemoteConnectorInstructions(`https://your-tunnel-url.example.com`));
@@ -101,9 +139,13 @@ async function runServe(): Promise<void> {
 export function createCliProgram(): Command {
   const program = new Command();
 
+  program.hook("preAction", () => {
+    bootstrap();
+  });
+
   program
-    .name("garmin-bud")
-    .description("GarminBud — MCP server for Garmin Connect fitness data")
+    .name("trainbud")
+    .description("TrainBud — MCP server for Garmin Connect fitness data")
     .version(packageVersion);
 
   program
@@ -153,10 +195,10 @@ export function createCliProgram(): Command {
     .action(async (options: { port?: number; host?: string }) => {
       try {
         if (options.port) {
-          process.env.GARMIN_MCP_PORT = String(options.port);
+          process.env.TRAINBUD_PORT = String(options.port);
         }
         if (options.host) {
-          process.env.GARMIN_MCP_HOST = options.host;
+          process.env.TRAINBUD_HOST = options.host;
         }
         await runServe();
       } catch (error) {
@@ -181,7 +223,7 @@ export function createCliProgram(): Command {
 
   program
     .command("check")
-    .description("Run live diagnostics against all GarminBud tools")
+    .description("Run live diagnostics against all TrainBud tools")
     .action(async () => {
       try {
         await runCheck();

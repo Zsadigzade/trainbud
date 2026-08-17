@@ -1,19 +1,19 @@
-# GarminBud — Claude Code plugin
+# TrainBud — Claude Code plugin
 
 Installs skills + MCP server for Garmin Connect fitness data.
 
 ## Install
 
 ```bash
-/plugin marketplace add Zsadigzade/garmin-bud
-/plugin install garmin-bud@garmin-bud
+/plugin marketplace add Zsadigzade/trainbud
+/plugin install trainbud@trainbud
 ```
 
 Or from a local clone:
 
 ```bash
-/plugin marketplace add /path/to/garmin-bud
-/plugin install garmin-bud@garmin-bud
+/plugin marketplace add /path/to/trainbud
+/plugin install trainbud@trainbud
 ```
 
 ## Credentials
@@ -31,18 +31,18 @@ Garmin Connect **MFA must be disabled**.
 
 | Command | Purpose |
 |---------|---------|
-| `/garmin-bud:garmin-bud-setup` | First-time setup and diagnostics |
-| `/garmin-bud:garmin-bud` | Ask about workouts, sleep, recovery, etc. |
+| `/trainbud:trainbud-setup` | First-time setup and diagnostics |
+| `/trainbud:trainbud` | Ask about workouts, sleep, recovery, etc. |
 
 ## MCP
 
-The plugin starts the MCP server via the `garmin-bud` CLI. Install it once:
+The plugin starts the MCP server via the `trainbud` CLI. Install it once:
 
 ```bash
-npm install -g garmin-bud          # after npm publish
+npm install -g trainbud          # after npm publish
 # or from source:
-git clone https://github.com/Zsadigzade/garmin-bud.git
-cd garmin-bud && npm install && npm run build && npm link
+git clone https://github.com/Zsadigzade/trainbud.git
+cd trainbud && npm install && npm run build && npm link
 ```
 
 Then restart Claude Code.

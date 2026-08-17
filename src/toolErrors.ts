@@ -11,7 +11,7 @@ export function formatToolError(error: unknown): string {
 
   if (error instanceof Error) {
     if (error.message.toLowerCase().includes("authentication")) {
-      return `${sanitizeErrorMessage(error.message)} Run "garmin-bud auth" to re-authenticate.`;
+      return `${sanitizeErrorMessage(error.message)} Run "trainbud auth" to re-authenticate.`;
     }
 
     return sanitizeErrorMessage(error.message);

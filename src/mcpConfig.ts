@@ -84,7 +84,7 @@ export function readMcpConfig(configPath: string): McpConfigFile {
   }
 }
 
-export function buildGarminBudServerEntry(credentials: {
+export function buildTrainBudServerEntry(credentials: {
   email: string;
   password: string;
   distIndexPath: string;
@@ -101,7 +101,7 @@ export function buildGarminBudServerEntry(credentials: {
   };
 }
 
-export function mergeGarminBudConfig(
+export function mergeTrainBudConfig(
   config: McpConfigFile,
   credentials: { email: string; password: string; distIndexPath: string }
 ): McpConfigFile {
@@ -109,7 +109,7 @@ export function mergeGarminBudConfig(
     ...config,
     mcpServers: {
       ...config.mcpServers,
-      "garmin-bud": buildGarminBudServerEntry(credentials),
+      "trainbud": buildTrainBudServerEntry(credentials),
     },
   };
 }
@@ -119,11 +119,11 @@ export function writeMcpConfig(configPath: string, config: McpConfigFile): void 
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
-export function configureGarminBudForClient(
+export function configureTrainBudForClient(
   client: DetectedMcpClient,
   credentials: { email: string; password: string; distIndexPath: string }
 ): void {
   const existing = readMcpConfig(client.configPath);
-  const merged = mergeGarminBudConfig(existing, credentials);
+  const merged = mergeTrainBudConfig(existing, credentials);
   writeMcpConfig(client.configPath, merged);
 }

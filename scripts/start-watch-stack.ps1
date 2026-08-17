@@ -1,4 +1,4 @@
-# Starts garmin-bud serve + ngrok tunnel for the Connect IQ watch widget.
+# Starts trainbud serve + ngrok tunnel for the Connect IQ watch widget.
 # Run from repo root: .\scripts\start-watch-stack.ps1
 #
 # SETUP: Set your ngrok static domain below, or pass it as an argument:
@@ -35,7 +35,7 @@ function Stop-PortListener([int]$Port) {
     }
 }
 
-Write-Host "GarminBud watch stack startup"
+Write-Host "TrainBud watch stack startup"
 Write-Host ""
 
 # Free port if a stale server is running
@@ -43,10 +43,10 @@ Stop-PortListener -Port $ServerPort
 Start-Sleep -Seconds 1
 
 # Start HTTP server
-Write-Host "Starting garmin-bud serve..."
+Write-Host "Starting trainbud serve..."
 $serveJob = Start-Job -ScriptBlock {
     Set-Location $using:RepoRoot
-    npx garmin-bud serve 2>&1
+    npx trainbud serve 2>&1
 }
 
 Start-Sleep -Seconds 3
@@ -78,7 +78,7 @@ Start-Sleep -Seconds 3
 $tunnelUrl = "https://$NgrokDomain"
 
 # Save for server to pick up
-$setupPath = Join-Path $RepoRoot ".garmin\watch-setup.json"
+$setupPath = Join-Path $RepoRoot ".trainbud\watch-setup.json"
 New-Item -ItemType Directory -Force -Path (Split-Path $setupPath) | Out-Null
 @{ serverUrl = $tunnelUrl; updatedAt = (Get-Date).ToUniversalTime().ToString("o") } |
     ConvertTo-Json |
@@ -87,8 +87,8 @@ New-Item -ItemType Directory -Force -Path (Split-Path $setupPath) | Out-Null
 # Read API key from .env for dashboard link
 $apiKey = ""
 if (Test-Path (Join-Path $RepoRoot ".env")) {
-    $envLine = Get-Content (Join-Path $RepoRoot ".env") | Select-String "^GARMIN_MCP_API_KEY="
-    if ($envLine) { $apiKey = ($envLine -replace "^GARMIN_MCP_API_KEY=", "").Trim() }
+    $envLine = Get-Content (Join-Path $RepoRoot ".env") | Select-String "^TRAINBUD_API_KEY="
+    if ($envLine) { $apiKey = ($envLine -replace "^TRAINBUD_API_KEY=", "").Trim() }
 }
 
 Write-Host ""
@@ -100,7 +100,7 @@ Write-Host "2. Open dashboard to pair watch + set Claude key:"
 if ($apiKey) {
     Write-Host "   $tunnelUrl/dashboard?token=$apiKey"
 } else {
-    Write-Host "   $tunnelUrl/dashboard?token=YOUR_GARMIN_MCP_API_KEY"
+    Write-Host "   $tunnelUrl/dashboard?token=YOUR_TRAINBUD_API_KEY"
 }
 Write-Host ""
 Write-Host "Saved to: $setupPath"

@@ -1,6 +1,6 @@
 # Quickstart
 
-Get GarminBud running in about 5 minutes.
+Get TrainBud running in about 5 minutes.
 
 ## Prerequisites
 
@@ -11,11 +11,11 @@ Get GarminBud running in about 5 minutes.
 ## Recommended: one-command setup
 
 ```bash
-git clone https://github.com/Zsadigzade/garmin-bud.git
-cd garmin-bud
+git clone https://github.com/Zsadigzade/trainbud.git
+cd trainbud
 npm install
 npm run build
-npx garmin-bud setup
+npx trainbud setup
 ```
 
 The setup wizard will:
@@ -24,7 +24,7 @@ The setup wizard will:
 2. Save credentials to `.env`
 3. Authenticate with Garmin Connect
 4. Detect Cursor and Claude Desktop on your machine
-5. Offer to add GarminBud to your MCP client config automatically
+5. Offer to add TrainBud to your MCP client config automatically
 6. Optionally run a live API check against all 9 tools
 
 After setup, **restart your MCP client completely** (Cursor or Claude Desktop), then ask:
@@ -38,17 +38,17 @@ After setup, **restart your MCP client completely** (Cursor or Claude Desktop), 
 **Plugin (recommended)** — skills + MCP in one install:
 
 ```bash
-/plugin marketplace add Zsadigzade/garmin-bud
-/plugin install garmin-bud@garmin-bud
+/plugin marketplace add Zsadigzade/trainbud
+/plugin install trainbud@trainbud
 ```
 
-Then `/garmin-bud:garmin-bud-setup` and `/garmin-bud:garmin-bud`.
+Then `/trainbud:trainbud-setup` and `/trainbud:trainbud`.
 
 **In-repo skills** — if you cloned the repo and run `claude` here:
 
-1. `/garmin-bud-setup` — guided install + MCP config + live check
+1. `/trainbud-setup` — guided install + MCP config + live check
 2. Restart MCP client
-3. `/garmin-bud` — ask any fitness question
+3. `/trainbud` — ask any fitness question
 
 See [`plugin/README.md`](./plugin/README.md) for plugin details.
 
@@ -57,13 +57,13 @@ See [`plugin/README.md`](./plugin/README.md) for plugin details.
 After setup, you can confirm Garmin Connect access directly:
 
 ```bash
-garmin-bud check
+trainbud check
 ```
 
 Example output:
 
 ```text
-GarminBud live check
+TrainBud live check
 
   get_latest_activity       ✓  Activity: Morning Run, Distance: 5.2 km, Start: ...
   get_activities_range      ✓  3 activities found
@@ -75,7 +75,7 @@ GarminBud live check
   get_vo2_max_trends        ✓  30-day VO2 max trend loaded
   get_training_insights     ✓  Weekly summary generated
 
-All 9 checks passed. GarminBud is ready to use.
+All 9 checks passed. TrainBud is ready to use.
 ```
 
 ## Manual setup (alternative)
@@ -85,8 +85,8 @@ If you prefer to configure files yourself:
 ### 1. Install
 
 ```bash
-git clone https://github.com/Zsadigzade/garmin-bud.git
-cd garmin-bud
+git clone https://github.com/Zsadigzade/trainbud.git
+cd trainbud
 npm install
 ```
 
@@ -107,7 +107,7 @@ GARMIN_PASSWORD=yourpassword
 
 ```bash
 npm run build
-npx garmin-bud auth
+npx trainbud auth
 ```
 
 You should see: `Garmin authentication successful. Session saved.`
@@ -122,9 +122,9 @@ You should see: `Garmin authentication successful. Session saved.`
 ```json
 {
   "mcpServers": {
-    "garmin-bud": {
+    "trainbud": {
       "command": "node",
-      "args": ["C:/path/to/garmin-bud/dist/index.js", "start"],
+      "args": ["C:/path/to/trainbud/dist/index.js", "start"],
       "env": {
         "GARMIN_EMAIL": "your@email.com",
         "GARMIN_PASSWORD": "yourpassword"
@@ -141,7 +141,7 @@ Restart your MCP client.
 For web AI platforms that require remote MCP connectors:
 
 ```bash
-garmin-bud serve
+trainbud serve
 ```
 
 Then expose via HTTPS tunnel and add to claude.ai Connectors. Full guide: [docs/WEB-MCP.md](./docs/WEB-MCP.md)
@@ -149,13 +149,13 @@ Then expose via HTTPS tunnel and add to claude.ai Connectors. Full guide: [docs/
 ## Useful commands
 
 ```bash
-garmin-bud setup         # Interactive first-time setup (recommended)
-garmin-bud serve         # Remote HTTP MCP for web AI connectors
-garmin-bud check         # Live diagnostics against all tools
-garmin-bud status        # Check session + cache
-garmin-bud cache clear   # Force fresh data fetch
-garmin-bud auth          # Re-login if session expired
-garmin-bud start         # Start MCP server manually (stdio)
+trainbud setup         # Interactive first-time setup (recommended)
+trainbud serve         # Remote HTTP MCP for web AI connectors
+trainbud check         # Live diagnostics against all tools
+trainbud status        # Check session + cache
+trainbud cache clear   # Force fresh data fetch
+trainbud auth          # Re-login if session expired
+trainbud start         # Start MCP server manually (stdio)
 ```
 
 ## Troubleshooting setup
@@ -164,7 +164,7 @@ garmin-bud start         # Start MCP server manually (stdio)
 |-------|-----|
 | Authentication failed | Verify email/password; disable MFA at connect.garmin.com |
 | MCP client doesn't see tools | Restart the client completely (not just reload window) |
-| Stale data | Run `garmin-bud cache clear` |
+| Stale data | Run `trainbud cache clear` |
 | `dist/index.js` not found | Run `npm run build` |
 
 ## Next steps
