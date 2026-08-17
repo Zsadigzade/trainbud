@@ -81,16 +81,33 @@ https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
 
 ## Required assets
 
-| Asset | Path | Size |
-|-------|------|------|
-| Launcher icon | `ciq/resources/drawables/launcher_icon.png` | 40×40 |
-| Store icon | `ciq/store/store_icon.png` | 130×130 |
-| Cover | `ciq/store/cover_500.png` | 500×500 |
-| Screenshots | `ciq/store/screenshots/` | 1–3 per device family |
+| Asset | Path | Size | State |
+|-------|------|------|-------|
+| Launcher icons | `ciq/resources-launcher-<size>/drawables/` | 35–70, exact per device | generated |
+| Store icon | `ciq/store/store_icon.png` | 130×130 | generated |
+| Cover | `ciq/store/cover_500.png` | 500×500 | generated |
+| Screenshots | `ciq/store/screenshots/` | 1–3 per device family | **MISSING — must be captured** |
 
-> Icons were redesigned for this submission. The previous set was a large letter **G**
-> on teal, which reads as a vendor monogram — regenerate with `scripts/generate-icons.ps1`
-> rather than restoring the old files.
+Icons come from `scripts/generate-icons.ps1`; re-run it after changing the product
+list and it rewrites `monkey.jungle` to match. The previous set was a large letter
+**G** on teal, which reads as a vendor monogram — do not restore those files.
+
+> **Screenshots must be captured from the simulator, not drawn.**
+> `ciq/store/screenshots/` was previously filled by `scripts/generate-store-screenshots.ps1`,
+> which does not run the app — it redraws imitations of the screens in PowerShell. Those
+> images were removed in 1.2.0 because publishing drawings as screenshots misrepresents
+> the app, and they had drifted from the real UI besides. That script now writes to
+> `ciq/store/mockups/` and refuses to run without an explicit flag.
+>
+> To produce real ones:
+> ```powershell
+> .\scripts\start-watch-stack.ps1            # server + HTTPS tunnel
+> cd ciq; .\build.ps1 -Device fenix847mm
+> connectiq                                  # simulator
+> monkeydo bin\TrainBud.prg fenix847mm
+> # pair the simulated watch via the dashboard, then File > Save Screenshot per card
+> ```
+> Capture at least: glance, Overview, Recovery, and Ask AI with a real answer.
 
 ## Review notes for Garmin
 

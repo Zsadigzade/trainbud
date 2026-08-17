@@ -1,9 +1,52 @@
-# Generate Connect IQ Store screenshots from live /api/watch data.
-# Usage: .\scripts\generate-store-screenshots.ps1
+# Draws MOCKUPS of the watch screens from live /api/watch data.
+#
+# ---------------------------------------------------------------------------
+# THESE ARE NOT SCREENSHOTS AND MUST NOT BE SUBMITTED AS STORE SCREENSHOTS.
+#
+# Nothing here runs the app. Every screen below is redrawn by hand with
+# System.Drawing to imitate the Monkey C rendering, so the output will always
+# be an approximation that drifts from what the app actually shows - it still
+# reproduces layouts that changed in 1.2.0. Publishing these as screenshots
+# would misrepresent the app to reviewers and to users deciding whether to
+# install it.
+#
+# Use this only as a quick preview of layout and colour while iterating.
+# For store assets, capture the real thing from the Connect IQ simulator:
+#   1. .\scripts\start-watch-stack.ps1        # server + HTTPS tunnel
+#   2. cd ciq; .\build.ps1 -Device fenix847mm
+#   3. connectiq                              # launch simulator
+#   4. monkeydo bin\TrainBud.prg fenix847mm
+#   5. Pair the simulated watch via the dashboard, then in the simulator:
+#      File > Save Screenshot, once per card you want to show.
+# ---------------------------------------------------------------------------
+#
+# Usage: .\scripts\generate-store-screenshots.ps1 -IUnderstandTheseAreMockups
+
+param(
+    # Required, so the script cannot be run by muscle memory and its output
+    # mistaken for real captures.
+    [switch]$IUnderstandTheseAreMockups
+)
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
+
+if (-not $IUnderstandTheseAreMockups) {
+    Write-Host ""
+    Write-Host "This script draws MOCKUPS, not screenshots. It does not run the app." -ForegroundColor Yellow
+    Write-Host "Do not submit its output to the Connect IQ Store." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Capture real screenshots from the simulator instead:"
+    Write-Host "  cd ciq; .\build.ps1 -Device fenix847mm"
+    Write-Host "  connectiq"
+    Write-Host "  monkeydo bin\TrainBud.prg fenix847mm"
+    Write-Host "  then File > Save Screenshot in the simulator."
+    Write-Host ""
+    Write-Host "To draw mockups anyway, re-run with -IUnderstandTheseAreMockups."
+    exit 1
+}
+
 
 Add-Type -AssemblyName System.Drawing
 
@@ -158,27 +201,13 @@ function Draw-SleepScreen($summary) {
     return $ctx.Bitmap
 }
 
-function Draw-CoverImage {
-    $src = Join-Path $RepoRoot "ciq\store\store_icon.png"
-    if (-not (Test-Path $src)) {
-        $src = Join-Path $RepoRoot "ciq\resources\drawables\launcher_icon.png"
-    }
-
-    $img = [System.Drawing.Image]::FromFile($src)
-    $bmp = New-Object System.Drawing.Bitmap 500, 500
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.Clear([System.Drawing.Color]::Black)
-    $g.DrawImage($img, 0, 0, 500, 500)
-    $g.Dispose()
-    $img.Dispose()
-    return $bmp
-}
 
 Write-Host "Fetching watch summary..."
 $summary = Get-WatchSummary
 
-$outDir = Join-Path $RepoRoot "ciq\store\screenshots"
+# Written to store/mockups/, never store/screenshots/, so drawn images cannot be
+# picked up by mistake when assembling a submission.
+$outDir = Join-Path $RepoRoot "ciq\store\mockups"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $screens = @(
@@ -196,11 +225,10 @@ foreach ($screen in $screens) {
     Write-Host "Wrote $path ($sizeKb KB)"
 }
 
-$coverPath = Join-Path $RepoRoot "ciq\store\cover_500.png"
-$cover = Draw-CoverImage
-Save-PngUnderSize $cover $coverPath 300000
-$cover.Dispose()
-Write-Host "Wrote $coverPath"
-
 Write-Host ""
-Write-Host "Store assets ready in ciq\store\"
+Write-Host "Mockups written to ciq\store\mockups\ - layout preview only." -ForegroundColor Yellow
+Write-Host "Store screenshots must be captured from the simulator. See the header." -ForegroundColor Yellow
+
+# The cover image is generated at native resolution by scripts/generate-icons.ps1.
+# It used to be upscaled from the 130x130 store icon here, which was both blurrier
+# and a second owner of the same file.

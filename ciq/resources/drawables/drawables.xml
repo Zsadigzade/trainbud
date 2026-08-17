@@ -1,3 +1,8 @@
 <drawables>
-    <bitmap id="LauncherIcon" filename="launcher_icon.png"/>
+    <!--
+      LauncherIcon is intentionally NOT declared here. Each device gets an
+      exact-size icon from ciq/resources-launcher-<size>/, wired per product in
+      monkey.jungle by scripts/generate-icons.ps1. Declaring it here as well
+      would be a duplicate resource id.
+    -->
 </drawables>

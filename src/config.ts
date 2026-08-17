@@ -13,7 +13,7 @@ import {
 const projectRoot = getProjectRoot();
 const defaultEnvPath = path.join(projectRoot, ".env");
 
-loadEnv({ path: defaultEnvPath });
+loadEnv({ path: defaultEnvPath, quiet: true });
 
 // SECTION: Environment variables
 //
@@ -107,7 +107,7 @@ export function writeEnvFile(credentials: { email: string; password: string; api
   ];
 
   fs.writeFileSync(envPath, lines.join("\n"), "utf8");
-  loadEnv({ path: envPath, override: true });
+  loadEnv({ path: envPath, override: true, quiet: true });
   return envPath;
 }
 

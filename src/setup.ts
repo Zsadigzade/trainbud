@@ -163,7 +163,7 @@ async function promptRunLiveCheck(): Promise<boolean> {
   const rl = createInterface({ input, output });
 
   try {
-    const answer = (await rl.question("\nRun a live Garmin API check now? [Y/n]: ")).trim().toLowerCase();
+    const answer = (await rl.question("\nRun diagnostics now (config + live API)? [Y/n]: ")).trim().toLowerCase();
     return answer === "" || answer === "y" || answer === "yes";
   } finally {
     rl.close();
@@ -220,6 +220,23 @@ export async function runSetup(): Promise<void> {
   output.write(`- Run: trainbud serve\n`);
   output.write(`- See docs/WEB-MCP.md for Cloudflare Tunnel + claude.ai setup\n`);
   output.write(`- Your API key: ${appConfig.mcpApiKey}\n`);
+
+  // The watch app is the part people get stuck on: it needs a public HTTPS URL
+  // and a pairing approval, neither of which the wizard used to mention.
+  const publicUrl = appConfig.publicUrl;
+  const dashboardBase = publicUrl || `http://${appConfig.mcpHost}:${appConfig.mcpPort}`;
+
+  output.write("\nWatch app (Connect IQ):\n");
+  if (publicUrl) {
+    output.write(`- Public URL: ${publicUrl}\n`);
+  } else {
+    output.write("- No public URL yet. Run `scripts/start-watch-stack.ps1`, or set TRAINBUD_PUBLIC_URL\n");
+    output.write("  in .env to an HTTPS tunnel pointing at this server. The watch needs HTTPS.\n");
+  }
+  output.write("- Enter that URL as Server URL in the Connect IQ app settings for TrainBud\n");
+  output.write("- Open the app on the watch, then approve the 6-digit code at:\n");
+  output.write(`  ${dashboardBase}/dashboard?token=${appConfig.mcpApiKey}\n`);
+  output.write("- AI cards stay empty until you add an AI provider key on that dashboard\n");
 
   if (selectedClients.length > 0) {
     output.write("\nNext steps:\n");

@@ -1,7 +1,9 @@
+import fs from "node:fs";
 import { DateTime } from "luxon";
-import { assertGarminCredentials, appConfig } from "./config.js";
+import { assertGarminCredentials, appConfig, deprecatedEnvNames, getEnvFilePath } from "./config.js";
 import { executeTool, listRegisteredToolNames } from "./tools/index.js";
 import { configureLogger } from "./utils/logger.js";
+import { getDataDir, getLegacyDataDir } from "./paths.js";
 
 // SECTION: Live Diagnostics
 
@@ -10,10 +12,89 @@ interface ToolCheckCase {
   args: Record<string, unknown>;
 }
 
-interface ToolCheckResult {
+export interface ToolCheckResult {
   name: string;
   ok: boolean;
   summary: string;
+  /** Non-fatal findings are reported but do not fail the command. */
+  warning?: boolean;
+  section?: string;
+}
+
+// -----------------------------------------------------------------------------
+// Setup checks
+//
+// The tool checks below only prove the Connect API works. They say nothing about
+// the parts that actually strand people: no API key, no public URL, state left
+// in the pre-rename directory. Those are checked first so `trainbud check`
+// diagnoses the whole stack rather than one layer of it.
+// -----------------------------------------------------------------------------
+
+function checkSetup(): ToolCheckResult[] {
+  const results: ToolCheckResult[] = [];
+  const add = (name: string, ok: boolean, summary: string, warning = false): void => {
+    results.push({ name, ok, summary, warning, section: "Setup" });
+  };
+
+  const envPath = getEnvFilePath();
+  add(".env file", fs.existsSync(envPath), fs.existsSync(envPath) ? envPath : `missing — run "trainbud setup"`);
+
+  const hasCredentials = !!appConfig.garminEmail && !!appConfig.garminPassword;
+  add(
+    "Connect credentials",
+    hasCredentials,
+    hasCredentials ? appConfig.garminEmail : "GARMIN_EMAIL / GARMIN_PASSWORD not set"
+  );
+
+  const hasApiKey = appConfig.mcpApiKey.length > 0;
+  add(
+    "API key",
+    hasApiKey,
+    hasApiKey ? `set (${appConfig.mcpApiKey.length} chars)` : `TRAINBUD_API_KEY not set — run "trainbud setup"`
+  );
+
+  const dataDir = getDataDir();
+  let writable: boolean;
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.accessSync(dataDir, fs.constants.W_OK);
+    writable = true;
+  } catch {
+    writable = false;
+  }
+  add("Data directory", writable, writable ? dataDir : `not writable: ${dataDir}`);
+
+  const legacyDir = getLegacyDataDir();
+  const legacyPresent = fs.existsSync(legacyDir);
+  add(
+    "Legacy directory",
+    true,
+    legacyPresent
+      ? `${legacyDir} still present — safe to delete once everything works`
+      : "none",
+    legacyPresent
+  );
+
+  const deprecated = deprecatedEnvNames();
+  add(
+    "Env var names",
+    true,
+    deprecated.length > 0 ? `using old names: ${deprecated.join(", ")}` : "current",
+    deprecated.length > 0
+  );
+
+  const publicUrl = appConfig.publicUrl;
+  add(
+    "Public URL",
+    true,
+    publicUrl.length > 0 ? publicUrl : "not set — the watch cannot reach this server without it",
+    publicUrl.length === 0
+  );
+
+  const aiKey = appConfig.anthropicApiKey.length > 0;
+  add("AI features", true, aiKey ? "key present" : "no key — AI cards stay empty (optional)", !aiKey);
+
+  return results;
 }
 
 function buildDefaultToolChecks(): ToolCheckCase[] {
@@ -154,40 +235,64 @@ async function runToolCheck(check: ToolCheckCase): Promise<ToolCheckResult> {
 }
 
 export async function runLiveCheck(): Promise<ToolCheckResult[]> {
+  const results: ToolCheckResult[] = checkSetup();
+
+  // Without credentials the tool checks can only fail, and their errors would
+  // bury the setup finding that actually explains why.
+  if (!appConfig.garminEmail || !appConfig.garminPassword) {
+    return results;
+  }
+
   assertGarminCredentials();
   configureLogger(appConfig.logPath);
 
   const registered = new Set(listRegisteredToolNames());
   const checks = buildDefaultToolChecks().filter((check) => registered.has(check.name));
 
-  const results: ToolCheckResult[] = [];
-
   for (const check of checks) {
-    results.push(await runToolCheck(check));
+    const result = await runToolCheck(check);
+    results.push({ ...result, section: "Tools" });
   }
 
   return results;
 }
 
 export function printLiveCheckResults(results: ToolCheckResult[]): void {
-  console.log("TrainBud live check");
-  console.log("");
+  console.log("TrainBud check");
 
+  let currentSection = "";
   for (const result of results) {
-    const icon = result.ok ? "✓" : "✗";
-    const paddedName = result.name.padEnd(26, " ");
-    console.log(`  ${paddedName}${icon}  ${result.summary}`);
+    const section = result.section ?? "Checks";
+    if (section !== currentSection) {
+      console.log("");
+      console.log(`${section}`);
+      currentSection = section;
+    }
+
+    const icon = !result.ok ? "✗" : result.warning ? "!" : "✓";
+    console.log(`  ${result.name.padEnd(26, " ")}${icon}  ${result.summary}`);
   }
 
   console.log("");
 
-  const passed = results.filter((result) => result.ok).length;
+  const failed = results.filter((result) => !result.ok);
+  const warned = results.filter((result) => result.ok && result.warning);
   const total = results.length;
 
-  if (passed === total) {
+  if (failed.length === 0 && warned.length === 0) {
     console.log(`All ${total} checks passed. TrainBud is ready to use.`);
     return;
   }
 
-  console.log(`${passed}/${total} checks passed. Review failures above before connecting an MCP client.`);
+  if (failed.length === 0) {
+    console.log(
+      `${total - warned.length}/${total} clean, ${warned.length} advisory (!). Nothing is broken — the notes above are optional setup.`
+    );
+    return;
+  }
+
+  console.log(`${total - failed.length}/${total} passed, ${failed.length} failed (✗). Fix those first:`);
+  for (const result of failed) {
+    console.log(`  - ${result.name}: ${result.summary}`);
+  }
 }
