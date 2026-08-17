@@ -55,9 +55,11 @@ export interface MigrationResult {
  * new directory already exists, individual entries are only copied when they
  * are not already present, and the legacy directory is left on disk.
  */
-export function migrateLegacyDataDir(): MigrationResult {
-  const legacyDir = getLegacyDataDir();
-  const dir = getDataDir();
+export function migrateLegacyDataDir(
+  options: { legacyDir?: string; dataDir?: string } = {}
+): MigrationResult {
+  const legacyDir = options.legacyDir ?? getLegacyDataDir();
+  const dir = options.dataDir ?? getDataDir();
 
   if (!fs.existsSync(legacyDir)) {
     return { migrated: false, reason: "no legacy directory" };

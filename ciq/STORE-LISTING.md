@@ -33,14 +33,13 @@ Your training and recovery data on your wrist, with optional AI answers — reco
 
 TrainBud puts your training and recovery numbers on your watch face, and lets you ask an AI assistant about them without reaching for your phone.
 
-Open the widget for a compact daily overview, then swipe or tap through the cards:
-• Overview — recovery, sleep, stress and VO2 max at a glance
-• Recovery — score with a colour-coded progress ring
+A glance shows your recovery score and last night's sleep without opening anything.
+Open it for the full set, then swipe or tap through seven cards:
+• Overview — recovery, sleep, stress and VO2 max in one grid
+• Recovery — score with a colour-coded ring, plus resting and maximum heart rate
 • Sleep — hours and quality score
-• Activity — latest workout with duration, distance and average heart rate
+• Activity — latest workout with duration, distance, average heart rate and VO2 max
 • Stress — daily average
-• VO2 max — value and trend
-• Heart rate — resting and maximum
 • AI Insight — a daily one-line tip generated from your own numbers
 • Ask AI — pick a preset question and read the answer on your watch
 
@@ -115,22 +114,31 @@ https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
 1. Developer account at https://developer.garmin.com, agreement signed
 2. Existing app registration `e9204b53-2eea-4851-9071-8ce7e6839589` — rename the listing
    in place; do **not** register a new ID
-3. Build a release binary:
+3. Build the store package. `-d all` is **not** a valid device id in SDK 9.x — the
+   export build (`-e`) is what compiles every product in the manifest:
 
 ```powershell
 cd ciq
-.\build.ps1 -Device fr70          # single-device smoke test
-monkeyc -f monkey.jungle -o bin/TrainBud.prg -y developer_key.der -d all -w
+.\build.ps1 -Device fr70                        # single-device smoke test
+monkeyc -f monkey.jungle -o bin/TrainBud.iq -y developer_key.der -e -r -w
 ```
 
-4. Export the `.iq` via **Monkey C: Export Project** in VS Code
-5. Upload `.iq`, icons, screenshots and this copy
-6. Paste the reviewer test-server details into the private review notes
+   The export is equivalent to **Monkey C: Export Project** in VS Code. A clean run
+   ends with `59 OUT OF 59 DEVICES BUILT` / `BUILD SUCCESSFUL`; the remaining
+   launcher-icon warnings are the compiler downscaling one source icon per device
+   and are not defects.
+
+4. Upload `bin/TrainBud.iq`, icons, screenshots and this copy
+5. Paste the reviewer test-server details into the private review notes
 
 ## Supported devices
 
-See `ciq/manifest.xml`. Covers Forerunner (70, 570, 55, 265s, 645, 745, 955, 965, 970),
-fenix 7/8/E, epix 2 and Pro, Venu 2/3, vivoactive 5/6, MARQ 2 and Instinct 3 families.
+See `ciq/manifest.xml` — 38 products. Covers Forerunner (70, 570, 55, 265s, 745, 955,
+965, 970), fenix 7/8/E, epix 2 and Pro, Venu 2/3, vivoactive 5/6, MARQ 2 and Instinct 3.
+
+> Forerunner 645 and 645 Music were removed in 1.2.0. They cannot meet the manifest's
+> `minSdkVersion` of 3.2.0, so a release build including them had never succeeded, and
+> they predate glance support. Re-adding them would break the export build.
 
 ## Setup summary for users
 

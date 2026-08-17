@@ -1,15 +1,15 @@
 ---
-name: garmin-bud-setup
+name: trainbud-setup
 description: >-
-  First-time GarminBud setup — credentials, Garmin Connect auth, MCP verification.
-  Use when the user runs /garmin-bud:garmin-bud-setup, asks to connect Garmin,
-  set up GarminBud, or fix MCP connection.
+  First-time TrainBud setup — credentials, Garmin Connect auth, MCP verification.
+  Use when the user runs /trainbud:trainbud-setup, asks to connect Garmin,
+  set up TrainBud, or fix MCP connection.
 disable-model-invocation: true
 ---
 
-# GarminBud setup
+# TrainBud setup
 
-Guide one-time setup. GarminBud is unofficial — not affiliated with Garmin Ltd.
+Guide one-time setup. TrainBud is unofficial — not affiliated with Garmin Ltd.
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ Guide one-time setup. GarminBud is unofficial — not affiliated with Garmin Ltd
 
 ## Current state
 
-!`node -v 2>&1; echo ---; if command -v garmin-bud >/dev/null 2>&1; then garmin-bud status 2>&1; else echo "garmin-bud CLI not on PATH"; fi`
+!`node -v 2>&1; echo ---; if command -v trainbud >/dev/null 2>&1; then trainbud status 2>&1; else echo "trainbud CLI not on PATH"; fi`
 
 ## Plugin MCP credentials
 
@@ -35,7 +35,7 @@ Set these in your shell profile or Claude Code environment **before** enabling t
 Alternatively, run the setup wizard (creates `.env` in the current project):
 
 ```bash
-npx garmin-bud setup
+npx trainbud setup
 ```
 
 ## Setup workflow
@@ -44,28 +44,28 @@ npx garmin-bud setup
 
 2. **Install CLI** (pick one):
    ```bash
-   npm install -g garmin-bud          # after npm publish
+   npm install -g trainbud          # after npm publish
    # or from source:
-   git clone https://github.com/Zsadigzade/garmin-bud.git && cd garmin-bud
+   git clone https://github.com/Zsadigzade/trainbud.git && cd trainbud
    npm install && npm run build && npm link
    ```
 
 3. **Verify** all 9 tools:
    ```bash
-   garmin-bud check
+   trainbud check
    ```
 
-4. **Enable plugin** if not already: `/plugin install garmin-bud@garmin-bud`
+4. **Enable plugin** if not already: `/plugin install trainbud@trainbud`
 
-5. **Restart Claude Code**, then run `/garmin-bud:garmin-bud`.
+5. **Restart Claude Code**, then run `/trainbud:trainbud`.
 
 ## If setup fails
 
 | Symptom | Fix |
 |---------|-----|
-| Auth error | MFA off; run `garmin-bud auth` |
+| Auth error | MFA off; run `trainbud auth` |
 | MCP tools missing | Check env vars; restart Claude Code |
-| `npx garmin-bud` fails | Run `npm link` from cloned repo, or `npm install -g garmin-bud` |
-| Stale data | `garmin-bud cache clear` |
+| `npx trainbud` fails | Run `npm link` from cloned repo, or `npm install -g trainbud` |
+| Stale data | `trainbud cache clear` |
 
-Do not commit `.env` or `.garmin/` credentials.
+Do not commit `.env` or `.trainbud/` credentials.

@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { randomBytes } from "node:crypto";
-import { createPromptJob, getPromptJob, updatePromptJob } from "./appDb.js";
+import { DateTime } from "luxon";
+import {
+  createPromptJob,
+  deleteSetting,
+  getPromptJob,
+  getSetting,
+  listSettingKeys,
+  setSetting,
+  updatePromptJob,
+} from "./appDb.js";
 import { appConfig } from "./config.js";
 import { buildWatchSummary } from "./watchApi.js";
 import { logger } from "./utils/logger.js";
@@ -9,6 +18,23 @@ import { logger } from "./utils/logger.js";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 300;
+const INSIGHT_PREFIX = "daily_insight:";
+
+/**
+ * The dashboard writes the key to the settings table, but the server only
+ * copied it into process.env at startup — so a key saved from the dashboard did
+ * nothing until the server was restarted. Resolving on every call fixes that.
+ * The stored value wins because it is the one the user set most recently
+ * through the UI; the environment is the fallback for headless setups.
+ */
+function resolveAnthropicKey(): string {
+  return getSetting("anthropic_api_key") ?? appConfig.anthropicApiKey ?? "";
+}
+
+/** True when AI features are usable, from either source. */
+export function isAiConfigured(): boolean {
+  return resolveAnthropicKey().length > 0;
+}
 
 function buildJobId(): string {
   return randomBytes(12).toString("hex");
@@ -40,7 +66,7 @@ function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummar
 }
 
 async function callClaude(prompt: string, healthContext: string): Promise<string> {
-  const apiKey = appConfig.anthropicApiKey;
+  const apiKey = resolveAnthropicKey();
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not configured. Set it in the dashboard or .env file.");
   }
@@ -50,8 +76,10 @@ async function callClaude(prompt: string, healthContext: string): Promise<string
   const message = await client.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: `You are a concise fitness coach assistant integrated into a Garmin smartwatch.
+    system: `You are a concise fitness coach assistant shown on a small smartwatch screen.
 Answer in 2-3 short sentences maximum. Be direct and actionable. No markdown formatting.
+Give general training and wellness guidance only. Do not diagnose conditions or give
+medical advice; if asked something medical, say it is outside what you can advise on.
 ${healthContext}`,
     messages: [{ role: "user", content: prompt }],
   });
@@ -109,11 +137,25 @@ export function getPromptStatus(id: string): PromptJobStatus | null {
   };
 }
 
+/**
+ * The daily insight used to be generated inline on every /api/watch request, so
+ * a cold fetch blocked the watch for a full Claude round trip and spent API
+ * credit on every sync. It is now generated once per local day and cached in the
+ * settings table.
+ */
 export async function generateDailyInsight(
-  summary: Awaited<ReturnType<typeof buildWatchSummary>>
+  summary: Awaited<ReturnType<typeof buildWatchSummary>>,
+  options: { force?: boolean } = {}
 ): Promise<string | null> {
-  const apiKey = appConfig.anthropicApiKey;
+  const apiKey = resolveAnthropicKey();
   if (!apiKey) return null;
+
+  const cacheKey = `${INSIGHT_PREFIX}${DateTime.local().toISODate()}`;
+
+  if (!options.force) {
+    const cached = getSetting(cacheKey);
+    if (cached) return cached;
+  }
 
   try {
     const healthContext = formatHealthContext(summary);
@@ -121,9 +163,30 @@ export async function generateDailyInsight(
       "Give me one sentence of actionable advice for today based on my health data.",
       healthContext
     );
+    setSetting(cacheKey, result);
+    pruneOldInsights(cacheKey);
     return result;
   } catch (err) {
     logger.warn({ err }, "Daily insight generation failed");
-    return null;
+    // Fall back to an earlier insight rather than showing nothing on the watch.
+    return getSetting(cacheKey);
+  }
+}
+
+/** Returns today's cached insight without contacting the API. */
+export function getCachedDailyInsight(): string | null {
+  return getSetting(`${INSIGHT_PREFIX}${DateTime.local().toISODate()}`);
+}
+
+/** Drops today's cached insight so the next request regenerates it. */
+export function clearDailyInsight(): void {
+  deleteSetting(`${INSIGHT_PREFIX}${DateTime.local().toISODate()}`);
+}
+
+function pruneOldInsights(keepKey: string): void {
+  for (const key of listSettingKeys(INSIGHT_PREFIX)) {
+    if (key !== keepKey) {
+      deleteSetting(key);
+    }
   }
 }

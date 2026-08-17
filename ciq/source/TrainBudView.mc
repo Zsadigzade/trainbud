@@ -4,14 +4,14 @@ import Toybox.Lang;
 import Toybox.Time;
 import Toybox.WatchUi;
 
-class GarminBudView extends WatchUi.View {
+class TrainBudView extends WatchUi.View {
 
     function initialize() {
         View.initialize();
     }
 
     function onShow() as Void {
-        var app = Application.getApp() as GarminBudApp;
+        var app = Application.getApp() as TrainBudApp;
         app.fetchSummary();
     }
 
@@ -19,7 +19,7 @@ class GarminBudView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
 
-        var app = Application.getApp() as GarminBudApp;
+        var app = Application.getApp() as TrainBudApp;
         var status = app.getStatus();
 
         // Pairing screens
@@ -55,8 +55,8 @@ class GarminBudView extends WatchUi.View {
 
         var cardIndex = app.getCardIndex();
 
-        // Ask AI menu (card 8)
-        if (cardIndex == 8) {
+        // Ask AI menu
+        if (cardIndex == Cards.ASK_AI) {
             var promptStatus = app.getPromptStatus();
             if (promptStatus.equals("idle")) {
                 drawAskAiMenu(dc, app);
@@ -76,14 +76,14 @@ class GarminBudView extends WatchUi.View {
             drawStaleIndicator(dc, app.getCachedAt());
         }
 
-        drawHint(dc);
+        drawPageDots(dc, cardIndex, app.getCardCount());
     }
 
     // -------------------------------------------------------------------------
     // Pairing screen
     // -------------------------------------------------------------------------
 
-    private function drawPairingScreen(dc as Dc, app as GarminBudApp) as Void {
+    private function drawPairingScreen(dc as Dc, app as TrainBudApp) as Void {
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
 
@@ -122,7 +122,7 @@ class GarminBudView extends WatchUi.View {
     // Ask AI menu
     // -------------------------------------------------------------------------
 
-    private function drawAskAiMenu(dc as Dc, app as GarminBudApp) as Void {
+    private function drawAskAiMenu(dc as Dc, app as TrainBudApp) as Void {
         var cx = dc.getWidth() / 2;
         var w  = dc.getWidth();
         var h  = dc.getHeight();
@@ -190,7 +190,7 @@ class GarminBudView extends WatchUi.View {
     // Prompt result
     // -------------------------------------------------------------------------
 
-    private function drawPromptResult(dc as Dc, app as GarminBudApp) as Void {
+    private function drawPromptResult(dc as Dc, app as TrainBudApp) as Void {
         var cx   = dc.getWidth() / 2;
         var cy   = dc.getHeight() / 2;
         var page = app.getPromptPageIndex();
@@ -241,6 +241,29 @@ class GarminBudView extends WatchUi.View {
         );
     }
 
+    // Position indicator. Replaces the static "tap or swipe" hint, which told
+    // you what you could do but never where you were in the carousel.
+    private function drawPageDots(dc as Dc, cardIndex as Number, cardCount as Number) as Void {
+        if (cardCount <= 1) { return; }
+
+        var spacing = 10;
+        var radius  = 2;
+        var totalW  = (cardCount - 1) * spacing;
+        var startX  = (dc.getWidth() / 2) - (totalW / 2);
+        var y       = dc.getHeight() - 12;
+
+        for (var i = 0; i < cardCount; i += 1) {
+            var x = startX + (i * spacing);
+            if (i == cardIndex) {
+                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(x, y, radius + 1);
+            } else {
+                dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(x, y, radius);
+            }
+        }
+    }
+
     private function drawStaleIndicator(dc as Dc, cachedAt as Number or Null) as Void {
         if (cachedAt == null) { return; }
 
@@ -265,19 +288,21 @@ class GarminBudView extends WatchUi.View {
         summary as Dictionary or Null,
         roundScreen as Boolean
     ) as Void {
-        if (cardIndex == 0) { drawOverviewCard(dc, summary); return; }
-        if (cardIndex == 1) { drawRecoveryCard(dc, summary, roundScreen); return; }
-        if (cardIndex == 7) { drawAiInsightCard(dc, summary); return; }
+        if (cardIndex == Cards.OVERVIEW)   { drawOverviewCard(dc, summary); return; }
+        if (cardIndex == Cards.RECOVERY)   { drawRecoveryCard(dc, summary, roundScreen); return; }
+        if (cardIndex == Cards.AI_INSIGHT) { drawAiInsightCard(dc, summary); return; }
 
         var title      = getCardTitle(cardIndex);
         var value      = WatchUi.loadResource(Rez.Strings.NoData) as String;
         var subtitle   = "";
+        var footnote   = "";
         var valueColor = Graphics.COLOR_WHITE;
 
         if (summary != null) {
             var cardData = getCardData(cardIndex, summary);
             value      = cardData[:value] as String;
             subtitle   = cardData[:subtitle] as String;
+            footnote   = cardData[:footnote] as String;
             valueColor = cardData[:color] as Number;
         }
 
@@ -292,6 +317,13 @@ class GarminBudView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 + 36, Graphics.FONT_TINY,
                 subtitle, Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        // Secondary metric folded onto this card (VO2 max on Activity).
+        if ((footnote as String).length() > 0) {
+            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 + 62, Graphics.FONT_XTINY,
+                footnote, Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -430,6 +462,35 @@ class GarminBudView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, cy + 36, Graphics.FONT_TINY, label, Graphics.TEXT_JUSTIFY_CENTER);
         }
+
+        drawRestingHeartRate(dc, summary, cx, cy + 62);
+    }
+
+    // Resting and max heart rate share the Recovery card: resting HR is how the
+    // recovery score is largely derived, so the two are read together.
+    private function drawRestingHeartRate(
+        dc as Dc,
+        summary as Dictionary or Null,
+        cx as Number,
+        y as Number
+    ) as Void {
+        if (summary == null) { return; }
+
+        var heartRate = summary.get("heart_rate");
+        if (heartRate == null || !(heartRate instanceof Dictionary)) { return; }
+
+        var hd      = heartRate as Dictionary;
+        var resting = hd.get("resting");
+        var max     = hd.get("max");
+        if (resting == null) { return; }
+
+        var text = WatchUi.loadResource(Rez.Strings.LabelResting) as String + " " + resting.toString();
+        if (max != null) {
+            text = text + "  " + WatchUi.loadResource(Rez.Strings.LabelMax) as String + " " + max.toString();
+        }
+
+        dc.setColor(heartRateColor(resting as Number), Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_XTINY, text, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     // -------------------------------------------------------------------------
@@ -437,21 +498,20 @@ class GarminBudView extends WatchUi.View {
     // -------------------------------------------------------------------------
 
     private function getCardTitle(cardIndex as Number) as String {
-        if (cardIndex == 2) { return WatchUi.loadResource(Rez.Strings.CardSleep) as String; }
-        if (cardIndex == 3) { return WatchUi.loadResource(Rez.Strings.CardActivity) as String; }
-        if (cardIndex == 4) { return WatchUi.loadResource(Rez.Strings.CardStress) as String; }
-        if (cardIndex == 5) { return WatchUi.loadResource(Rez.Strings.CardVo2Max) as String; }
-        return WatchUi.loadResource(Rez.Strings.CardHeartRate) as String;
+        if (cardIndex == Cards.SLEEP)    { return WatchUi.loadResource(Rez.Strings.CardSleep) as String; }
+        if (cardIndex == Cards.ACTIVITY) { return WatchUi.loadResource(Rez.Strings.CardActivity) as String; }
+        return WatchUi.loadResource(Rez.Strings.CardStress) as String;
     }
 
     private function getCardData(cardIndex as Number, summary as Dictionary) as Dictionary {
         var result = {
             :value    => WatchUi.loadResource(Rez.Strings.NoData) as String,
             :subtitle => "",
+            :footnote => "",
             :color    => Graphics.COLOR_WHITE
         };
 
-        if (cardIndex == 2) {
+        if (cardIndex == Cards.SLEEP) {
             var sleep = summary.get("sleep");
             if (sleep != null && sleep instanceof Dictionary) {
                 var sd = sleep as Dictionary;
@@ -469,7 +529,7 @@ class GarminBudView extends WatchUi.View {
             return result;
         }
 
-        if (cardIndex == 3) {
+        if (cardIndex == Cards.ACTIVITY) {
             var activity = summary.get("activity");
             if (activity != null && activity instanceof Dictionary) {
                 var ad = activity as Dictionary;
@@ -484,45 +544,30 @@ class GarminBudView extends WatchUi.View {
                 if (avgHr != null)    { parts.add(avgHr.toString() + " bpm"); }
                 result[:subtitle] = joinParts(parts, " · ");
             }
-            return result;
-        }
 
-        if (cardIndex == 4) {
-            var stress = summary.get("stress");
-            if (stress != null && stress instanceof Dictionary) {
-                var sd = stress as Dictionary;
-                var avg = sd.get("avg");
-                var lbl = sd.get("label");
-                if (avg != null) { result[:value] = avg.toString(); result[:color] = stressColor(avg as Number); }
-                if (lbl != null) { result[:subtitle] = lbl as String; }
-            }
-            return result;
-        }
-
-        if (cardIndex == 5) {
+            // VO2 max shares this card — it is a single number with a trend and
+            // did not justify a swipe of its own.
             var vo2max = summary.get("vo2max");
             if (vo2max != null && vo2max instanceof Dictionary) {
                 var vd    = vo2max as Dictionary;
-                var value = vd.get("value");
+                var vo2   = vd.get("value");
                 var trend = vd.get("trend");
-                if (value != null) { result[:value] = value.toString(); }
-                if (trend != null) { result[:subtitle] = trend as String; }
+                if (vo2 != null) {
+                    var vo2Text = WatchUi.loadResource(Rez.Strings.LabelVo2) as String + " " + vo2.toString();
+                    if (trend != null) { vo2Text = vo2Text + " " + (trend as String); }
+                    result[:footnote] = vo2Text;
+                }
             }
             return result;
         }
 
-        var heartRate = summary.get("heart_rate");
-        if (heartRate != null && heartRate instanceof Dictionary) {
-            var hd      = heartRate as Dictionary;
-            var resting = hd.get("resting");
-            var max     = hd.get("max");
-            if (resting != null) {
-                result[:value] = resting.toString();
-                result[:color] = heartRateColor(resting as Number);
-            }
-            result[:subtitle] = max != null
-                ? WatchUi.loadResource(Rez.Strings.LabelMax) as String + " " + max.toString()
-                : WatchUi.loadResource(Rez.Strings.LabelResting) as String;
+        var stress = summary.get("stress");
+        if (stress != null && stress instanceof Dictionary) {
+            var sd = stress as Dictionary;
+            var avg = sd.get("avg");
+            var lbl = sd.get("label");
+            if (avg != null) { result[:value] = avg.toString(); result[:color] = stressColor(avg as Number); }
+            if (lbl != null) { result[:subtitle] = lbl as String; }
         }
 
         return result;

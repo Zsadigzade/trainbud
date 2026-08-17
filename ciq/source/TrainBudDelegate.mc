@@ -2,7 +2,7 @@ import Toybox.Application;
 import Toybox.Lang;
 import Toybox.WatchUi;
 
-class GarminBudDelegate extends WatchUi.BehaviorDelegate {
+class TrainBudDelegate extends WatchUi.BehaviorDelegate {
 
     function initialize() {
         BehaviorDelegate.initialize();
@@ -13,11 +13,11 @@ class GarminBudDelegate extends WatchUi.BehaviorDelegate {
     // -------------------------------------------------------------------------
 
     function onBack() as Boolean {
-        var app = Application.getApp() as GarminBudApp;
+        var app = Application.getApp() as TrainBudApp;
         var promptStatus = app.getPromptStatus();
 
         // Back from prompt result / error → return to Ask AI menu
-        if (app.getCardIndex() == 8 && !promptStatus.equals("idle")) {
+        if (app.getCardIndex() == Cards.ASK_AI && !promptStatus.equals("idle")) {
             app.clearPrompt();
             WatchUi.requestUpdate();
             return true;
@@ -41,7 +41,7 @@ class GarminBudDelegate extends WatchUi.BehaviorDelegate {
     }
 
     private function handleSelect() as Void {
-        var app    = Application.getApp() as GarminBudApp;
+        var app    = Application.getApp() as TrainBudApp;
         var status = app.getStatus();
         var cardIndex = app.getCardIndex();
 
@@ -61,8 +61,8 @@ class GarminBudDelegate extends WatchUi.BehaviorDelegate {
             return;
         }
 
-        // Ask AI card (card 8)
-        if (cardIndex == 8) {
+        // Ask AI card
+        if (cardIndex == Cards.ASK_AI) {
             var promptStatus = app.getPromptStatus();
 
             if (promptStatus.equals("idle")) {
@@ -99,13 +99,13 @@ class GarminBudDelegate extends WatchUi.BehaviorDelegate {
     // -------------------------------------------------------------------------
 
     function onSwipe(swipeEvent as WatchUi.SwipeEvent) as Boolean {
-        var app       = Application.getApp() as GarminBudApp;
+        var app       = Application.getApp() as TrainBudApp;
         var direction = swipeEvent.getDirection();
         var cardIndex = app.getCardIndex();
         var promptStatus = app.getPromptStatus();
 
-        // Ask AI card (card 8)
-        if (cardIndex == 8) {
+        // Ask AI card
+        if (cardIndex == Cards.ASK_AI) {
             if (promptStatus.equals("idle")) {
                 // Swipe up/down or left/right cycles through prompts
                 if (direction == WatchUi.SWIPE_UP || direction == WatchUi.SWIPE_LEFT) {

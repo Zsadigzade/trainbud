@@ -63,16 +63,23 @@ connectiq
 
 ## Using the widget
 
-1. Add the **TrainBud** widget to your watch face widget loop
-2. Open it — it fetches fresh data from your server
-3. **Tap** or **swipe left/right** to cycle through cards:
-   - **Overview** — recovery, sleep, stress, and VO2 max at a glance
-   - **Recovery** — score with color ring (round watches) or progress bar
+1. Add **TrainBud** to your watch's glance list or app list
+2. The **glance** shows recovery and sleep without opening anything — it reads the
+   last cached summary, so it renders instantly and never blocks on the network
+3. Open it to fetch fresh data, then **tap** or **swipe left/right** through 7 cards:
+   - **Overview** — recovery, sleep, stress and VO2 max in a 2×2 grid
+   - **Recovery** — score with colour ring (round watches) or bar, plus resting and max HR
    - **Sleep** — hours + quality score
-   - **Activity** — name, duration, distance, and average HR
+   - **Activity** — name, duration, distance, average HR, with VO2 max and trend
    - **Stress** — average + label
-   - **VO2 Max** — value + trend
-   - **Heart Rate** — resting HR + max
+   - **AI Insight** — the day's one-line tip
+   - **Ask AI** — preset questions, answer paged on screen
+
+Page dots at the bottom show your position in the carousel.
+
+> Heart rate and VO2 max used to be cards of their own. They were folded into
+> Recovery and Activity in 1.2.0 — resting HR is read alongside recovery, and VO2
+> max is one number that did not justify its own swipe.
 
 Tap or swipe on error/config screens to retry. If the server is unreachable, the widget shows your last cached summary with a stale indicator.
 

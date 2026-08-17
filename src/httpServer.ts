@@ -8,8 +8,8 @@ import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
 import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
 import { requestPairing, checkPairStatus, approvePairing } from "./pairApi.js";
-import { submitPrompt, getPromptStatus } from "./promptApi.js";
-import { renderDashboard, renderPairSuccess, renderPairError } from "./dashboard.js";
+import { submitPrompt, getPromptStatus, isAiConfigured, clearDailyInsight } from "./promptApi.js";
+import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
 
 // SECTION: HTTP MCP Server
 
@@ -46,6 +46,14 @@ function isRateLimited(clientKey: string): boolean {
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
   res.writeHead(statusCode, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+/**
+ * The dashboard drives these endpoints over fetch and expects JSON; a plain
+ * browser form post still gets HTML. Keeps the no-JavaScript path working.
+ */
+function wantsJson(req: IncomingMessage): boolean {
+  return (req.headers.accept ?? "").includes("application/json");
 }
 
 function normalizePathname(pathname: string): string {
@@ -310,8 +318,21 @@ export function createHttpMcpServer(): HttpMcpServer {
           }
 
           const ok = approvePairing(formCode);
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(ok ? renderPairSuccess(formCode) : renderPairError("Code not found or expired."));
+
+          // The dashboard approves over fetch and stays on the page; the HTML
+          // fallback still renders a page, now carrying the token so the "back"
+          // link does not 401.
+          if (wantsJson(req)) {
+            sendJson(res, ok ? 200 : 404, ok ? { ok: true } : { error: "Code not found or expired." });
+            return;
+          }
+
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(
+            ok
+              ? renderPairSuccess(formCode, queryToken)
+              : renderPairError("Code not found or expired.", queryToken)
+          );
           return;
         }
 
@@ -336,8 +357,39 @@ export function createHttpMcpServer(): HttpMcpServer {
             process.env["ANTHROPIC_API_KEY"] = key;
           }
 
-          res.writeHead(302, { Location: "/dashboard" });
+          if (wantsJson(req)) {
+            sendJson(res, 200, { ok: true, ai_configured: isAiConfigured() });
+            return;
+          }
+
+          // Without the token the redirect target 401s, which is what the
+          // non-JS form flow used to do after every save.
+          res.writeHead(302, {
+            Location: queryToken ? `/dashboard?token=${encodeURIComponent(queryToken)}` : "/dashboard",
+          });
           res.end();
+          return;
+        }
+
+        if (pathname === "/dashboard/status" && req.method === "GET") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+          sendJson(res, 200, getDashboardStatus());
+          return;
+        }
+
+        if (pathname === "/dashboard/insight/regenerate" && req.method === "POST") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+          clearDailyInsight();
+          // Drop the watch summary cache too, otherwise the next /api/watch
+          // serves the old response and the insight looks unchanged.
+          watchApiCache = null;
+          sendJson(res, 200, { ok: true });
           return;
         }
 

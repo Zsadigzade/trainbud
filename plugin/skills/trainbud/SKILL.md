@@ -1,19 +1,19 @@
 ---
-name: garmin-bud
+name: trainbud
 description: >-
   Answer questions about the user's Garmin Connect data — workouts, sleep, heart rate,
   recovery, stress, VO2 max, body composition, and training load. Use when the user
-  runs /garmin-bud:garmin-bud or asks about Garmin stats, fitness, recovery, or training.
+  runs /trainbud:trainbud or asks about Garmin stats, fitness, recovery, or training.
 disable-model-invocation: true
 ---
 
-# GarminBud — talk to your Garmin data
+# TrainBud — talk to your Garmin data
 
-Use GarminBud MCP tools when the `garmin-bud` server is connected. Do not guess fitness data.
+Use TrainBud MCP tools when the `trainbud` server is connected. Do not guess fitness data.
 
 ## Before fetching data
 
-If MCP tools are unavailable, tell the user to run **`/garmin-bud:garmin-bud-setup`**, set `GARMIN_EMAIL` / `GARMIN_PASSWORD`, restart Claude Code, and try again.
+If MCP tools are unavailable, tell the user to run **`/trainbud:trainbud-setup`**, set `GARMIN_EMAIL` / `GARMIN_PASSWORD`, restart Claude Code, and try again.
 
 ## MCP tools (9)
 
@@ -59,6 +59,6 @@ See [prompts.md](prompts.md). Natural language works too:
 ## Diagnostics
 
 ```bash
-garmin-bud check
-garmin-bud cache clear
+trainbud check
+trainbud cache clear
 ```

@@ -1,6 +1,6 @@
-# GarminBud example prompts
+# TrainBud example prompts
 
-Use after setup (`/garmin-bud:garmin-bud-setup` + restart).
+Use after setup (`/trainbud:trainbud-setup` + restart).
 
 ## Single-topic
 

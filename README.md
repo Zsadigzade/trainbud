@@ -97,7 +97,9 @@ View recovery, sleep, activity, stress, and VO2 max on your Garmin watch via a C
    - **Server URL** — your tunnel URL (e.g. `https://abc.trycloudflare.com`)
 4. Open the widget on your watch — it shows a pairing code. Approve it in the dashboard (`/dashboard?token=YOUR_API_KEY`) to complete setup.
 
-Tap the widget to cycle through data cards. The watch calls `GET /api/watch` — a compact JSON summary, not the full MCP protocol.
+The glance shows recovery and sleep from the last cached summary, so it renders without
+waiting on the network. Open it and tap or swipe to cycle through seven cards. The watch
+calls `GET /api/watch` — a compact JSON summary, not the full MCP protocol.
 
 ## Connect to Claude Desktop
 

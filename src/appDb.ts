@@ -76,6 +76,14 @@ export function deleteSetting(key: string): void {
   getDb().prepare("DELETE FROM settings WHERE key = ?").run(key);
 }
 
+/** Setting keys starting with `prefix`, used to prune dated cache entries. */
+export function listSettingKeys(prefix: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT key FROM settings WHERE key LIKE ?")
+    .all(`${prefix}%`) as { key: string }[];
+  return rows.map((row) => row.key);
+}
+
 // Pair tokens
 
 const PAIR_TOKEN_TTL_SECONDS = 5 * 60;

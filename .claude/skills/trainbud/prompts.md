@@ -1,6 +1,6 @@
-# GarminBud example prompts
+# TrainBud example prompts
 
-Use after MCP is connected (`/garmin-bud-setup` done + client restarted).
+Use after MCP is connected (`/trainbud-setup` done + client restarted).
 
 ## Single-topic
 

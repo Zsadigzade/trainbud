@@ -7,7 +7,7 @@ import Toybox.Time;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
-class GarminBudApp extends Application.AppBase {
+class TrainBudApp extends Application.AppBase {
 
     // Storage keys
     const STORAGE_SUMMARY_KEY    = "summary";
@@ -16,8 +16,8 @@ class GarminBudApp extends Application.AppBase {
     const STORAGE_API_KEY        = "api_key";
     const STORAGE_SERVER_URL     = "server_url";
 
-    // Card count: Overview, Recovery, Sleep, Activity, Stress, VO2Max, HeartRate, AI Insight, Ask AI
-    const CARD_COUNT = 9;
+    // Carousel layout lives in Cards.mc — see that module for the card order.
+    const CARD_COUNT = Cards.COUNT;
 
     const FETCH_TIMEOUT_MS  = 10000;
     const PAIR_POLL_MS      = 5000;
@@ -66,7 +66,15 @@ class GarminBudApp extends Application.AppBase {
     }
 
     function getInitialView() {
-        return [ new GarminBudView(), new GarminBudDelegate() ];
+        return [ new TrainBudView(), new TrainBudDelegate() ];
+    }
+
+    // From API level 4.0.0 an app without a glance view does not appear in the
+    // device's glance list at all. The view reads the cached summary directly
+    // from storage so the glance scope stays small — see TrainBudGlanceView.
+    (:glance)
+    function getGlanceView() {
+        return [ new TrainBudGlanceView() ];
     }
 
     // -------------------------------------------------------------------------
