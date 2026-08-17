@@ -218,6 +218,20 @@ export function createHttpMcpServer(): HttpMcpServer {
         const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
         const pathname = normalizePathname(url.pathname);
 
+        // Every request, with the client's identity. Without this there is no way
+        // to tell "the watch sent a request that failed" from "the watch never
+        // sent one" — a distinction that decides where a pairing bug lives.
+        logger.info(
+          {
+            method: req.method,
+            path: pathname,
+            ua: req.headers["user-agent"] ?? "(none)",
+            accept: req.headers["accept"] ?? "(none)",
+            encoding: req.headers["accept-encoding"] ?? "(none)",
+          },
+          "request"
+        );
+
         if (pathname === "/" || pathname === "") {
           sendJson(res, 200, {
             service: "trainbud",
