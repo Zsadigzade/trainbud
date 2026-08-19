@@ -8,7 +8,11 @@
 # Alternatively use Cloudflare Tunnel (see README).
 
 param(
-    [string]$NgrokDomain = ""
+    # The static domain the Connect IQ app is built against: ciq/resources/settings/
+    # properties.xml ships this as the default ServerUrl, and a sideloaded app has no
+    # settings screen to change it on. Passing a different domain here means the watch
+    # is talking to an address the server is no longer on.
+    [string]$NgrokDomain = "backpedal-immorally-cathouse.ngrok-free.dev"
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,8 +91,13 @@ New-Item -ItemType Directory -Force -Path (Split-Path $setupPath) | Out-Null
 # Read API key from .env for dashboard link
 $apiKey = ""
 if (Test-Path (Join-Path $RepoRoot ".env")) {
-    $envLine = Get-Content (Join-Path $RepoRoot ".env") | Select-String "^TRAINBUD_API_KEY="
-    if ($envLine) { $apiKey = ($envLine -replace "^TRAINBUD_API_KEY=", "").Trim() }
+    # Both names are live: TRAINBUD_API_KEY is what setup writes now, GARMIN_MCP_API_KEY
+    # is what a pre-0.3.0 .env still holds and the server still honours. Matching only the
+    # new one printed a dashboard link with no token on every existing install, which 401s.
+    $envLine = Get-Content (Join-Path $RepoRoot ".env") |
+        Select-String "^(TRAINBUD_API_KEY|GARMIN_MCP_API_KEY)=" |
+        Select-Object -First 1
+    if ($envLine) { $apiKey = ($envLine -replace "^(TRAINBUD_API_KEY|GARMIN_MCP_API_KEY)=", "").Trim() }
 }
 
 Write-Host ""
