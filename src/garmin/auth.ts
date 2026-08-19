@@ -4,6 +4,7 @@ import type { GarminConnectInstance } from "./garminConnect.js";
 import { GarminConnect } from "./garminConnect.js";
 import { appConfig, assertGarminCredentials } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { writeSecretFile } from "../utils/secretFile.js";
 import type { StoredSession } from "./types.js";
 
 // SECTION: Session Persistence
@@ -39,9 +40,8 @@ export function readStoredSession(): StoredSession | null {
 }
 
 export function writeStoredSession(session: StoredSession): void {
-  const sessionPath = appConfig.sessionPath;
-  fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-  fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2), "utf8");
+  // Live OAuth tokens for the Connect account -- owner-readable only.
+  writeSecretFile(appConfig.sessionPath, JSON.stringify(session, null, 2));
 }
 
 export function clearStoredSession(): void {

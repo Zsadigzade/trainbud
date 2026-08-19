@@ -9,6 +9,7 @@ import {
   readRenamedEnv,
   remapLegacyPath,
 } from "./paths.js";
+import { writeSecretFile } from "./utils/secretFile.js";
 
 const projectRoot = getProjectRoot();
 const defaultEnvPath = path.join(projectRoot, ".env");
@@ -106,7 +107,7 @@ export function writeEnvFile(credentials: { email: string; password: string; api
     "",
   ];
 
-  fs.writeFileSync(envPath, lines.join("\n"), "utf8");
+  writeSecretFile(envPath, lines.join("\n"));
   loadEnv({ path: envPath, override: true, quiet: true });
   return envPath;
 }

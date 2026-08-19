@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { writeSecretFile } from "./utils/secretFile.js";
 
 // SECTION: MCP Client Config
 
@@ -115,8 +116,9 @@ export function mergeTrainBudConfig(
 }
 
 export function writeMcpConfig(configPath: string, config: McpConfigFile): void {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  // This file carries GARMIN_PASSWORD in its env block, so it is as sensitive
+  // as .env and gets the same permissions.
+  writeSecretFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 export function configureTrainBudForClient(
