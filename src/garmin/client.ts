@@ -8,9 +8,17 @@ import { GarminApiError } from "./types.js";
 let clientInstance: GarminConnectInstance | null = null;
 let clientPromise: Promise<GarminConnectInstance> | null = null;
 
-export async function getGarminClient(forceAuth = false): Promise<GarminConnectInstance> {
+/** Injectable for tests; production always authenticates for real. */
+export type Authenticator = (force: boolean) => Promise<GarminConnectInstance>;
+
+const defaultAuthenticator: Authenticator = (force) => authenticateGarmin(force);
+
+export async function getGarminClient(
+  forceAuth = false,
+  authenticator: Authenticator = defaultAuthenticator
+): Promise<GarminConnectInstance> {
   if (forceAuth) {
-    clientInstance = await authenticateGarmin(true);
+    clientInstance = await authenticator(true);
     clientPromise = Promise.resolve(clientInstance);
     return clientInstance;
   }
@@ -20,10 +28,20 @@ export async function getGarminClient(forceAuth = false): Promise<GarminConnectI
   }
 
   if (!clientPromise) {
-    clientPromise = authenticateGarmin(false).then((client) => {
-      clientInstance = client;
-      return client;
-    });
+    // The in-flight promise is memoised so concurrent callers share one login.
+    // It used to be memoised on failure too: a single bad password poisoned
+    // every later call with the same rejected promise, so fixing the
+    // credentials changed nothing until the process was restarted. Clear it on
+    // rejection and let the next caller try again.
+    clientPromise = authenticator(false)
+      .then((client) => {
+        clientInstance = client;
+        return client;
+      })
+      .catch((error: unknown) => {
+        clientPromise = null;
+        throw error;
+      });
   }
 
   return clientPromise;
