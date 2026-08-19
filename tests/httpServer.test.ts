@@ -146,3 +146,85 @@ describe("public URL resolution for pairing", () => {
     assert.notEqual(url, "https://127.0.0.1:3847");
   });
 });
+
+// Pairing is the one flow that is reachable with no credential at all: POST
+// /api/pair mints a code, and GET /api/pair/<code>/status hands back the API
+// key once that code is approved. Unthrottled, six digits is a space a tunnel
+// client can walk in minutes, so the pair endpoints carry their own, tighter
+// budget than the general one.
+describe("pair endpoint rate limiting", () => {
+  const originalEnv = {
+    email: process.env.GARMIN_EMAIL,
+    password: process.env.GARMIN_PASSWORD,
+    apiKey: process.env.TRAINBUD_API_KEY,
+    port: process.env.TRAINBUD_PORT,
+    host: process.env.TRAINBUD_HOST,
+  };
+
+  let server: import("../src/httpServer.js").HttpMcpServer;
+  const baseUrl = "http://127.0.0.1:3849";
+
+  before(async () => {
+    process.env.GARMIN_EMAIL = process.env.GARMIN_EMAIL ?? "test@example.com";
+    process.env.GARMIN_PASSWORD = process.env.GARMIN_PASSWORD ?? "test-password";
+    process.env.TRAINBUD_API_KEY = "test-api-key-123";
+    process.env.TRAINBUD_PORT = "3849";
+    process.env.TRAINBUD_HOST = "127.0.0.1";
+
+    const { createHttpMcpServer } = await import("../src/httpServer.js");
+    server = createHttpMcpServer();
+    await server.start();
+  });
+
+  after(async () => {
+    await server.close();
+    process.env.GARMIN_EMAIL = originalEnv.email;
+    process.env.GARMIN_PASSWORD = originalEnv.password;
+    process.env.TRAINBUD_API_KEY = originalEnv.apiKey;
+    process.env.TRAINBUD_PORT = originalEnv.port;
+    process.env.TRAINBUD_HOST = originalEnv.host;
+  });
+
+  it("stops a walk through the pair code space", async () => {
+    let sawTooManyRequests = false;
+
+    for (let i = 0; i < 40; i++) {
+      const code = String(100000 + i);
+      const response = await fetch(`${baseUrl}/api/pair/${code}/status`, {
+        // Every request through a tunnel arrives from the tunnel agent on
+        // loopback, so the forwarded client address is what identifies a
+        // caller. It also keeps this test in a bucket of its own.
+        headers: { "X-Forwarded-For": "203.0.113.7" },
+      });
+      if (response.status === 429) {
+        sawTooManyRequests = true;
+        break;
+      }
+    }
+
+    assert.ok(sawTooManyRequests, "40 status polls in a row were all served");
+  });
+
+  it("does not punish a different client for that walk", async () => {
+    const response = await fetch(`${baseUrl}/api/pair/999999/status`, {
+      headers: { "X-Forwarded-For": "203.0.113.99" },
+    });
+    assert.equal(response.status, 404, "a separate client was rate limited by another client's traffic");
+  });
+
+  it("rejects a wrong-length token without crashing the request", async () => {
+    // A constant-time comparison throws on mismatched lengths if the guard is
+    // missing, which turns a 401 into a 500 or a dropped socket.
+    const response = await fetch(`${baseUrl}/api/watch`, {
+      headers: { Authorization: "Bearer x", "X-Forwarded-For": "203.0.113.20" },
+    });
+    assert.equal(response.status, 401);
+  });
+
+  it("still accepts the correct token", async () => {
+    const response = await fetch(`${baseUrl}/dashboard/status`, {
+      headers: { Authorization: "Bearer test-api-key-123", "X-Forwarded-For": "203.0.113.21" },
+    });
+    assert.equal(response.status, 200);
+  });
+});

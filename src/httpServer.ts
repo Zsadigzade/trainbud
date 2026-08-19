@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { closeCache } from "./garmin/cache.js";
 import { closeAppDb, setSetting } from "./appDb.js";
@@ -16,9 +17,21 @@ import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus
 const MAX_BODY_BYTES = 1024 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 60;
+// Pairing is the only flow reachable with no credential at all, and the prize
+// for guessing a code is the API key itself. Six digits is a small space, so
+// these endpoints get their own, much tighter budget: a real watch polls once
+// every five seconds, which is twelve requests a minute.
+const PAIR_RATE_LIMIT_MAX_REQUESTS = 30;
+const RATE_LIMIT_PRUNE_THRESHOLD = 256;
 const WATCH_API_CACHE_TTL_MS = 5 * 60_000;
 
-const requestLog = new Map<string, { count: number; windowStart: number }>();
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+const requestLog = new Map<string, RateLimitEntry>();
+const pairRequestLog = new Map<string, RateLimitEntry>();
 let watchApiCache: { summary: WatchSummary; expiresAt: number } | null = null;
 
 export interface HttpMcpServer {
@@ -26,21 +39,75 @@ export interface HttpMcpServer {
   close: () => Promise<void>;
 }
 
+/**
+ * Who to charge a request to.
+ *
+ * The socket address alone was wrong for the deployment this server actually
+ * runs in: behind a tunnel every request arrives from the tunnel agent on
+ * loopback, so the watch, the dashboard and a stranger all shared one bucket --
+ * one noisy client throttled everyone, and an attacker walking the pair code
+ * space was indistinguishable from the watch.
+ *
+ * The forwarded address is only trusted when the request came from loopback,
+ * i.e. from a local tunnel agent; a direct caller cannot promote itself by
+ * inventing the header. The last hop is used, not the first, because a client
+ * can send its own X-Forwarded-For and the proxy appends the address it
+ * actually saw.
+ */
 function getClientKey(req: IncomingMessage): string {
-  return req.socket.remoteAddress ?? "unknown";
+  const socketAddress = req.socket.remoteAddress ?? "unknown";
+  if (!isLoopbackAddress(socketAddress)) {
+    return socketAddress;
+  }
+
+  const forwarded = req.headers["x-forwarded-for"];
+  const raw = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
+  const hops = (raw ?? "")
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter((hop) => hop.length > 0);
+
+  return hops.length > 0 ? hops[hops.length - 1]! : socketAddress;
 }
 
-function isRateLimited(clientKey: string): boolean {
+function isLoopbackAddress(address: string): boolean {
+  const name = address.replace(/^::ffff:/, "");
+  return name === "127.0.0.1" || name === "::1" || name.startsWith("127.");
+}
+
+/** Drop windows that have already rolled over, so the map cannot grow forever. */
+function pruneRateLimitLog(log: Map<string, RateLimitEntry>, now: number): void {
+  if (log.size < RATE_LIMIT_PRUNE_THRESHOLD) {
+    return;
+  }
+  for (const [key, entry] of log) {
+    if (now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+      log.delete(key);
+    }
+  }
+}
+
+function isRateLimited(
+  clientKey: string,
+  log: Map<string, RateLimitEntry> = requestLog,
+  max: number = RATE_LIMIT_MAX_REQUESTS
+): boolean {
   const now = Date.now();
-  const entry = requestLog.get(clientKey);
+  pruneRateLimitLog(log, now);
+  const entry = log.get(clientKey);
 
   if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
-    requestLog.set(clientKey, { count: 1, windowStart: now });
+    log.set(clientKey, { count: 1, windowStart: now });
     return false;
   }
 
   entry.count += 1;
-  return entry.count > RATE_LIMIT_MAX_REQUESTS;
+  return entry.count > max;
+}
+
+/** True for the endpoints that can be reached without a credential. */
+function isPairPath(pathname: string): boolean {
+  return pathname === "/api/pair" || pathname.startsWith("/api/pair/");
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -67,7 +134,27 @@ function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
   const header = req.headers.authorization;
   const headerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
   const token = headerToken ?? queryToken ?? null;
-  return token !== null && token.length > 0 && token === appConfig.mcpApiKey;
+  return token !== null && matchesApiKey(token);
+}
+
+/**
+ * Constant-time comparison. `===` returns as soon as two bytes differ, which
+ * leaks the length of the matching prefix to anyone who can time the response,
+ * and this key is reachable over a public tunnel. timingSafeEqual throws on a
+ * length mismatch, so the lengths are compared first -- that leaks only the
+ * key's length, which is fixed and public anyway.
+ */
+function matchesApiKey(token: string): boolean {
+  const expected = appConfig.mcpApiKey;
+  if (!expected || !token) {
+    return false;
+  }
+  const provided = Buffer.from(token, "utf8");
+  const secret = Buffer.from(expected, "utf8");
+  if (provided.length !== secret.length) {
+    return false;
+  }
+  return timingSafeEqual(provided, secret);
 }
 
 async function getCachedWatchSummary(): Promise<WatchSummary> {
@@ -155,15 +242,6 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
     sendJson(res, 401, {
       error: "Unauthorized",
       message: "Missing or invalid Authorization: Bearer token.",
-    });
-    return;
-  }
-
-  const clientKey = getClientKey(req);
-  if (isRateLimited(clientKey)) {
-    sendJson(res, 429, {
-      error: "Too Many Requests",
-      message: "Rate limit exceeded. Try again in a minute.",
     });
     return;
   }
@@ -292,6 +370,22 @@ export function createHttpMcpServer(): HttpMcpServer {
           },
           "request"
         );
+
+        // Rate limiting used to be wired into the MCP handler alone, so every
+        // other route -- including the unauthenticated pair endpoints, the one
+        // place a stranger can reach -- was unthrottled.
+        const clientKey = getClientKey(req);
+        const overLimit = isPairPath(pathname)
+          ? isRateLimited(clientKey, pairRequestLog, PAIR_RATE_LIMIT_MAX_REQUESTS)
+          : isRateLimited(clientKey);
+
+        if (overLimit && pathname !== "/health") {
+          sendJson(res, 429, {
+            error: "Too Many Requests",
+            message: "Rate limit exceeded. Try again in a minute.",
+          });
+          return;
+        }
 
         if (pathname === "/" || pathname === "") {
           sendJson(res, 200, {
