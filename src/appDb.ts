@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appConfig } from "./config.js";
@@ -88,13 +89,17 @@ export function listSettingKeys(prefix: string): string[] {
 
 const PAIR_TOKEN_TTL_SECONDS = 5 * 60;
 
-function randomCode(): string {
-  const digits = "0123456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += digits[Math.floor(Math.random() * digits.length)];
-  }
-  return code;
+/**
+ * A pair code is a bearer credential in disguise: /api/pair is unauthenticated
+ * by design, and /api/pair/<code>/status hands out the API key as soon as that
+ * code is approved. Math.random() was the source here, which means an attacker
+ * who mints a handful of codes from the open endpoint can recover the PRNG
+ * state and predict the code the real watch is displaying. randomInt draws from
+ * the CSPRNG, uniformly and without modulo bias, and zero-padding keeps the
+ * full six-digit space (including 000042) in play.
+ */
+export function generatePairCode(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
 export function createPairToken(): PairToken {
@@ -105,12 +110,12 @@ export function createPairToken(): PairToken {
   // Clean expired tokens
   db.prepare("DELETE FROM pair_tokens WHERE expires_at < ?").run(now);
 
-  let code = randomCode();
+  let code = generatePairCode();
   let attempts = 0;
   while (attempts < 10) {
     const existing = db.prepare("SELECT code FROM pair_tokens WHERE code = ?").get(code);
     if (!existing) break;
-    code = randomCode();
+    code = generatePairCode();
     attempts++;
   }
 
