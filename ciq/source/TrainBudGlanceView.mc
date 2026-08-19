@@ -77,7 +77,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             0,
             baseline,
             LABEL_REC,
-            recovery == null ? "--" : recovery.toString(),
+            recovery == null ? "--" : metricText(recovery),
             recoveryColor(recovery)
         );
 
@@ -87,9 +87,18 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             width / 2,
             baseline,
             LABEL_SLEEP,
-            sleepH == null ? "--" : sleepH.toString() + "h",
+            sleepH == null ? "--" : metricText(sleepH) + "h",
             Graphics.COLOR_WHITE
         );
+    }
+
+    // Float.toString() renders six decimals, so 6.3 hours of sleep drew as
+    // "6.300000h" in a glance slot two characters wide.
+    private function metricText(value) as String {
+        if (value instanceof Float || value instanceof Double) {
+            return (value as Float).format("%.1f");
+        }
+        return value.toString();
     }
 
     private function drawMetric(

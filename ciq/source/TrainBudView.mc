@@ -445,23 +445,27 @@ class TrainBudView extends WatchUi.View {
             WatchUi.loadResource(Rez.Strings.CardOverview) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
-        var recValue   = WatchUi.loadResource(Rez.Strings.NoData) as String;
-        var sleepValue = WatchUi.loadResource(Rez.Strings.NoData) as String;
-        var stressValue = WatchUi.loadResource(Rez.Strings.NoData) as String;
-        var vo2Value   = WatchUi.loadResource(Rez.Strings.NoData) as String;
+        // "No data" is too wide for a quarter of the screen: four of them drew
+        // over each other and over their own labels. The glance has always used
+        // a dash for the same reason.
+        var placeholder = WatchUi.loadResource(Rez.Strings.NoDataShort) as String;
+        var recValue   = placeholder;
+        var sleepValue = placeholder;
+        var stressValue = placeholder;
+        var vo2Value   = placeholder;
 
         if (summary != null) {
             var overview = summary.get("daily_overview");
             if (overview != null && overview instanceof Dictionary) {
                 var ov = overview as Dictionary;
                 var recovery = ov.get("recovery");
-                if (recovery != null) { recValue = recovery.toString(); }
+                if (recovery != null) { recValue = metricText(recovery); }
                 var sleepH = ov.get("sleep_h");
-                if (sleepH != null) { sleepValue = sleepH.toString() + "h"; }
+                if (sleepH != null) { sleepValue = metricText(sleepH) + "h"; }
                 var stress = ov.get("stress");
-                if (stress != null) { stressValue = stress.toString(); }
+                if (stress != null) { stressValue = metricText(stress); }
                 var vo2 = ov.get("vo2max");
-                if (vo2 != null) { vo2Value = vo2.toString(); }
+                if (vo2 != null) { vo2Value = metricText(vo2); }
             }
         }
 
@@ -474,6 +478,17 @@ class TrainBudView extends WatchUi.View {
         drawOverviewCell(dc, rightX, topY,    WatchUi.loadResource(Rez.Strings.LabelSleep) as String,    sleepValue,  Graphics.COLOR_WHITE);
         drawOverviewCell(dc, leftX,  bottomY, WatchUi.loadResource(Rez.Strings.LabelStress) as String,   stressValue, stressColor(parseNumber(stressValue)));
         drawOverviewCell(dc, rightX, bottomY, WatchUi.loadResource(Rez.Strings.LabelVo2) as String,      vo2Value,    Graphics.COLOR_WHITE);
+    }
+
+    // JSON numbers arrive as Float whenever the server sent a decimal, and
+    // Float.toString() renders six decimal places: sleep of 6.3 hours drew as
+    // "6.300000h" on the watch, which then overflowed its cell. Every metric
+    // that can be fractional goes through this.
+    private function metricText(value) as String {
+        if (value instanceof Float || value instanceof Double) {
+            return (value as Float).format("%.1f");
+        }
+        return value.toString();
     }
 
     private function drawOverviewCell(dc as Dc, x as Number, y as Number, label as String, value as String, valueColor as Number) as Void {
@@ -593,7 +608,7 @@ class TrainBudView extends WatchUi.View {
                 var hours = sd.get("hours");
                 var score = sd.get("score");
                 var lbl   = sd.get("label");
-                if (hours != null) { result[:value] = hours.toString() + "h"; }
+                if (hours != null) { result[:value] = metricText(hours) + "h"; }
                 if (score != null) {
                     result[:subtitle] = "Score " + score.toString();
                     result[:color]    = sleepColor(score as Number);
@@ -615,7 +630,7 @@ class TrainBudView extends WatchUi.View {
                 var parts    = [] as Array<String>;
                 if (name != null) { result[:value] = truncate(name as String, 14); }
                 if (dur != null)      { parts.add(formatDuration(dur as Number)); }
-                if (distance != null) { parts.add(distance.toString() + " km"); }
+                if (distance != null) { parts.add(metricText(distance) + " km"); }
                 if (avgHr != null)    { parts.add(avgHr.toString() + " bpm"); }
                 result[:subtitle] = joinParts(parts, " · ");
             }
@@ -628,7 +643,7 @@ class TrainBudView extends WatchUi.View {
                 var vo2   = vd.get("value");
                 var trend = vd.get("trend");
                 if (vo2 != null) {
-                    var vo2Text = WatchUi.loadResource(Rez.Strings.LabelVo2) as String + " " + vo2.toString();
+                    var vo2Text = WatchUi.loadResource(Rez.Strings.LabelVo2) as String + " " + metricText(vo2);
                     if (trend != null) { vo2Text = vo2Text + " " + (trend as String); }
                     result[:footnote] = vo2Text;
                 }
@@ -641,7 +656,7 @@ class TrainBudView extends WatchUi.View {
             var sd = stress as Dictionary;
             var avg = sd.get("avg");
             var lbl = sd.get("label");
-            if (avg != null) { result[:value] = avg.toString(); result[:color] = stressColor(avg as Number); }
+            if (avg != null) { result[:value] = metricText(avg); result[:color] = stressColor(avg as Number); }
             if (lbl != null) { result[:subtitle] = lbl as String; }
         }
 

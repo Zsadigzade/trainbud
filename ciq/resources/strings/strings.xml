@@ -14,6 +14,9 @@
     <string id="ConfigError">Set Server URL in the Connect IQ app settings</string>
     <string id="FetchError">Could not reach TrainBud</string>
     <string id="NoData">No data</string>
+    <!-- Compact placeholder for the four-cell overview grid, where "No data"
+         is wide enough to overlap the neighbouring cell and its own label. -->
+    <string id="NoDataShort">--</string>
     <string id="TapHint">Tap or swipe to switch</string>
     <string id="StalePrefix">Updated</string>
     <string id="StaleSuffix">ago</string>
