@@ -388,16 +388,25 @@ class TrainBudView extends WatchUi.View {
         dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 - 8, Graphics.FONT_NUMBER_HOT,
             value, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
+        // The subtitle and the footnote were 26 pixels apart with a FONT_TINY
+        // line between them, so on the Activity card "1h 23m . 0 km . 114 bpm"
+        // and "VO2 46 stable" ran into each other. Stack them by their real
+        // heights instead.
+        var subtitleY = dc.getHeight() / 2 + 36;
+
         if ((subtitle as String).length() > 0) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 + 36, Graphics.FONT_TINY,
+            dc.drawText(dc.getWidth() / 2, subtitleY, Graphics.FONT_TINY,
                 subtitle, Graphics.TEXT_JUSTIFY_CENTER);
         }
 
         // Secondary metric folded onto this card (VO2 max on Activity).
         if ((footnote as String).length() > 0) {
+            var footnoteY = (subtitle as String).length() > 0
+                ? subtitleY + dc.getFontHeight(Graphics.FONT_TINY)
+                : subtitleY;
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 + 62, Graphics.FONT_XTINY,
+            dc.drawText(dc.getWidth() / 2, footnoteY, Graphics.FONT_XTINY,
                 footnote, Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
@@ -471,8 +480,18 @@ class TrainBudView extends WatchUi.View {
 
         var leftX   = dc.getWidth() / 4;
         var rightX  = (dc.getWidth() * 3) / 4;
-        var topY    = dc.getHeight() / 2 - 24;
-        var bottomY = dc.getHeight() / 2 + 18;
+
+        // The rows were 42 pixels apart with hard-coded offsets, while a cell is
+        // a label plus a value in FONT_MEDIUM underneath it -- taller than that
+        // on every device. The top row's numbers drew straight through the
+        // bottom row's labels ("91" over "Stress", "6.3h" over "VO2"). Deriving
+        // the pitch from the fonts keeps the rows clear at any screen size.
+        var labelHeight = dc.getFontHeight(Graphics.FONT_XTINY);
+        var valueHeight = dc.getFontHeight(Graphics.FONT_MEDIUM);
+        var rowHeight   = labelHeight + valueHeight;
+        var rowGap      = valueHeight / 4;
+        var topY        = dc.getHeight() / 2 - rowHeight - rowGap / 2;
+        var bottomY     = topY + rowHeight + rowGap;
 
         drawOverviewCell(dc, leftX,  topY,    WatchUi.loadResource(Rez.Strings.LabelRecovery) as String, recValue,    recoveryColor(parseNumber(recValue)));
         drawOverviewCell(dc, rightX, topY,    WatchUi.loadResource(Rez.Strings.LabelSleep) as String,    sleepValue,  Graphics.COLOR_WHITE);
@@ -495,7 +514,11 @@ class TrainBudView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(x, y, Graphics.FONT_XTINY, label, Graphics.TEXT_JUSTIFY_CENTER);
         dc.setColor(valueColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x, y + 18, Graphics.FONT_MEDIUM, value, Graphics.TEXT_JUSTIFY_CENTER);
+        // The value sits directly below its own label, so the offset is the
+        // label's real height rather than a constant that only suited one
+        // screen.
+        dc.drawText(x, y + dc.getFontHeight(Graphics.FONT_XTINY), Graphics.FONT_MEDIUM, value,
+            Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     // -------------------------------------------------------------------------
@@ -528,12 +551,26 @@ class TrainBudView extends WatchUi.View {
         var cy = dc.getHeight() / 2;
 
         if (roundScreen && hasScore) {
-            var radius = (dc.getWidth() / 2) - 36;
+            // The ring was a fixed inset from the screen edge, which put its top
+            // at y=36 -- inside the title, which occupies y=24 to roughly y=52.
+            // The score arc drew straight through the word "Recovery". Size it
+            // to whatever clears the title instead, so it stays clear on any
+            // screen and with any system font.
+            var titleBottom = 24 + dc.getFontHeight(Graphics.FONT_SMALL);
+            var maxRadius   = (dc.getWidth() / 2) - 12;
+            var clearance   = cy - titleBottom - 6;
+            var radius      = clearance < maxRadius ? clearance : maxRadius;
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawArc(cx, cy, radius, Graphics.ARC_COUNTER_CLOCKWISE, 90, 90 - 360);
+            dc.drawArc(cx, cy, radius, Graphics.ARC_CLOCKWISE, 90, 90 - 360);
+
+            // The end angle is measured clockwise from the top -- 90 minus the
+            // score's share of the circle -- but the arc was drawn with
+            // ARC_COUNTER_CLOCKWISE, so it swept the other way and rendered the
+            // complement: a score of 91 drew as a 33-degree sliver, which is
+            // the missing 9%. The higher the score, the emptier the ring looked.
             var endAngle = 90 - ((score * 360) / 100);
             dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-            dc.drawArc(cx, cy, radius, Graphics.ARC_COUNTER_CLOCKWISE, 90, endAngle);
+            dc.drawArc(cx, cy, radius, Graphics.ARC_CLOCKWISE, 90, endAngle);
         } else if (hasScore) {
             var barWidth = dc.getWidth() - 40;
             var fillWidth = (barWidth * score) / 100;
@@ -630,7 +667,10 @@ class TrainBudView extends WatchUi.View {
                 var parts    = [] as Array<String>;
                 if (name != null) { result[:value] = truncate(name as String, 14); }
                 if (dur != null)      { parts.add(formatDuration(dur as Number)); }
-                if (distance != null) { parts.add(metricText(distance) + " km"); }
+                // Connect reports 0 km for workouts that do not cover ground, so
+                // a strength session read "1h 23m . 0 km . 114 bpm". A distance
+                // of zero is an absence, not a measurement.
+                if (distance != null && (distance as Float) > 0) { parts.add(metricText(distance) + " km"); }
                 if (avgHr != null)    { parts.add(avgHr.toString() + " bpm"); }
                 result[:subtitle] = joinParts(parts, " · ");
             }
