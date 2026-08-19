@@ -16,10 +16,26 @@ const DEFAULT_WEIGHTS: RecoveryWeights = {
 };
 
 export function normalizeWeights(weights?: Partial<RecoveryWeights>): RecoveryWeights {
-  const merged = { ...DEFAULT_WEIGHTS, ...weights };
+  // Spreading the caller's object was wrong: getRecoveryStatus builds
+  // { hrv: input.hrv_weight, ... } from an input that usually carries no
+  // weights at all, so every key is present and explicitly undefined, and a
+  // spread of explicit undefined overwrites the default it was meant to fall
+  // back to. The total then came out NaN; `NaN <= 0` is false, so the guard
+  // below waved it through, every component was multiplied by NaN, and the
+  // score was NaN -- which JSON.stringify writes as null. That is how the
+  // cache, the tool output and the watch all ended up showing
+  // "Recovery score: null/100" with four healthy component scores beneath it.
+  const merged: RecoveryWeights = { ...DEFAULT_WEIGHTS };
+  for (const key of Object.keys(DEFAULT_WEIGHTS) as (keyof RecoveryWeights)[]) {
+    const value = weights?.[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      merged[key] = value;
+    }
+  }
+
   const total = merged.hrv + merged.sleep + merged.stress + merged.restingHr;
 
-  if (total <= 0) {
+  if (!Number.isFinite(total) || total <= 0) {
     return DEFAULT_WEIGHTS;
   }
 

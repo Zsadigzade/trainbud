@@ -122,6 +122,60 @@ describe("helpers", () => {
   });
 });
 
+describe("recovery weights", () => {
+  it("keeps its defaults when the caller passes no weights", () => {
+    // getRecoveryStatus builds {hrv: input.hrv_weight, ...} from an input with
+    // no weights in it, so every key is present and explicitly undefined --
+    // and spreading that over the defaults overwrites them. The total then
+    // became NaN, NaN <= 0 is false so the guard did not catch it, and the
+    // score came out NaN. JSON.stringify writes NaN as null, so it reached the
+    // cache, the tool output and the watch as "Recovery score: null/100" with
+    // all four component scores sitting right underneath it.
+    const weights = normalizeWeights({
+      hrv: undefined,
+      sleep: undefined,
+      stress: undefined,
+      restingHr: undefined,
+    });
+
+    for (const [name, value] of Object.entries(weights)) {
+      assert.ok(Number.isFinite(value), `${name} weight is ${value}`);
+    }
+
+    const total = weights.hrv + weights.sleep + weights.stress + weights.restingHr;
+    assert.ok(Math.abs(total - 1) < 1e-9, `weights sum to ${total}`);
+  });
+
+  it("produces a real score from real components", () => {
+    const weights = normalizeWeights({
+      hrv: undefined,
+      sleep: undefined,
+      stress: undefined,
+      restingHr: undefined,
+    });
+
+    const status = buildRecoveryStatus(
+      { hrvScore: 95, sleepScore: 94, stressScore: 95, restingHrScore: 75 },
+      weights
+    );
+
+    assert.ok(Number.isFinite(status.score), `score is ${status.score}`);
+    assert.ok(status.score > 60 && status.score <= 100, `score is ${status.score}`);
+  });
+
+  it("still honours weights the caller does pass", () => {
+    const weights = normalizeWeights({ hrv: 1, sleep: 1, stress: undefined, restingHr: undefined });
+    assert.ok(weights.hrv > 0.2 && weights.hrv < 0.5);
+  });
+
+  it("ignores a weight that is not a usable number", () => {
+    const weights = normalizeWeights({ hrv: Number.NaN, sleep: undefined, stress: undefined, restingHr: undefined });
+    for (const value of Object.values(weights)) {
+      assert.ok(Number.isFinite(value));
+    }
+  });
+});
+
 describe("recovery scoring", () => {
   it("builds a recovered status for strong component scores", () => {
     const weights = normalizeWeights();
