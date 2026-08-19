@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mapDailyStress, mapMaxMetrics } from "../src/garmin/rawApi.js";
+import { fetchDailyStress, fetchMaxMetrics, mapDailyStress, mapMaxMetrics } from "../src/garmin/rawApi.js";
+import type { GarminConnectInstance } from "../src/garmin/garminConnect.js";
 
 describe("rawApi mappers", () => {
   it("maps daily stress payloads", () => {
@@ -15,6 +16,81 @@ describe("rawApi mappers", () => {
     assert.equal(mapped?.date, "2026-06-25");
     assert.equal(mapped?.averageStress, 32);
     assert.equal(mapped?.maxStress, 78);
+  });
+
+  // The shape above never came from Connect -- it was written from a guess, and
+  // the guess is why a broken mapper looked tested. This is what
+  // /wellness-service/wellness/dailyStress/<date> actually returns: the average
+  // is avgStressLevel, and there is no overallStressLevel, restStressLevel or
+  // stressDuration in the response at all.
+  it("maps the payload Connect actually returns", () => {
+    const date = new Date("2026-08-18T00:00:00.000Z");
+    const mapped = mapDailyStress(date, {
+      userProfilePK: 136705478,
+      calendarDate: "2026-08-18",
+      maxStressLevel: 97,
+      avgStressLevel: 31,
+      stressValuesArray: [],
+    });
+
+    assert.equal(mapped?.averageStress, 31, "average stress was read from a field Connect does not send");
+    assert.equal(mapped?.maxStress, 97);
+    assert.equal(mapped?.restStress, null);
+    assert.equal(mapped?.stressDurationSeconds, null);
+  });
+
+  it("requests the date as a path segment, not a query parameter", async () => {
+    // Connect answers 404 for the query-parameter form, so every stress call
+    // failed and the watch showed no stress and no recovery score.
+    let seenUrl = "";
+    let seenOptions: unknown;
+    const client = {
+      get: async (url: string, options?: unknown) => {
+        seenUrl = url;
+        seenOptions = options;
+        return {};
+      },
+    } as unknown as GarminConnectInstance;
+
+    await fetchDailyStress(client, new Date("2026-08-18T00:00:00.000Z"));
+
+    assert.equal(
+      seenUrl,
+      "https://connectapi.garmin.com/wellness-service/wellness/dailyStress/2026-08-18"
+    );
+    assert.equal(seenOptions, undefined, "a query parameter was still attached");
+  });
+
+  it("treats Connect's negative sentinels as missing", () => {
+    // A day the watch was not worn comes back as -1 (or -2 while the day is
+    // still partial). Carried through as a number it is averaged in with real
+    // readings and drags the weekly stress average below anything measurable.
+    const mapped = mapDailyStress(new Date("2026-08-18T00:00:00.000Z"), {
+      avgStressLevel: -1,
+      maxStressLevel: -1,
+    });
+
+    assert.equal(mapped?.averageStress, null);
+    assert.equal(mapped?.maxStress, null);
+  });
+
+  it("asks for the latest VO2 max, not a specific day", async () => {
+    // maxmet/daily/<date> is a 404. VO2 max is only recomputed after a
+    // qualifying activity, so the daily form would be empty most days anyway.
+    let seenUrl = "";
+    const client = {
+      get: async (url: string) => {
+        seenUrl = url;
+        return {};
+      },
+    } as unknown as GarminConnectInstance;
+
+    await fetchMaxMetrics(client, new Date("2026-08-18T00:00:00.000Z"));
+
+    assert.equal(
+      seenUrl,
+      "https://connectapi.garmin.com/metrics-service/metrics/maxmet/latest/2026-08-18"
+    );
   });
 
   it("maps VO2 max payloads", () => {
