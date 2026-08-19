@@ -86,7 +86,7 @@ https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
 | Launcher icons | `ciq/resources-launcher-<size>/drawables/` | 35–70, exact per device | generated |
 | Store icon | `ciq/store/store_icon.png` | 130×130 | generated |
 | Cover | `ciq/store/cover_500.png` | 500×500 | generated |
-| Screenshots | `ciq/store/screenshots/` | 1–3 per device family | **MISSING — must be captured** |
+| Screenshots | `ciq/store/screenshots/` | 1–3 per device family | captured 2026-08-19 from a paired app on the fr70 simulator: overview, recovery, sleep, activity, stress |
 
 Icons come from `scripts/generate-icons.ps1`; re-run it after changing the product
 list and it rewrites `monkey.jungle` to match. The previous set was a large letter
