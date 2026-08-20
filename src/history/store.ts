@@ -69,6 +69,11 @@ function getDb(): Database.Database {
   return db ?? openHistoryDb();
 }
 
+/** The same handle, for the sibling modules that share this database. */
+export function getHistoryDb(): Database.Database {
+  return getDb();
+}
+
 export function closeHistoryDb(): void {
   if (db) {
     db.close();

@@ -44,6 +44,19 @@ export type IngestSource =
 export type IngestOutcome = "data" | "empty" | "error";
 
 /**
+ * What the user tells us that Garmin has no idea about. This is the whole
+ * differentiator: Connect holds the measurements and no notion of who is being
+ * measured or what they are training for.
+ */
+export type ContextKind = "goal" | "race" | "injury" | "note";
+
+/** Rated 1-10, one per day per kind. */
+export type SubjectiveKind = "rpe" | "soreness" | "mood";
+
+export const CONTEXT_KINDS: ContextKind[] = ["goal", "race", "injury", "note"];
+export const SUBJECTIVE_KINDS: SubjectiveKind[] = ["rpe", "soreness", "mood"];
+
+/**
  * `daily_metric.value` is NOT NULL and a row exists only for a real
  * measurement, so "is there a row" answers "was this measured". The different
  * question -- "have we ever asked Garmin about this day" -- is what ingest_day
@@ -102,4 +115,25 @@ export const HISTORY_SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS activity_date ON activity (date);
+
+  CREATE TABLE IF NOT EXISTS context_entry (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind           TEXT    NOT NULL,
+    text           TEXT    NOT NULL,
+    effective_from TEXT    NOT NULL,
+    effective_to   TEXT,
+    created_at     INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS context_entry_range
+    ON context_entry (effective_from, effective_to);
+
+  CREATE TABLE IF NOT EXISTS subjective (
+    date       TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    value      REAL    NOT NULL,
+    note       TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (date, kind)
+  );
 `;
