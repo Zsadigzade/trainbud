@@ -76,3 +76,13 @@ export interface BodyCompositionPayload {
   muscleTrend: string;
   entries: BodyCompositionEntry[];
 }
+
+export interface TrainingInsightsPayload {
+  startDate: string;
+  endDate: string;
+  latest: ActivitySummary | null;
+  activities: ActivitySummary[];
+  sleep: SleepPayload | null;
+  recovery: RecoveryPayload | null;
+  stress: StressPayload | null;
+}

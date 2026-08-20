@@ -4,17 +4,59 @@ import { getActivitiesPool, formatActivitySummary } from "./activities.js";
 import { getSleepDataTool } from "./sleep.js";
 import { getRecoveryStatus } from "./recovery.js";
 import { getStressLevels } from "./stress.js";
-import type { ToolTextResult } from "../garmin/types.js";
+import type { ToolResult } from "../garmin/types.js";
+import type { TrainingInsightsPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 
-export async function getTrainingInsights(input: { days?: number }): Promise<ToolTextResult> {
+/**
+ * The sub-tools' rendered text is passed in rather than re-derived here. This
+ * tool embeds their output verbatim, so calling three renderers from a fourth
+ * would duplicate the composition the handler already does -- and would make
+ * this function impure for no gain.
+ */
+export function renderTrainingInsightsText(
+  payload: TrainingInsightsPayload,
+  sleepText: string,
+  recoveryText: string,
+  stressText: string
+): string {
+  const activityLines =
+    payload.activities.length > 0
+      ? payload.activities.map((activity, index) => {
+          return `${index + 1}. ${activity.name} (${activity.type}) — ${activity.startTimeLocal}`;
+        })
+      : [`No activities found between ${payload.startDate} and ${payload.endDate}.`];
+
+  return [
+    "Training insights summary",
+    `Period: ${payload.startDate} to ${payload.endDate}`,
+    "",
+    "## Latest activity",
+    payload.latest ? formatActivitySummary(payload.latest) : "No activities found.",
+    "",
+    "## Activities in period",
+    ...activityLines,
+    "",
+    "## Sleep",
+    sleepText,
+    "",
+    "## Recovery",
+    recoveryText,
+    "",
+    "## Stress",
+    stressText,
+  ].join("\n");
+}
+
+export async function getTrainingInsights(
+  input: { days?: number }
+): Promise<ToolResult<TrainingInsightsPayload>> {
   const days = input.days ?? 7;
-  const endDate = DateTime.now().toISODate();
-  const startDate = DateTime.now().minus({ days }).toISODate();
+  const endDate = DateTime.now().toISODate() ?? "";
+  const startDate = DateTime.now().minus({ days }).toISODate() ?? "";
 
   const { activities: pool } = await getActivitiesPool();
-  const ranged = filterActivitiesByRange(pool, startDate ?? "", endDate ?? "");
-  const latest = pool[0] ?? null;
+  const ranged = filterActivitiesByRange(pool, startDate, endDate);
 
   const [sleep, recovery, stress] = await Promise.all([
     getSleepDataTool({ nights: days }),
@@ -22,36 +64,20 @@ export async function getTrainingInsights(input: { days?: number }): Promise<Too
     getStressLevels({ days }),
   ]);
 
-  const activityLines =
-    ranged.length > 0
-      ? ranged.map((activity, index) => {
-          return `${index + 1}. ${activity.name} (${activity.type}) — ${activity.startTimeLocal}`;
-        })
-      : [`No activities found between ${startDate} and ${endDate}.`];
-
-  const sections = [
-    "Training insights summary",
-    `Period: ${startDate} to ${endDate}`,
-    "",
-    "## Latest activity",
-    latest ? formatActivitySummary(latest) : "No activities found.",
-    "",
-    "## Activities in period",
-    ...activityLines,
-    "",
-    "## Sleep",
-    sleep.text,
-    "",
-    "## Recovery",
-    recovery.text,
-    "",
-    "## Stress",
-    stress.text,
-  ];
+  const payload: TrainingInsightsPayload = {
+    startDate,
+    endDate,
+    latest: pool[0] ?? null,
+    activities: ranged,
+    sleep: sleep.data ?? null,
+    recovery: recovery.data ?? null,
+    stress: stress.data ?? null,
+  };
 
   return {
     type: "text",
-    text: sections.join("\n"),
+    text: renderTrainingInsightsText(payload, sleep.text, recovery.text, stress.text),
+    data: payload,
   };
 }
 

@@ -10,6 +10,7 @@ import { buildHeartRatePayload, renderHeartRateText } from "../src/tools/heartRa
 import { buildStressPayload, renderStressText } from "../src/tools/stress.js";
 import { buildVo2MaxPayload, renderVo2MaxText } from "../src/tools/vo2Max.js";
 import { renderRecoveryText } from "../src/tools/recovery.js";
+import { renderTrainingInsightsText } from "../src/tools/trainingInsights.js";
 import {
   buildBodyCompositionPayload,
   renderBodyCompositionText,
@@ -287,5 +288,53 @@ describe("body composition payload", () => {
       renderBodyCompositionText(buildBodyCompositionPayload([], 30)),
       "No body composition data found for the last 30 days."
     );
+  });
+});
+
+describe("training insights payload", () => {
+  it("embeds each section under its own heading", () => {
+    const text = renderTrainingInsightsText(
+      {
+        startDate: "2026-08-12",
+        endDate: "2026-08-19",
+        latest: null,
+        activities: [],
+        sleep: null,
+        recovery: null,
+        stress: null,
+      },
+      "SLEEP-SECTION",
+      "RECOVERY-SECTION",
+      "STRESS-SECTION"
+    );
+
+    assert.match(text, /^Training insights summary$/m);
+    assert.match(text, /^Period: 2026-08-12 to 2026-08-19$/m);
+    assert.match(text, /^## Latest activity\nNo activities found\.$/m);
+    assert.match(text, /^No activities found between 2026-08-12 and 2026-08-19\.$/m);
+    assert.match(text, /^## Sleep\nSLEEP-SECTION$/m);
+    assert.match(text, /^## Recovery\nRECOVERY-SECTION$/m);
+    assert.match(text, /^## Stress\nSTRESS-SECTION$/m);
+  });
+
+  it("numbers the activities in the period", () => {
+    const text = renderTrainingInsightsText(
+      {
+        startDate: "2026-08-12",
+        endDate: "2026-08-19",
+        latest: activity(),
+        activities: [activity(), activity({ name: "Evening Ride", type: "cycling" })],
+        sleep: null,
+        recovery: null,
+        stress: null,
+      },
+      "",
+      "",
+      ""
+    );
+
+    assert.match(text, /^1\. Morning Run \(running\) — 2026-08-19 07:30:00$/m);
+    assert.match(text, /^2\. Evening Ride \(cycling\) — 2026-08-19 07:30:00$/m);
+    assert.match(text, /^## Latest activity\nActivity: Morning Run$/m);
   });
 });
