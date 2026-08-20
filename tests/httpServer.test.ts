@@ -256,9 +256,22 @@ describe("dashboard context routes", () => {
   };
 
   let server: import("../src/httpServer.js").HttpMcpServer;
+  let historyDir: string;
   const baseUrl = "http://127.0.0.1:3850";
 
   before(async () => {
+    // The server opens the history database at its default path, so without
+    // this the test writes goals and injuries into the developer's own store.
+    // Opening a temp one first wins, because the handle is a lazy singleton.
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { closeHistoryDb, openHistoryDb } = await import("../src/history/store.js");
+
+    historyDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-http-history-"));
+    closeHistoryDb();
+    openHistoryDb(path.join(historyDir, "history.db"));
+
     process.env.GARMIN_EMAIL = process.env.GARMIN_EMAIL ?? "test@example.com";
     process.env.GARMIN_PASSWORD = process.env.GARMIN_PASSWORD ?? "test-password";
     process.env.TRAINBUD_API_KEY = "test-api-key-123";
@@ -272,8 +285,11 @@ describe("dashboard context routes", () => {
 
   after(async () => {
     await server.close();
+
+    const fs = await import("node:fs");
     const { closeHistoryDb } = await import("../src/history/store.js");
     closeHistoryDb();
+    fs.rmSync(historyDir, { recursive: true, force: true });
 
     process.env.GARMIN_EMAIL = originalEnv.email;
     process.env.GARMIN_PASSWORD = originalEnv.password;
