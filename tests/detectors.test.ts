@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DateTime } from "luxon";
 import {
   detectHrvTrendBreak,
+  detectLoadRatio,
   detectRestingHrElevation,
   detectSleepDebt,
 } from "../src/detect/detectors.js";
@@ -154,5 +155,106 @@ describe("HRV trend break", () => {
     // No hrv_overnight in the store means no finding, even though the recovery
     // score would happily have produced one.
     assert.equal(detectHrvTrendBreak(input({ resting_hr: steadyResting(35) })), null);
+  });
+});
+
+/** One session per day, `avgHr` deciding how hard it was. */
+function sessions(dailyHr: Array<number | null>, minutes = 45): StoredActivity[] {
+  const start = NOW.startOf("day").minus({ days: dailyHr.length });
+
+  return dailyHr.flatMap((avgHr, index) => {
+    if (avgHr === null) {
+      return [];
+    }
+
+    const day = start.plus({ days: index + 1 });
+
+    return [
+      {
+        activityId: index + 1,
+        date: day.toISODate() ?? "",
+        startTimeLocal: `${day.toISODate()} 07:30:00`,
+        name: "Run",
+        type: "running",
+        distanceMeters: 8000,
+        durationSeconds: minutes * 60,
+        avgHr,
+        maxHr: avgHr + 15,
+        elevationGainMeters: 20,
+        calories: 400,
+        averageSpeedMps: 3,
+      },
+    ];
+  });
+}
+
+/** Resting and max series long enough for estimateHrProfile to work. */
+const HR_PROFILE_DATA = {
+  resting_hr: repeat(50, 35),
+  max_hr: repeat(190, 35),
+};
+
+describe("acute:chronic load ratio", () => {
+  // Four steady weeks: acute and chronic agree, so there is nothing to say.
+  it("stays silent on a steady block", () => {
+    const finding = detectLoadRatio(
+      input(HR_PROFILE_DATA, sessions(repeat(145, 28).map((v) => v)))
+    );
+
+    assert.equal(finding, null);
+  });
+
+  it("fires high when the last week spikes above the four-week average", () => {
+    const easy = repeat(130, 21);
+    const spike = repeat(175, 7);
+    const finding = detectLoadRatio(input(HR_PROFILE_DATA, sessions([...easy, ...spike], 90)));
+
+    assert.equal(finding?.kind, "load_ratio_high");
+    assert.ok((finding?.values.ratio ?? 0) > 1.5);
+    // The number is ours, not Garmin's, and the detail has to say so.
+    assert.match(finding?.detail ?? "", /TRIMP|our own|Connect/i);
+  });
+
+  it("fires low when training all but stops after a full block", () => {
+    const block = repeat(150, 21);
+    const nothing: Array<number | null> = repeat(0, 7).map(() => null);
+    const finding = detectLoadRatio(input(HR_PROFILE_DATA, sessions([...block, ...nothing])));
+
+    assert.equal(finding?.kind, "load_ratio_low");
+    assert.ok((finding?.values.ratio ?? 1) < 0.8);
+  });
+
+  // A chronic average taken over a hole makes every ratio look alarming.
+  it("returns null when the store does not cover the chronic window", () => {
+    const finding = detectLoadRatio(
+      input(
+        { resting_hr: repeat(50, 10), max_hr: repeat(190, 10) },
+        sessions(repeat(150, 10))
+      )
+    );
+
+    assert.equal(finding, null);
+  });
+
+  it("returns null when there is no heart rate profile to score against", () => {
+    assert.equal(detectLoadRatio(input({}, sessions(repeat(150, 28)))), null);
+  });
+
+  // A strength session with no HR must not read as a rest day.
+  it("ignores activities that cannot be scored rather than counting them as zero", () => {
+    const withHr = detectLoadRatio(
+      input(HR_PROFILE_DATA, sessions([...repeat(130, 21), ...repeat(175, 7)], 90))
+    );
+    const plusUnscorable = detectLoadRatio(
+      input(
+        HR_PROFILE_DATA,
+        [
+          ...sessions([...repeat(130, 21), ...repeat(175, 7)], 90),
+          ...sessions(repeat(null, 28)),
+        ]
+      )
+    );
+
+    assert.equal(withHr?.values.ratio, plusUnscorable?.values.ratio);
   });
 });

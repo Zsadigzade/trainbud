@@ -1,6 +1,7 @@
 import { buildBaseline, meanOf, median, robustZ, type Baseline } from "./baseline.js";
 import type { DetectorInput, Finding } from "./findings.js";
 import type { MetricPoint } from "../history/store.js";
+import { dailyTrimp, estimateHrProfile } from "./trimp.js";
 
 // SECTION: Detectors
 //
@@ -194,6 +195,91 @@ function buildHrvFinding(
       recentMedian: round(recentMedian),
       baseline: round(baseline.median),
       dropPercent,
+    },
+  };
+}
+
+// SECTION: Training load
+//
+// Acute (7-day TRIMP) against chronic (28-day TRIMP, expressed weekly). The
+// classic injury-risk flag, and the one signal here that actually joins
+// training to recovery rather than reading a wellness metric on its own.
+
+const ACUTE_DAYS = 7;
+const CHRONIC_DAYS = 28;
+const RATIO_HIGH = 1.5;
+const RATIO_LOW = 0.8;
+
+/**
+ * A chronic average taken over a hole in the store makes every ratio look
+ * alarming, so most of the window has to actually be covered before a number is
+ * worth reporting.
+ */
+const MIN_CHRONIC_COVERAGE_DAYS = 21;
+
+export function detectLoadRatio(input: DetectorInput): Finding | null {
+  const profile = estimateHrProfile(
+    input.series("resting_hr", CHRONIC_DAYS),
+    input.series("max_hr", CHRONIC_DAYS)
+  );
+
+  if (!profile) {
+    return null;
+  }
+
+  const coverage = input.series("resting_hr", CHRONIC_DAYS).length;
+  if (coverage < MIN_CHRONIC_COVERAGE_DAYS) {
+    return null;
+  }
+
+  const byDay = dailyTrimp(input.activities(CHRONIC_DAYS), profile);
+  const today = input.now.startOf("day");
+
+  const sumOverDays = (days: number): number => {
+    let total = 0;
+
+    for (let offset = 0; offset < days; offset += 1) {
+      const date = today.minus({ days: offset }).toISODate();
+      if (date) {
+        total += byDay.get(date) ?? 0;
+      }
+    }
+
+    return total;
+  };
+
+  const acute = sumOverDays(ACUTE_DAYS);
+  const chronicWeekly = sumOverDays(CHRONIC_DAYS) / (CHRONIC_DAYS / ACUTE_DAYS);
+
+  // Nothing to compare against: a first week of training is not a spike.
+  if (chronicWeekly <= 0) {
+    return null;
+  }
+
+  const ratio = round(acute / chronicWeekly, 2);
+
+  if (ratio <= RATIO_HIGH && ratio >= RATIO_LOW) {
+    return null;
+  }
+
+  const isHigh = ratio > RATIO_HIGH;
+  const provenance =
+    "This load is TRIMP, computed here from duration and heart rate, so it will not match the training load Connect shows.";
+
+  return {
+    kind: isHigh ? "load_ratio_high" : "load_ratio_low",
+    severity: isHigh && ratio >= 2 ? "warn" : "notice",
+    date: today.toISODate() ?? "",
+    headline: isHigh
+      ? `This week's training load is ${ratio}x your four-week average`
+      : `This week's training load is down to ${ratio}x your four-week average`,
+    detail: isHigh
+      ? `Jumps this size are where injuries tend to come from. Holding the next week nearer the average is the low-risk call. ${provenance}`
+      : `A drop this size for more than a week or two starts costing fitness rather than building it. ${provenance}`,
+    values: {
+      ratio,
+      acuteLoad: round(acute),
+      chronicWeeklyLoad: round(chronicWeekly),
     },
   };
 }
