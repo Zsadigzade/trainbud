@@ -105,6 +105,35 @@ describe("rawApi mappers", () => {
     assert.equal(mapped?.vo2MaxCycling, 44);
   });
 
+  // maxmet/latest/<date> ignores the date it is given and answers with the
+  // current reading. Captured from a real response on 2026-08-20: the request
+  // was for 2026-04-05, months before the watch existed, and it came back with
+  // a measurement calendar-dated 2026-08-12. Stamping that with the requested
+  // date wrote one real reading across 150 days as if measured on each.
+  it("dates a VO2 max reading by when it was measured, not when it was asked for", () => {
+    const mapped = mapMaxMetrics(new Date("2026-04-05T00:00:00.000Z"), {
+      generic: {
+        calendarDate: "2026-08-12",
+        vo2MaxPreciseValue: 45.9,
+        vo2MaxValue: 46,
+        fitnessAge: null,
+        maxMetCategory: 0,
+      },
+      cycling: null,
+    });
+
+    assert.equal(mapped?.date, "2026-08-12");
+    assert.equal(mapped?.vo2Max, 46);
+  });
+
+  it("falls back to the requested date when Connect omits its own", () => {
+    const mapped = mapMaxMetrics(new Date("2026-06-25T00:00:00.000Z"), {
+      generic: { vo2MaxValue: 46 },
+    });
+
+    assert.equal(mapped?.date, "2026-06-25");
+  });
+
   it("returns null for empty stress payloads", () => {
     const mapped = mapDailyStress(new Date("2026-06-25T00:00:00.000Z"), null);
     assert.equal(mapped, null);

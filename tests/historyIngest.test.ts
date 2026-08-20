@@ -460,3 +460,57 @@ describe("activity ingest", () => {
     assert.equal(result.fetched, 1);
   });
 });
+
+// The VO2 max endpoint ignores the date it is asked about and answers with the
+// current reading. Recording that under the requested date wrote one real
+// measurement across every day in the range as invented history.
+describe("VO2 max lands on the day it was measured", () => {
+  beforeEach(() => {
+    freshDb();
+  });
+
+  after(() => {
+    closeHistoryDb();
+  });
+
+  function latestOnlyClient(): GarminConnectInstance {
+    return {
+      get: async (url: string) => {
+        if (url.includes("maxmet")) {
+          return { generic: { calendarDate: "2026-08-12", vo2MaxValue: 46 } };
+        }
+        return {};
+      },
+    } as unknown as GarminConnectInstance;
+  }
+
+  it("writes one row on the measured date, not one per day asked about", async () => {
+    await runIngest(latestOnlyClient(), {
+      days: 30,
+      delayMs: 0,
+      sources: ["vo2max"],
+      now: NOW,
+      stopAfterEmptyDays: 0,
+    });
+
+    const rows = getMetricSeries("vo2max", "2026-01-01", "2026-12-31");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.date, "2026-08-12");
+    assert.equal(rows[0]?.value, 46);
+  });
+
+  // Otherwise every pre-purchase day answers "data" forever and the empty-run
+  // stop can never trip on this source.
+  it("marks a day whose reading belongs elsewhere as empty", async () => {
+    await runIngest(latestOnlyClient(), {
+      days: 5,
+      delayMs: 0,
+      sources: ["vo2max"],
+      now: NOW,
+      stopAfterEmptyDays: 0,
+    });
+
+    assert.equal(getIngestCheckpoint("2026-08-19", "vo2max")?.outcome, "empty");
+    assert.equal(getIngestCheckpoint("2026-08-17", "vo2max")?.outcome, "empty");
+  });
+});

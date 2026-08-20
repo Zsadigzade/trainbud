@@ -21,7 +21,19 @@ async function fetchVo2MaxDays(days: number): Promise<Vo2MaxEntry[]> {
       }
     });
 
-    return entries.filter((entry): entry is Vo2MaxEntry => entry !== null);
+    // Every requested date comes back with whatever the latest reading is, so
+    // the same measurement arrives once per day asked about. Keyed on the date
+    // it was actually taken, the duplicates collapse into the real series.
+    const byMeasuredDate = new Map<string, Vo2MaxEntry>();
+    for (const entry of entries) {
+      if (entry !== null) {
+        byMeasuredDate.set(entry.date, entry);
+      }
+    }
+
+    return Array.from(byMeasuredDate.values()).sort((left, right) =>
+      right.date.localeCompare(left.date)
+    );
   });
 }
 

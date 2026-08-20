@@ -19,11 +19,16 @@ export async function fetchDailyStress(client: GarminConnectInstance, date: Date
 }
 
 /**
- * `maxmet/daily/<date>` answers 404 -- it is `latest/<date>`, which returns the
- * most recent measurement on or before that date. VO2 max is only recomputed
- * after a qualifying activity, so "latest" is the right question anyway: asking
- * for one specific day would come back empty on most days even if the daily
- * route existed. Every VO2 max reading was missing because of this.
+ * `maxmet/daily/<date>` answers 404 -- it is `latest/<date>`. VO2 max is only
+ * recomputed after a qualifying activity, so "latest" is the right question
+ * anyway: a daily route would come back empty on most days even if it existed.
+ *
+ * The catch is that this endpoint **ignores the date it is given**. Asked about
+ * 2026-04-05 it returns the current measurement with its own
+ * `generic.calendarDate` of 2026-08-12. Stamping the response with the
+ * requested date -- which is what this did -- writes one real reading across
+ * every day in the range as if it had been measured on each of them, which is
+ * invented history, and a trend over it is flat by construction.
  */
 export async function fetchMaxMetrics(client: GarminConnectInstance, date: Date): Promise<unknown> {
   return client.get(`${GC_API}/metrics-service/metrics/maxmet/latest/${toGarminDate(date)}`);
@@ -108,8 +113,15 @@ export function mapMaxMetrics(date: Date, payload: unknown): Vo2MaxEntry | null 
     return null;
   }
 
+  // The day the measurement was actually taken, which is rarely the day asked
+  // about. Falling back to the requested date only when Connect omits its own.
+  const measuredOn =
+    typeof generic?.calendarDate === "string" && generic.calendarDate.length > 0
+      ? generic.calendarDate
+      : toGarminDate(date);
+
   return {
-    date: toGarminDate(date),
+    date: measuredOn,
     vo2Max,
     vo2MaxCycling,
   };

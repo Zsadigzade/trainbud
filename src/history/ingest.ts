@@ -195,6 +195,13 @@ export function pendingWork(options: IngestOptions = {}): IngestUnit[] {
 interface SourceResult {
   raw: unknown;
   metrics: Array<{ kind: MetricKind; value: number }>;
+  /**
+   * The day the measurement belongs to, when that is not the day asked about.
+   * VO2 max is the case: its endpoint ignores the requested date and returns
+   * the current reading, so the row has to land on the date the reading was
+   * actually taken rather than being copied across the whole range.
+   */
+  measuredOn?: string;
 }
 
 function measured(value: number | null | undefined): number | null {
@@ -262,6 +269,7 @@ async function fetchSource(
           ["vo2max", mapped?.vo2Max],
           ["vo2max_cycling", mapped?.vo2MaxCycling],
         ]),
+        measuredOn: mapped?.date,
       };
     }
     case "body_composition": {
@@ -395,16 +403,24 @@ export async function runIngest(
         continue;
       }
 
-      const { raw, metrics } = await fetchSource(unit.source, client, new Date(unit.date));
+      const { raw, metrics, measuredOn } = await fetchSource(
+        unit.source,
+        client,
+        new Date(unit.date)
+      );
 
       appendRawPayload(unit.date, unit.source, raw, stampedAt);
-      putMetrics(unit.date, metrics, stampedAt);
+      putMetrics(measuredOn ?? unit.date, metrics, stampedAt);
 
       if (options.captureDir) {
         writeFixture(options.captureDir, unit.source, unit.date, raw);
       }
 
-      outcome = metrics.length > 0 ? "data" : "empty";
+      // A reading that belongs to another day is not a measurement for this
+      // one. Recording it as `data` would also defeat the empty-run stop, since
+      // every pre-purchase day would answer with today's reading forever.
+      const measuredHere = (measuredOn ?? unit.date) === unit.date;
+      outcome = metrics.length > 0 && measuredHere ? "data" : "empty";
       result.fetched += 1;
     } catch (error) {
       // One bad day must not end a year-long run.
