@@ -1,5 +1,6 @@
 import type {
   HeartRateData,
+  IActivity,
   SleepData,
   WeightDataResponse,
 } from "./garminApiTypes.js";
@@ -13,6 +14,7 @@ import {
   type Vo2MaxEntry,
 } from "./rawApi.js";
 import type {
+  ActivitySummary,
   BodyCompositionEntry,
   HeartRateDaySummary,
   SleepNightSummary,
@@ -86,6 +88,28 @@ export function mapHeartRateData(
     maxHeartRate: heartRate.maxHeartRate ?? null,
     minHeartRate: heartRate.minHeartRate ?? null,
     averageHeartRate,
+  };
+}
+
+/**
+ * Connect omits these for activities they do not apply to -- strength training
+ * reports no distance or pace, an indoor ride no elevation. They were once
+ * typed as plain numbers, which type-checked while crashing on
+ * `undefined.toFixed`.
+ */
+export function mapActivity(activity: IActivity): ActivitySummary {
+  return {
+    activityId: activity.activityId,
+    name: activity.activityName,
+    type: activity.activityType.typeKey,
+    startTimeLocal: activity.startTimeLocal,
+    distanceMeters: activity.distance ?? null,
+    durationSeconds: activity.duration ?? null,
+    averageHeartRate: activity.averageHR ?? null,
+    maxHeartRate: activity.maxHR ?? null,
+    elevationGainMeters: activity.elevationGain ?? null,
+    calories: activity.calories ?? null,
+    averageSpeedMps: activity.averageSpeed ?? null,
   };
 }
 

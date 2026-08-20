@@ -7,12 +7,16 @@ import {
   fetchVo2MaxDay,
 } from "../garmin/daily.js";
 import type { GarminConnectInstance } from "../garmin/garminConnect.js";
+import { mapActivity } from "../garmin/daily.js";
+import { parseActivityLocalDateTime } from "../utils/helpers.js";
+import type { ActivitySummary } from "../garmin/types.js";
 import { logger } from "../utils/logger.js";
 import { writeFixture } from "./capture.js";
 import {
   appendRawPayload,
   listIngestedDates,
   markIngested,
+  putActivities,
   putMetrics,
 } from "./store.js";
 import type { IngestOutcome, IngestSource, MetricKind } from "./schema.js";
@@ -51,7 +55,14 @@ const DEFAULT_SOURCES: IngestSource[] = [
   "stress",
   "vo2max",
   "body_composition",
+  "activities",
 ];
+
+/** Connect's page size for the activity list. */
+const ACTIVITY_PAGE_SIZE = 100;
+
+/** Backstop against paging forever if the window start is never reached. */
+const MAX_ACTIVITY_PAGES = 20;
 
 export interface IngestOptions {
   days?: number;
@@ -85,6 +96,13 @@ export interface IngestResult {
 export interface IngestUnit {
   date: string;
   source: IngestSource;
+}
+
+function activityStartDate(activity: ActivitySummary): string {
+  return (
+    parseActivityLocalDateTime(activity.startTimeLocal).toISODate() ??
+    activity.startTimeLocal.slice(0, 10)
+  );
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -143,6 +161,16 @@ export function pendingWork(options: IngestOptions = {}): IngestUnit[] {
   const work: IngestUnit[] = [];
 
   for (const source of sources) {
+    // Activities are paged, not addressed by date, so the whole window is one
+    // unit of work rather than one per day.
+    if (source === "activities") {
+      const date = today.toISODate();
+      if (date && shouldFetch(date, listIngestedDates(source).get(date), today, nowSeconds)) {
+        work.push({ date, source });
+      }
+      continue;
+    }
+
     const checkpoints = listIngestedDates(source);
 
     // Newest first: an interrupted backfill should leave the most recent
@@ -250,9 +278,52 @@ async function fetchSource(
       };
     }
     case "activities":
-      // Activities are paged, not per-date, and are ingested separately.
+      // Handled by ingestActivities, which pages rather than addressing a date.
       return { raw: null, metrics: [] };
   }
+}
+
+/**
+ * The activity list is paged newest-first, so the first activity older than the
+ * window means every remaining page is older still and there is nothing left to
+ * ask for.
+ */
+async function ingestActivities(
+  client: GarminConnectInstance,
+  windowStart: string,
+  stampedAt: number,
+  captureDir?: string
+): Promise<number> {
+  let start = 0;
+  let stored = 0;
+
+  for (let page = 0; page < MAX_ACTIVITY_PAGES; page += 1) {
+    const activities = await client.getActivities(start, ACTIVITY_PAGE_SIZE);
+
+    if (activities.length === 0) {
+      break;
+    }
+
+    const mapped = activities.map(mapActivity);
+    putActivities(mapped, stampedAt);
+    stored += mapped.length;
+
+    if (captureDir) {
+      writeFixture(captureDir, "activities", `page-${page}`, activities);
+    }
+
+    const reachedWindowStart = mapped.some(
+      (activity) => activityStartDate(activity) < windowStart
+    );
+
+    if (reachedWindowStart || activities.length < ACTIVITY_PAGE_SIZE) {
+      break;
+    }
+
+    start += ACTIVITY_PAGE_SIZE;
+  }
+
+  return stored;
 }
 
 export async function runIngest(
@@ -299,6 +370,31 @@ export async function runIngest(
     let outcome: IngestOutcome;
 
     try {
+      if (unit.source === "activities") {
+        const windowStart =
+          (options.now ?? DateTime.local())
+            .startOf("day")
+            .minus({ days: options.days ?? DEFAULT_DAYS })
+            .toISODate() ?? "";
+
+        const stored = await ingestActivities(client, windowStart, stampedAt, options.captureDir);
+
+        markIngested(unit.date, unit.source, stored > 0 ? "data" : "empty", stampedAt);
+        result.fetched += 1;
+        done += 1;
+        options.onProgress?.({
+          ...unit,
+          outcome: stored > 0 ? "data" : "empty",
+          done,
+          total: work.length,
+        });
+
+        if (done < work.length) {
+          await delay(delayMs, options.signal);
+        }
+        continue;
+      }
+
       const { raw, metrics } = await fetchSource(unit.source, client, new Date(unit.date));
 
       appendRawPayload(unit.date, unit.source, raw, stampedAt);

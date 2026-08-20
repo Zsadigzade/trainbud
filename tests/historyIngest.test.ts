@@ -7,6 +7,7 @@ import { DateTime } from "luxon";
 import { pendingWork, runIngest } from "../src/history/ingest.js";
 import {
   closeHistoryDb,
+  getActivitiesBetween,
   getIngestCheckpoint,
   getMetricSeries,
   markIngested,
@@ -351,5 +352,111 @@ describe("early stop past the start of the record", () => {
     });
 
     assert.equal(counts.sleep, 40);
+  });
+});
+
+// Activities are paged, not fetched per date, so they need their own path.
+// Without it getActivitiesBetween is always empty and the load-ratio detector
+// can never fire, which is how this shipped unnoticed the first time.
+describe("activity ingest", () => {
+  beforeEach(() => {
+    freshDb();
+  });
+
+  after(() => {
+    closeHistoryDb();
+  });
+
+  function pagingClient(pages: number[][], calls: Array<[number, number]>): GarminConnectInstance {
+    return {
+      getActivities: async (start = 0, limit = 100) => {
+        calls.push([start, limit]);
+        const page = pages[Math.floor(start / limit)] ?? [];
+        return page.map((offset, index) => ({
+          activityId: start + index + 1,
+          activityName: "Run",
+          startTimeLocal:
+            (NOW.startOf("day").minus({ days: offset }).toISODate() ?? "") + " 07:30:00",
+          distance: 8000,
+          duration: 2700,
+          averageHR: 145,
+          maxHR: 165,
+          elevationGain: 20,
+          calories: 400,
+          averageSpeed: 3,
+          activityType: { typeKey: "running" },
+        }));
+      },
+    } as unknown as GarminConnectInstance;
+  }
+
+  it("stores the activities it pages through", async () => {
+    const calls: Array<[number, number]> = [];
+    await runIngest(pagingClient([[0, 1, 2]], calls), {
+      days: 30,
+      delayMs: 0,
+      sources: ["activities"],
+      now: NOW,
+    });
+
+    const stored = getActivitiesBetween(
+      NOW.startOf("day").minus({ days: 30 }).toISODate() ?? "",
+      NOW.startOf("day").toISODate() ?? ""
+    );
+    assert.equal(stored.length, 3);
+    assert.equal(stored[0]?.avgHr, 145);
+  });
+
+  // The pool is ordered newest first, so the first activity older than the
+  // window means every remaining page is older still.
+  it("stops paging once it passes the start of the window", async () => {
+    const calls: Array<[number, number]> = [];
+    await runIngest(pagingClient([[1, 2, 200], [400, 500]], calls), {
+      days: 30,
+      delayMs: 0,
+      sources: ["activities"],
+      now: NOW,
+    });
+
+    assert.equal(calls.length, 1, "should not have asked for a second page");
+  });
+
+  // A page shorter than the page size is already the end of the list.
+  it("does not ask for another page after a short one", async () => {
+    const calls: Array<[number, number]> = [];
+    await runIngest(pagingClient([[1, 2], [3]], calls), {
+      days: 30,
+      delayMs: 0,
+      sources: ["activities"],
+      now: NOW,
+    });
+
+    assert.equal(calls.length, 1);
+  });
+
+  it("stops on an empty page after a full one", async () => {
+    const calls: Array<[number, number]> = [];
+    const fullPage = Array.from({ length: 100 }, () => 1);
+
+    await runIngest(pagingClient([fullPage, []], calls), {
+      days: 30,
+      delayMs: 0,
+      sources: ["activities"],
+      now: NOW,
+    });
+
+    assert.equal(calls.length, 2);
+  });
+
+  it("counts as one unit of work rather than one per day", async () => {
+    const calls: Array<[number, number]> = [];
+    const result = await runIngest(pagingClient([[1, 2]], calls), {
+      days: 365,
+      delayMs: 0,
+      sources: ["activities"],
+      now: NOW,
+    });
+
+    assert.equal(result.fetched, 1);
   });
 });

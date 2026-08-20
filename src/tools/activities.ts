@@ -1,7 +1,7 @@
-import type { IActivity } from "../garmin/garminApiTypes.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
+import { mapActivity } from "../garmin/daily.js";
 import type { ActivitySummary, ToolResult } from "../garmin/types.js";
 import type { ActivitiesRangePayload, LatestActivityPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
@@ -18,22 +18,6 @@ const ACTIVITIES_PAGE_SIZE = 100;
 const MAX_ACTIVITIES_FETCH = 500;
 
 // SECTION: Activity Mapping
-
-function mapActivity(activity: IActivity): ActivitySummary {
-  return {
-    activityId: activity.activityId,
-    name: activity.activityName,
-    type: activity.activityType.typeKey,
-    startTimeLocal: activity.startTimeLocal,
-    distanceMeters: activity.distance ?? null,
-    durationSeconds: activity.duration ?? null,
-    averageHeartRate: activity.averageHR ?? null,
-    maxHeartRate: activity.maxHR ?? null,
-    elevationGainMeters: activity.elevationGain ?? null,
-    calories: activity.calories ?? null,
-    averageSpeedMps: activity.averageSpeed ?? null,
-  };
-}
 
 export function formatActivitySummary(activity: ActivitySummary): string {
   return [
