@@ -73,6 +73,21 @@ export interface ToolTextResult {
   text: string;
 }
 
+/**
+ * Tools return rendered text for MCP clients and the same information as typed
+ * data for everything else -- the history store, the detectors and the watch.
+ * Before this existed, watchApi.ts recovered numbers by matching regexes
+ * against the formatted prose, so a wording change in a renderer silently broke
+ * the watch.
+ *
+ * `data` is optional only while the nine tools are converted one at a time. It
+ * becomes required once the last one lands, so the compiler proves none was
+ * missed rather than a tool quietly returning text alone.
+ */
+export interface ToolResult<T> extends ToolTextResult {
+  data?: T;
+}
+
 export class GarminApiError extends Error {
   readonly statusCode?: number;
   readonly retryAfterSeconds?: number;

@@ -2,7 +2,8 @@ import type { SleepData } from "../garmin/garminApiTypes.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import type { SleepNightSummary, ToolTextResult } from "../garmin/types.js";
+import type { SleepNightSummary, ToolResult } from "../garmin/types.js";
+import type { SleepPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
 import {
@@ -63,7 +64,45 @@ function formatSleepNight(night: SleepNightSummary): string {
 
 // SECTION: Tool Handler
 
-export async function getSleepDataTool(input: { nights?: number }): Promise<ToolTextResult> {
+export function buildSleepPayload(
+  nights: SleepNightSummary[],
+  requestedNights: number
+): SleepPayload {
+  const scored = nights
+    .map((night) => night.sleepScore)
+    .filter((score): score is number => score !== null);
+
+  const averageScore =
+    scored.length > 0
+      ? Math.round(scored.reduce((sum, score) => sum + score, 0) / scored.length)
+      : null;
+
+  return {
+    requestedNights,
+    recordedNights: nights.length,
+    averageScore,
+    nights,
+  };
+}
+
+export function renderSleepText(payload: SleepPayload): string {
+  if (payload.recordedNights === 0) {
+    return `No sleep data found for the last ${payload.requestedNights} nights.`;
+  }
+
+  return [
+    `Sleep summary for last ${payload.recordedNights} recorded nights:`,
+    payload.averageScore !== null ? `Average sleep score: ${payload.averageScore}` : "",
+    "",
+    ...payload.nights.map(formatSleepNight),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function getSleepDataTool(
+  input: { nights?: number }
+): Promise<ToolResult<SleepPayload>> {
   const nights = input.nights ?? 7;
   const cacheKey = buildToolCacheKey("get_sleep_data", { nights });
 
@@ -71,35 +110,12 @@ export async function getSleepDataTool(input: { nights?: number }): Promise<Tool
     return fetchSleepNights(nights);
   });
 
-  if (sleepNights.length === 0) {
-    return {
-      type: "text",
-      text: `No sleep data found for the last ${nights} nights.`,
-    };
-  }
-
-  const averageScoreValues = sleepNights
-    .map((night) => night.sleepScore)
-    .filter((score): score is number => score !== null);
-
-  const averageScore =
-    averageScoreValues.length > 0
-      ? Math.round(
-          averageScoreValues.reduce((sum, score) => sum + score, 0) /
-            averageScoreValues.length
-        )
-      : null;
-
-  const lines = [
-    `Sleep summary for last ${sleepNights.length} recorded nights:`,
-    averageScore !== null ? `Average sleep score: ${averageScore}` : "",
-    "",
-    ...sleepNights.map(formatSleepNight),
-  ].filter(Boolean);
+  const payload = buildSleepPayload(sleepNights, nights);
 
   return {
     type: "text",
-    text: lines.join("\n"),
+    text: renderSleepText(payload),
+    data: payload,
   };
 }
 
