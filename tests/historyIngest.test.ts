@@ -260,3 +260,96 @@ describe("ingest execution", () => {
     closeHistoryDb();
   });
 });
+
+// The watch has a purchase date. Walking newest-first, a long unbroken run of
+// empty days means the device did not exist yet, and every older request is
+// spent against an account for nothing.
+describe("early stop past the start of the record", () => {
+  beforeEach(() => {
+    freshDb();
+  });
+
+  after(() => {
+    closeHistoryDb();
+  });
+
+  function emptyClient(counts: FakeCounts, dataUntilOffset: number): GarminConnectInstance {
+    return {
+      getSleepData: async (date?: Date) => {
+        counts.sleep += 1;
+        const offset = Math.round(
+          (NOW.startOf("day").toMillis() - (date?.getTime() ?? 0)) / 86_400_000
+        );
+        if (offset > dataUntilOffset) {
+          return { avgOvernightHrv: null };
+        }
+        return {
+          avgOvernightHrv: 44,
+          dailySleepDTO: {
+            sleepTimeSeconds: 22680,
+            deepSleepSeconds: 4800,
+            lightSleepSeconds: 13080,
+            remSleepSeconds: 4800,
+            awakeCount: 2,
+          },
+        };
+      },
+    } as unknown as GarminConnectInstance;
+  }
+
+  it("stops a source after a long unbroken run of empty days", async () => {
+    const counts = newCounts();
+    const result = await runIngest(emptyClient(counts, 4), {
+      days: 200,
+      delayMs: 0,
+      sources: ["sleep"],
+      now: NOW,
+      stopAfterEmptyDays: 10,
+    });
+
+    // 5 days of data, then 10 empties, then it gives up.
+    assert.equal(counts.sleep, 15);
+    assert.ok(result.skipped > 0);
+  });
+
+  // Skipping is not the same claim as "we asked and there was nothing", so the
+  // abandoned days keep no checkpoint and a later run can still reach them.
+  it("leaves the abandoned days uncheckpointed", async () => {
+    await runIngest(emptyClient(newCounts(), 4), {
+      days: 200,
+      delayMs: 0,
+      sources: ["sleep"],
+      now: NOW,
+      stopAfterEmptyDays: 10,
+    });
+
+    const oldDate = NOW.startOf("day").minus({ days: 150 }).toISODate() ?? "";
+    assert.equal(getIngestCheckpoint(oldDate, "sleep"), null);
+  });
+
+  it("keeps going when the empty run is broken by real data", async () => {
+    const counts = newCounts();
+    await runIngest(emptyClient(counts, 400), {
+      days: 30,
+      delayMs: 0,
+      sources: ["sleep"],
+      now: NOW,
+      stopAfterEmptyDays: 10,
+    });
+
+    assert.equal(counts.sleep, 30);
+  });
+
+  it("does not stop at all when the limit is zero", async () => {
+    const counts = newCounts();
+    await runIngest(emptyClient(counts, 2), {
+      days: 40,
+      delayMs: 0,
+      sources: ["sleep"],
+      now: NOW,
+      stopAfterEmptyDays: 0,
+    });
+
+    assert.equal(counts.sleep, 40);
+  });
+});

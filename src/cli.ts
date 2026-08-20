@@ -13,6 +13,7 @@ import { withGarminClient } from "./garmin/client.js";
 import { runIngest } from "./history/ingest.js";
 import { startHistoryScheduler } from "./history/scheduler.js";
 import { closeHistoryDb, historyStats } from "./history/store.js";
+import { runDetectors } from "./detect/index.js";
 import type { IngestSource } from "./history/schema.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
 
@@ -114,6 +115,42 @@ async function runStatus(): Promise<void> {
   console.log(`History measurements: ${history.metricRows}`);
   console.log(`History raw payloads: ${history.rawRows}`);
   console.log(`History activities: ${history.activityRows}`);
+  if (history.emptyDays > 0) {
+    // Almost always days before the watch was bought. Reported so a small span
+    // reads as "that is all Garmin has" rather than as a broken backfill.
+    console.log(`Days Garmin had no data for: ${history.emptyDays}`);
+  }
+  closeHistoryDb();
+}
+
+async function runFindings(): Promise<void> {
+  const result = runDetectors();
+
+  if (!result.coverage.ready) {
+    console.log(
+      `Still gathering data — ${result.coverage.days} of the 14 days needed before anything can be compared to a baseline.`
+    );
+    console.log("Run `trainbud backfill` to pull what Garmin already holds.");
+    closeHistoryDb();
+    return;
+  }
+
+  console.log(`TrainBud findings — ${result.coverage.days} days of history`);
+  console.log("");
+
+  if (result.findings.length === 0) {
+    console.log("Nothing stands out against your own baselines.");
+    closeHistoryDb();
+    return;
+  }
+
+  for (const finding of result.findings) {
+    console.log(`[${finding.severity}] ${finding.headline}`);
+    console.log(`  ${finding.detail}`);
+    console.log("");
+  }
+
+  console.log("General training guidance only. Not medical advice.");
   closeHistoryDb();
 }
 
@@ -130,6 +167,7 @@ async function runBackfill(options: {
   delayMs?: number;
   source?: string[];
   capture?: string;
+  earlyStop?: boolean;
 }): Promise<void> {
   assertGarminCredentials();
 
@@ -162,6 +200,7 @@ async function runBackfill(options: {
       delayMs,
       sources,
       captureDir: options.capture,
+      stopAfterEmptyDays: options.earlyStop === false ? 0 : undefined,
       onProgress: (progress) => {
         // One line per day so an hour-long run is legible and a stall is
         // obvious. This is the only feedback the user gets while it walks a
@@ -310,12 +349,35 @@ export function createCliProgram(): Command {
       (value: string, previous: string[] = []) => [...previous, value]
     )
     .option("--capture <dir>", "Also write each redacted response there, as a test fixture")
-    .action(async (options: { days?: number; delayMs?: number; source?: string[]; capture?: string }) => {
+    .option(
+      "--no-early-stop",
+      "Keep asking past a long run of empty days instead of assuming the record has run out"
+    )
+    .action(async (options: {
+      days?: number;
+      delayMs?: number;
+      source?: string[];
+      capture?: string;
+      earlyStop?: boolean;
+    }) => {
       try {
         await runBackfill(options);
       } catch (error) {
         logger.error({ error }, "Backfill failed");
         console.error(error instanceof Error ? error.message : "Backfill failed");
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("findings")
+    .description("Show what stands out in your history, against your own baselines")
+    .action(async () => {
+      try {
+        await runFindings();
+      } catch (error) {
+        logger.error({ error }, "Failed to compute findings");
+        console.error(error instanceof Error ? error.message : "Failed to compute findings");
         process.exitCode = 1;
       }
     });

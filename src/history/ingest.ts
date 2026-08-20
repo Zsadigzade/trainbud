@@ -33,6 +33,18 @@ const STALE_RECHECK_SECONDS = 60 * 60;
 const DEFAULT_DAYS = 365;
 const DEFAULT_DELAY_MS = 1000;
 
+/**
+ * A watch has a purchase date, and asking Garmin about the months before it is
+ * spending requests against the account for nothing. Walking newest-first, a
+ * long unbroken run of empty days is the signal that the record has run out.
+ *
+ * 60 days rather than something tighter because a real person can stop wearing
+ * a watch for a while -- an injury, a holiday, a flat charger -- and the older
+ * history behind that gap is still worth having. Set to 0 to walk the whole
+ * window regardless.
+ */
+const DEFAULT_STOP_AFTER_EMPTY_DAYS = 60;
+
 const DEFAULT_SOURCES: IngestSource[] = [
   "sleep",
   "heart_rate",
@@ -50,6 +62,8 @@ export interface IngestOptions {
   onProgress?: (progress: IngestProgress) => void;
   /** Write each redacted response here, for use as a test fixture. */
   captureDir?: string;
+  /** Abandon a source after this many consecutive empty days. 0 disables. */
+  stopAfterEmptyDays?: number;
 }
 
 export interface IngestProgress {
@@ -252,6 +266,10 @@ export async function runIngest(
   // checkpoints were stamped from the wall clock, so a caller that supplied a
   // clock got checkpoints the planner could not reason about.
   const stampedAt = (options.now ?? DateTime.local()).toUnixInteger();
+  const stopAfterEmptyDays = options.stopAfterEmptyDays ?? DEFAULT_STOP_AFTER_EMPTY_DAYS;
+
+  const emptyRun = new Map<IngestSource, number>();
+  const exhausted = new Set<IngestSource>();
 
   const result: IngestResult = {
     fetched: 0,
@@ -267,6 +285,15 @@ export async function runIngest(
     if (options.signal?.aborted) {
       result.skipped += work.length - done;
       break;
+    }
+
+    // Deliberately not checkpointed. Skipping is not the same claim as "we
+    // asked and there was nothing", so a later run -- with a wider window, or
+    // with the limit disabled -- can still reach these days.
+    if (exhausted.has(unit.source)) {
+      result.skipped += 1;
+      done += 1;
+      continue;
     }
 
     let outcome: IngestOutcome;
@@ -291,6 +318,19 @@ export async function runIngest(
     }
 
     markIngested(unit.date, unit.source, outcome, stampedAt);
+
+    if (stopAfterEmptyDays > 0) {
+      const run = outcome === "empty" ? (emptyRun.get(unit.source) ?? 0) + 1 : 0;
+      emptyRun.set(unit.source, run);
+
+      if (run >= stopAfterEmptyDays) {
+        exhausted.add(unit.source);
+        logger.info(
+          { source: unit.source, date: unit.date, emptyDays: run },
+          "Reached the start of the record for this source; skipping older days"
+        );
+      }
+    }
 
     result.firstDate =
       result.firstDate === null || unit.date < result.firstDate ? unit.date : result.firstDate;

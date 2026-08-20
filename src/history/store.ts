@@ -44,6 +44,8 @@ export interface HistoryStats {
   activityRows: number;
   oldestDate: string | null;
   newestDate: string | null;
+  /** Days asked about that Garmin had nothing for -- usually pre-purchase. */
+  emptyDays: number;
 }
 
 let db: Database.Database | null = null;
@@ -294,11 +296,18 @@ export function historyStats(): HistoryStats {
     .prepare("SELECT MIN(date) AS oldest, MAX(date) AS newest FROM daily_metric")
     .get() as { oldest: string | null; newest: string | null };
 
+  const emptyDays = (
+    database
+      .prepare("SELECT COUNT(*) AS count FROM ingest_day WHERE outcome = 'empty'")
+      .get() as { count: number }
+  ).count;
+
   return {
     metricRows: count("daily_metric"),
     rawRows: count("raw_payload"),
     activityRows: count("activity"),
     oldestDate: span.oldest,
     newestDate: span.newest,
+    emptyDays,
   };
 }

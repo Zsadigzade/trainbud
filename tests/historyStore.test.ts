@@ -153,5 +153,8 @@ describe("history store", () => {
     assert.equal(stats.activityRows, 2);
     assert.equal(stats.oldestDate, "2026-07-01");
     assert.equal(stats.newestDate, "2026-08-19");
+    // The only day checkpointed empty above was then re-checkpointed as data,
+    // which is the upsert working.
+    assert.equal(stats.emptyDays, 0);
   });
 });
