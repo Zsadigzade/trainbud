@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { activityToolDefinitions } from "./activities.js";
+import { contextToolDefinitions } from "./context.js";
+import { findingsToolDefinitions } from "./findings.js";
 import { bodyCompositionToolDefinitions } from "./bodyComposition.js";
 import { heartRateToolDefinitions } from "./heartRate.js";
 import { recoveryToolDefinitions } from "./recovery.js";
@@ -22,6 +24,8 @@ export const toolRegistry: ToolDefinition[] = [
   ...stressToolDefinitions,
   ...vo2MaxToolDefinitions,
   ...trainingInsightsToolDefinitions,
+  ...findingsToolDefinitions,
+  ...contextToolDefinitions,
 ];
 
 const toolHandlers = new Map<string, ToolDefinition["handler"]>(
@@ -88,6 +92,23 @@ export const toolSchemas = {
   }),
   get_training_insights: z.object({
     days: z.number().int().positive().optional(),
+  }),
+  get_findings: z.object({}),
+  remember_context: z.object({
+    kind: z.enum(["goal", "race", "injury", "note"]).describe("What sort of thing this is"),
+    text: z.string().describe("What to remember, in the user's own words where possible"),
+    effective_from: z.string().optional().describe("ISO date this became true"),
+    effective_to: z.string().optional().describe("ISO date this stops being true"),
+  }),
+  get_user_context: z.object({
+    on_date: z.string().optional().describe("ISO date to evaluate against"),
+    include_closed: z.boolean().optional().describe("Include entries that have ended"),
+  }),
+  log_subjective: z.object({
+    kind: z.enum(["rpe", "soreness", "mood"]).describe("Which rating this is"),
+    value: z.number().describe("A rating from 1 to 10"),
+    date: z.string().optional().describe("ISO date the rating is for"),
+    note: z.string().optional().describe("Optional free-text detail"),
   }),
 };
 

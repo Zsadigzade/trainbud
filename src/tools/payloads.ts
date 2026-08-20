@@ -1,4 +1,7 @@
 import type { DailyStressSummary, Vo2MaxEntry } from "../garmin/rawApi.js";
+import type { ContextEntry, SubjectivePoint } from "../history/context.js";
+import type { SubjectiveKind } from "../history/schema.js";
+import type { Finding } from "../detect/findings.js";
 import type {
   ActivitySummary,
   BodyCompositionEntry,
@@ -85,4 +88,27 @@ export interface TrainingInsightsPayload {
   sleep: SleepPayload | null;
   recovery: RecoveryPayload | null;
   stress: StressPayload | null;
+}
+
+export interface RememberContextPayload {
+  entry: ContextEntry;
+}
+
+export interface ContextListPayload {
+  onDate: string;
+  includeClosed: boolean;
+  entries: ContextEntry[];
+}
+
+export interface SubjectivePayload {
+  date: string;
+  kind: SubjectiveKind;
+  value: number;
+  note: string | null;
+  recent: SubjectivePoint[];
+}
+
+export interface FindingsPayload {
+  findings: Finding[];
+  coverage: { days: number; ready: boolean };
 }

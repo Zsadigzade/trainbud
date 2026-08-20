@@ -10,7 +10,14 @@ describe("integration", () => {
     const server = createMcpServer();
     assert.equal(typeof server.start, "function");
     assert.equal(typeof server.close, "function");
-    assert.equal(toolRegistry.length, 9);
+
+    // A count here was just a second place to edit whenever a tool was added.
+    // What actually has to hold is that every registered tool is callable.
+    assert.ok(toolRegistry.length > 0);
+    for (const tool of toolRegistry) {
+      assert.equal(typeof tool.handler, "function", `${tool.name} has no handler`);
+      assert.ok(tool.description.length > 0, `${tool.name} has no description`);
+    }
   });
 
   it("reads package version for MCP handshake", () => {

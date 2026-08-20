@@ -20,9 +20,13 @@ import { formatToolError } from "../src/toolErrors.js";
 import { GarminApiError } from "../src/garmin/types.js";
 
 describe("tool registry", () => {
-  it("registers all nine MVP tools", () => {
+  // The exhaustive list, which is what catches an accidental addition or
+  // removal, lives in tests/contextTools.test.ts. A second copy here would
+  // simply be a second thing to update.
+  it("registers every Garmin data tool", () => {
     const names = toolRegistry.map((tool) => tool.name);
-    assert.deepEqual(names, [
+
+    for (const expected of [
       "get_latest_activity",
       "get_activities_range",
       "get_sleep_data",
@@ -32,7 +36,9 @@ describe("tool registry", () => {
       "get_stress_levels",
       "get_vo2_max_trends",
       "get_training_insights",
-    ]);
+    ]) {
+      assert.ok(names.includes(expected), `${expected} is not registered`);
+    }
   });
 });
 
