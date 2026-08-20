@@ -1,4 +1,4 @@
-import type { SleepNightSummary } from "../garmin/types.js";
+import type { ActivitySummary, SleepNightSummary } from "../garmin/types.js";
 
 // SECTION: Structured tool payloads
 //
@@ -13,4 +13,15 @@ export interface SleepPayload {
   recordedNights: number;
   averageScore: number | null;
   nights: SleepNightSummary[];
+}
+
+export interface LatestActivityPayload {
+  activity: ActivitySummary | null;
+}
+
+export interface ActivitiesRangePayload {
+  startDate: string;
+  endDate: string;
+  truncated: boolean;
+  activities: ActivitySummary[];
 }

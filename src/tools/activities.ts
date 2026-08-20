@@ -2,7 +2,8 @@ import type { IActivity } from "../garmin/garminApiTypes.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import type { ActivitySummary, ToolTextResult } from "../garmin/types.js";
+import type { ActivitySummary, ToolResult } from "../garmin/types.js";
+import type { ActivitiesRangePayload, LatestActivityPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import {
   filterActivitiesByRange,
@@ -89,7 +90,15 @@ export async function getActivitiesPool(): Promise<{ activities: ActivitySummary
 
 // SECTION: Tool Handlers
 
-export async function getLatestActivity(): Promise<ToolTextResult> {
+export function renderLatestActivityText(payload: LatestActivityPayload): string {
+  if (!payload.activity) {
+    return "No activities found in your Garmin Connect account.";
+  }
+
+  return formatActivitySummary(payload.activity);
+}
+
+export async function getLatestActivity(): Promise<ToolResult<LatestActivityPayload>> {
   const cacheKey = buildToolCacheKey("get_latest_activity", {});
 
   const activity = await withCache(cacheKey, appConfig.cacheTtlActivities, async () => {
@@ -97,33 +106,30 @@ export async function getLatestActivity(): Promise<ToolTextResult> {
     return activities[0] ?? null;
   });
 
-  if (!activity) {
-    return {
-      type: "text",
-      text: "No activities found in your Garmin Connect account.",
-    };
-  }
+  const payload: LatestActivityPayload = { activity };
 
   return {
     type: "text",
-    text: formatActivitySummary(activity),
+    text: renderLatestActivityText(payload),
+    data: payload,
   };
 }
 
-export async function getActivitiesRange(input: Record<string, unknown>): Promise<ToolTextResult> {
-  const start_date = input.start_date as string;
-  const end_date = input.end_date as string;
-  const { activities: pool, truncated } = await getActivitiesPool();
-  const activities = filterActivitiesByRange(pool, start_date, end_date);
+export function buildActivitiesRangePayload(
+  activities: ActivitySummary[],
+  startDate: string,
+  endDate: string,
+  truncated: boolean
+): ActivitiesRangePayload {
+  return { startDate, endDate, truncated, activities };
+}
 
-  if (activities.length === 0) {
-    return {
-      type: "text",
-      text: `No activities found between ${start_date} and ${end_date}.`,
-    };
+export function renderActivitiesRangeText(payload: ActivitiesRangePayload): string {
+  if (payload.activities.length === 0) {
+    return `No activities found between ${payload.startDate} and ${payload.endDate}.`;
   }
 
-  const lines = activities.map((activity, index) => {
+  const lines = payload.activities.map((activity, index) => {
     const activityDate =
       parseActivityLocalDateTime(activity.startTimeLocal).toISODate() ??
       formatIsoDate(new Date(activity.startTimeLocal));
@@ -134,13 +140,31 @@ export async function getActivitiesRange(input: Record<string, unknown>): Promis
     ].join("\n");
   });
 
-  const warning = truncated
+  const warning = payload.truncated
     ? "\n\nNote: Results may be incomplete — only the most recent 500 activities were scanned."
     : "";
 
+  return [`Found ${payload.activities.length} activities:`, "", ...lines].join("\n") + warning;
+}
+
+export async function getActivitiesRange(
+  input: Record<string, unknown>
+): Promise<ToolResult<ActivitiesRangePayload>> {
+  const start_date = input.start_date as string;
+  const end_date = input.end_date as string;
+  const { activities: pool, truncated } = await getActivitiesPool();
+
+  const payload = buildActivitiesRangePayload(
+    filterActivitiesByRange(pool, start_date, end_date),
+    start_date,
+    end_date,
+    truncated
+  );
+
   return {
     type: "text",
-    text: [`Found ${activities.length} activities:`, "", ...lines].join("\n") + warning,
+    text: renderActivitiesRangeText(payload),
+    data: payload,
   };
 }
 
