@@ -1,4 +1,7 @@
 import { getPendingPairings } from "./pairApi.js";
+import { activeContext } from "./history/context.js";
+import { CONTEXT_KINDS } from "./history/schema.js";
+import { DateTime } from "luxon";
 import { appConfig } from "./config.js";
 import { isAiConfigured, getCachedDailyInsight } from "./promptApi.js";
 
@@ -13,11 +16,20 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+export interface DashboardContextRow {
+  id: number;
+  kind: string;
+  text: string;
+  effective_from: string;
+  effective_to: string | null;
+}
+
 export interface DashboardStatus {
   pending: { code: string; expires_in: number }[];
   ai_configured: boolean;
   insight: string | null;
   public_url: string;
+  context: DashboardContextRow[];
 }
 
 export function getDashboardStatus(): DashboardStatus {
@@ -30,6 +42,13 @@ export function getDashboardStatus(): DashboardStatus {
     ai_configured: isAiConfigured(),
     insight: getCachedDailyInsight(),
     public_url: appConfig.publicUrl,
+    context: activeContext(DateTime.local().toISODate() ?? "").map((entry) => ({
+      id: entry.id,
+      kind: entry.kind,
+      text: entry.text,
+      effective_from: entry.effectiveFrom,
+      effective_to: entry.effectiveTo,
+    })),
   };
 }
 
@@ -119,6 +138,20 @@ export function renderDashboard(): string {
     </div>
 
     <div class="section">
+      <h2>About you</h2>
+      <p class="muted">Garmin measures you. It has no idea what you are training for, or what hurts — and that is what makes a finding worth anything.</p>
+      <div id="context"></div>
+      <form id="context-form" autocomplete="off" style="margin-top:12px;">
+        <select name="kind">
+          ${CONTEXT_KINDS.map((kind) => `<option value="${kind}">${kind}</option>`).join("")}
+        </select>
+        <input type="text" name="text" placeholder="Half marathon, Oct 12" maxlength="200" required>
+        <input type="date" name="effective_to" title="Optional: when this stops being true">
+        <button type="submit" class="btn-save">Add</button>
+      </form>
+    </div>
+
+    <div class="section">
       <h2>Watch setup</h2>
       <p class="muted">In the Connect IQ app → TrainBud → settings, set Server URL to:</p>
       <pre id="setup-url">${escapeHtml(serverUrl)}</pre>
@@ -190,6 +223,8 @@ export function renderDashboard(): string {
         })
         .then(function (s) {
           renderPairing(s.pending);
+          renderContext(s.context);
+          renderContext(s.context);
           var ai = document.getElementById('ai-status');
           ai.textContent = s.ai_configured ? 'enabled' : 'no API key';
           ai.className = s.ai_configured ? 'ok' : 'warn';
@@ -223,6 +258,126 @@ export function renderDashboard(): string {
         if (!r.ok) { throw new Error('Failed (' + r.status + ')'); }
         toast('Insight cleared — next watch sync regenerates it');
         refresh();
+      }).catch(function (e) { toast(e.message, true); });
+    });
+
+    function renderContext(entries) {
+      var host = document.getElementById('context');
+      if (!entries || entries.length === 0) {
+        host.innerHTML = '<p class="muted">Nothing on record yet.</p>';
+        return;
+      }
+      // textContent on every value: this is the user's own text coming back
+      // from the store, and innerHTML here would execute whatever it contains.
+      host.innerHTML = '';
+      entries.forEach(function (entry) {
+        var row = document.createElement('div');
+        row.className = 'alert';
+        var label = document.createElement('span');
+        label.textContent = entry.kind + ': ' + entry.text +
+          (entry.effective_to ? ' (until ' + entry.effective_to + ')' : '');
+        var close = document.createElement('button');
+        close.className = 'btn-ghost';
+        close.style.marginLeft = '10px';
+        close.textContent = 'Done';
+        close.addEventListener('click', function () { closeContext(entry.id); });
+        row.appendChild(label);
+        row.appendChild(close);
+        host.appendChild(row);
+      });
+    }
+
+    function closeContext(id) {
+      fetch('/dashboard/context/close', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
+        body: JSON.stringify({ id: id })
+      }).then(function (r) {
+        if (!r.ok) { throw new Error('Could not close that entry'); }
+        toast('Closed');
+        refresh();
+      }).catch(function (e) { toast(e.message, true); });
+    }
+
+    document.getElementById('context-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var form = e.target;
+      fetch('/dashboard/context', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
+        body: JSON.stringify({
+          kind: form.kind.value,
+          text: form.text.value,
+          effective_to: form.effective_to.value || undefined
+        })
+      }).then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) { throw new Error(body.error || 'Could not save that'); }
+          toast('Saved');
+          form.text.value = '';
+          form.effective_to.value = '';
+          refresh();
+        });
+      }).catch(function (e) { toast(e.message, true); });
+    });
+
+    function renderContext(entries) {
+      var host = document.getElementById('context');
+      if (!entries || entries.length === 0) {
+        host.innerHTML = '<p class="muted">Nothing on record yet.</p>';
+        return;
+      }
+      // textContent for every value: this is the user's own text coming back
+      // out of the store, and innerHTML here would run whatever it contains.
+      host.innerHTML = '';
+      entries.forEach(function (entry) {
+        var row = document.createElement('div');
+        row.className = 'alert';
+        var label = document.createElement('span');
+        label.textContent = entry.kind + ': ' + entry.text +
+          (entry.effective_to ? ' (until ' + entry.effective_to + ')' : '');
+        var close = document.createElement('button');
+        close.className = 'btn-ghost';
+        close.style.marginLeft = '10px';
+        close.textContent = 'Done';
+        close.addEventListener('click', function () { closeContext(entry.id); });
+        row.appendChild(label);
+        row.appendChild(close);
+        host.appendChild(row);
+      });
+    }
+
+    function closeContext(id) {
+      fetch('/dashboard/context/close', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
+        body: JSON.stringify({ id: id })
+      }).then(function (r) {
+        if (!r.ok) { throw new Error('Could not close that entry'); }
+        toast('Closed');
+        refresh();
+      }).catch(function (e) { toast(e.message, true); });
+    }
+
+    document.getElementById('context-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var form = e.target;
+      fetch('/dashboard/context', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
+        body: JSON.stringify({
+          kind: form.kind.value,
+          text: form.text.value,
+          effective_to: form.effective_to.value || undefined
+        })
+      }).then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) { throw new Error(body.error || 'Could not save that'); }
+          toast('Saved');
+          form.text.value = '';
+          form.effective_to.value = '';
+          refresh();
+        });
       }).catch(function (e) { toast(e.message, true); });
     });
 

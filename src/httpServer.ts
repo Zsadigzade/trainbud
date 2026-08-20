@@ -11,6 +11,8 @@ import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
 import { requestPairing, checkPairStatus, approvePairing } from "./pairApi.js";
 import { submitPrompt, getPromptStatus, isAiConfigured, clearDailyInsight } from "./promptApi.js";
 import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
+import { addContextEntry, closeContextEntry } from "./history/context.js";
+import { CONTEXT_KINDS, type ContextKind } from "./history/schema.js";
 
 // SECTION: HTTP MCP Server
 
@@ -211,6 +213,41 @@ export function readFormOrJsonField(raw: string, field: string): string | null {
   }
 
   return new URLSearchParams(raw).get(field);
+}
+
+/**
+ * Deliberately separate from readFormOrJsonField, which returns null for any
+ * non-string JSON value. That is not an oversight there: a pair code is a
+ * zero-padded six-digit string, `000042` is not valid JSON as a number, and
+ * silently coercing 42 would turn "you sent this in a form that cannot
+ * represent it" into a failed lookup.
+ *
+ * A row id has no such problem, and a JSON client naturally sends {"id": 5}.
+ */
+export function readNumericField(raw: string, field: string): number | null {
+  const trimmed = raw.trim();
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const value = (JSON.parse(trimmed) as Record<string, unknown>)[field];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
+        return Number.parseInt(value, 10);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  const formValue = new URLSearchParams(raw).get(field);
+  if (formValue !== null && /^-?\d+$/.test(formValue.trim())) {
+    return Number.parseInt(formValue, 10);
+  }
+
+  return null;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -566,6 +603,59 @@ export function createHttpMcpServer(): HttpMcpServer {
             Location: queryToken ? `/dashboard?token=${encodeURIComponent(queryToken)}` : "/dashboard",
           });
           res.end();
+          return;
+        }
+
+        if (pathname === "/dashboard/context" && req.method === "POST") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          const body = await readRawBody(req);
+          const kind = readFormOrJsonField(body, "kind")?.trim() ?? "";
+          const text = readFormOrJsonField(body, "text")?.trim() ?? "";
+          const effectiveTo = readFormOrJsonField(body, "effective_to")?.trim();
+
+          if (!CONTEXT_KINDS.includes(kind as ContextKind)) {
+            sendJson(res, 400, {
+              error: `Unknown kind "${kind}". Choose one of: ${CONTEXT_KINDS.join(", ")}.`,
+            });
+            return;
+          }
+
+          if (text.length === 0) {
+            sendJson(res, 400, { error: "Tell me what to remember." });
+            return;
+          }
+
+          try {
+            const entry = addContextEntry(kind as ContextKind, text, {
+              effectiveTo: effectiveTo && effectiveTo.length > 0 ? effectiveTo : undefined,
+            });
+            sendJson(res, 200, { ok: true, id: entry.id });
+          } catch (error) {
+            sendJson(res, 400, {
+              error: error instanceof Error ? error.message : "Could not save that.",
+            });
+          }
+          return;
+        }
+
+        if (pathname === "/dashboard/context/close" && req.method === "POST") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          const id = readNumericField(await readRawBody(req), "id");
+
+          if (id === null) {
+            sendJson(res, 400, { error: "Which entry?" });
+            return;
+          }
+
+          sendJson(res, 200, { ok: closeContextEntry(id) });
           return;
         }
 
