@@ -1,5 +1,7 @@
 import { executeTool } from "./tools/index.js";
 import { generateDailyInsight } from "./promptApi.js";
+import { runDetectors } from "./detect/index.js";
+import type { Finding } from "./detect/findings.js";
 import type { RecoveryStatusResult } from "./garmin/types.js";
 import type {
   HeartRatePayload,
@@ -63,6 +65,22 @@ export interface WatchVo2Max {
   trend: string;
 }
 
+/**
+ * The watch gets the sentence, not the numbers to build one. It cannot wrap
+ * arbitrary text well -- a fixed-font activity name already clips on a 390 px
+ * round screen -- so the detail paragraph and the raw values stay on the server.
+ */
+export interface WatchFinding {
+  kind: string;
+  severity: string;
+  headline: string;
+}
+
+export interface WatchCoverage {
+  days: number;
+  ready: boolean;
+}
+
 export interface WatchSummary {
   daily_overview: WatchDailyOverview;
   recovery: WatchRecovery | null;
@@ -71,6 +89,8 @@ export interface WatchSummary {
   stress: WatchStress | null;
   vo2max: WatchVo2Max | null;
   heart_rate: WatchHeartRate | null;
+  findings: WatchFinding[];
+  coverage: WatchCoverage;
   ai_insight: string | null;
   updated_at: string;
 }
@@ -173,6 +193,14 @@ export function toWatchHeartRate(payload: HeartRatePayload | null): WatchHeartRa
 
 // SECTION: Summary assembly
 
+export function toWatchFindings(findings: Finding[]): WatchFinding[] {
+  return findings.map((finding) => ({
+    kind: finding.kind,
+    severity: finding.severity,
+    headline: finding.headline,
+  }));
+}
+
 export interface WatchSummaryParts {
   recovery: RecoveryPayload | null;
   sleep: SleepPayload | null;
@@ -180,6 +208,8 @@ export interface WatchSummaryParts {
   stress: StressPayload | null;
   vo2max: Vo2MaxPayload | null;
   heartRate: HeartRatePayload | null;
+  findings: Finding[];
+  coverage: WatchCoverage;
   updatedAt: string;
 }
 
@@ -204,6 +234,8 @@ export function buildWatchSummaryFrom(
     stress,
     vo2max,
     heart_rate: toWatchHeartRate(parts.heartRate),
+    findings: toWatchFindings(parts.findings),
+    coverage: parts.coverage,
     updated_at: parts.updatedAt,
   };
 }
@@ -222,6 +254,10 @@ async function payloadOf<T>(name: string, args: Record<string, unknown>): Promis
 }
 
 export async function buildWatchSummary(): Promise<WatchSummary> {
+  // Detection is a local SQLite read, so it costs nothing next to six Garmin
+  // round trips and does not need to be raced with them.
+  const detection = runDetectors();
+
   const [recovery, sleep, activity, stress, vo2max, heartRate] = await Promise.all([
     payloadOf<RecoveryPayload>("get_recovery_status", {}),
     payloadOf<SleepPayload>("get_sleep_data", { nights: 1 }),
@@ -239,6 +275,8 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       stress,
       vo2max,
       heartRate,
+      findings: detection.findings,
+      coverage: detection.coverage,
       updatedAt: new Date().toISOString(),
     }),
     ai_insight: null,

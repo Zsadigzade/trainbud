@@ -174,6 +174,8 @@ describe("watch mappers", () => {
       stress: { requestedDays: 7, recordedDays: 1, averageStress: 34, trend: "stable", days: [] },
       vo2max: null,
       heartRate: null,
+      findings: [],
+      coverage: { days: 0, ready: false },
       updatedAt: "2026-08-19T20:00:00.000Z",
     });
 

@@ -12,6 +12,8 @@ import {
 } from "./appDb.js";
 import { appConfig } from "./config.js";
 import { buildWatchSummary } from "./watchApi.js";
+import { runDetectors, type DetectionResult } from "./detect/index.js";
+import { activeContext, type ContextEntry } from "./history/context.js";
 import { logger } from "./utils/logger.js";
 
 // SECTION: Prompt API — Claude integration
@@ -38,6 +40,51 @@ export function isAiConfigured(): boolean {
 
 function buildJobId(): string {
   return randomBytes(12).toString("hex");
+}
+
+/**
+ * What the model is told before it writes a sentence.
+ *
+ * This used to be four current numbers, which is why the daily insight read
+ * like a horoscope: with nothing but today's figures there was nothing to say
+ * that the numbers did not already say themselves. Findings refer to things
+ * that happened -- a run of days, a deficit against a personal median -- and
+ * context says who it is happening to.
+ *
+ * Cold start is stated explicitly. Handed an empty findings list with no
+ * explanation, a model will confidently reassure the user out of no data at all.
+ */
+export function formatFindingsContext(
+  result: DetectionResult,
+  context: ContextEntry[]
+): string {
+  const lines: string[] = [];
+
+  if (!result.coverage.ready) {
+    lines.push(
+      `Still gathering data: only ${result.coverage.days} days of history are stored, which is not yet enough to compare anything against a baseline. Say so rather than reassuring the user.`
+    );
+  } else if (result.findings.length === 0) {
+    lines.push(
+      `Across ${result.coverage.days} days of history, nothing stands out against this user's own baselines.`
+    );
+  } else {
+    lines.push(`What stands out, from ${result.coverage.days} days of history:`);
+    for (const finding of result.findings) {
+      lines.push(`- [${finding.severity}] ${finding.headline}`);
+    }
+  }
+
+  if (context.length === 0) {
+    lines.push("Nothing on record about this user's goals, races or injuries.");
+  } else {
+    lines.push("On record about this user:");
+    for (const entry of context) {
+      lines.push(`- ${entry.kind}: ${entry.text}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummary>>): string {
@@ -111,7 +158,15 @@ async function processPromptJob(id: string, prompt: string): Promise<void> {
   updatePromptJob(id, { status: "running" });
   try {
     const summary = await buildWatchSummary();
-    const healthContext = formatHealthContext(summary);
+    const detection = runDetectors();
+    const context = activeContext(DateTime.local().toISODate() ?? "");
+
+    const healthContext = [
+      formatFindingsContext(detection, context),
+      "",
+      formatHealthContext(summary),
+    ].join("\n");
+
     const result = await callClaude(prompt, healthContext);
     updatePromptJob(id, { status: "done", result });
   } catch (err) {
@@ -158,9 +213,18 @@ export async function generateDailyInsight(
   }
 
   try {
-    const healthContext = formatHealthContext(summary);
+    // Both: the findings say what changed, the snapshot says where things stand.
+    const detection = runDetectors();
+    const context = activeContext(DateTime.local().toISODate() ?? "");
+
+    const healthContext = [
+      formatFindingsContext(detection, context),
+      "",
+      formatHealthContext(summary),
+    ].join("\n");
+
     const result = await callClaude(
-      "Give me one sentence of actionable advice for today based on my health data.",
+      "Give me one sentence of actionable advice for today. Refer to what actually stands out rather than restating the numbers.",
       healthContext
     );
     setSetting(cacheKey, result);
