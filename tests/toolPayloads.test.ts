@@ -9,7 +9,16 @@ import {
 import { buildHeartRatePayload, renderHeartRateText } from "../src/tools/heartRate.js";
 import { buildStressPayload, renderStressText } from "../src/tools/stress.js";
 import { buildVo2MaxPayload, renderVo2MaxText } from "../src/tools/vo2Max.js";
-import type { ActivitySummary, SleepNightSummary } from "../src/garmin/types.js";
+import { renderRecoveryText } from "../src/tools/recovery.js";
+import {
+  buildBodyCompositionPayload,
+  renderBodyCompositionText,
+} from "../src/tools/bodyComposition.js";
+import type {
+  ActivitySummary,
+  BodyCompositionEntry,
+  SleepNightSummary,
+} from "../src/garmin/types.js";
 
 function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
   return {
@@ -216,6 +225,67 @@ describe("vo2 max payload", () => {
     assert.equal(
       renderVo2MaxText(buildVo2MaxPayload([], 30)),
       "No VO2 max data found for the last 30 days."
+    );
+  });
+});
+
+describe("recovery payload", () => {
+  it("renders the score, status and every component", () => {
+    const text = renderRecoveryText({
+      date: "2026-08-19",
+      recovery: {
+        score: 91,
+        status: "recovered",
+        recommendation: "You look recovered. Hard training or a quality session is appropriate today.",
+        components: { hrvScore: 95, sleepScore: 88, stressScore: 95, restingHrScore: 90 },
+      },
+    });
+
+    assert.match(text, /^Recovery score: 91\/100 \(recovered\)$/m);
+    assert.match(text, /^- HRV: 95$/m);
+    assert.match(text, /^- Resting HR: 90$/m);
+    assert.match(text, /^Date: 2026-08-19$/m);
+  });
+});
+
+describe("body composition payload", () => {
+  function entry(overrides: Partial<BodyCompositionEntry> = {}): BodyCompositionEntry {
+    return {
+      date: "2026-08-19",
+      weightKg: 74.2,
+      bodyFatPercent: 15.1,
+      muscleMassKg: 60.4,
+      bmi: 22.1,
+      ...overrides,
+    };
+  }
+
+  it("computes deltas between newest and oldest", () => {
+    const payload = buildBodyCompositionPayload(
+      [entry(), entry({ date: "2026-07-19", weightKg: 76.0, bodyFatPercent: 16.3 })],
+      30
+    );
+
+    assert.equal(payload.weightDeltaKg?.toFixed(1), "-1.8");
+    assert.equal(payload.bodyFatDeltaPercent?.toFixed(1), "-1.2");
+    assert.equal(payload.current?.date, "2026-08-19");
+    assert.equal(payload.baseline?.date, "2026-07-19");
+  });
+
+  it("returns null deltas when a value is missing", () => {
+    const payload = buildBodyCompositionPayload(
+      [entry({ weightKg: null }), entry({ date: "2026-07-19" })],
+      30
+    );
+
+    assert.equal(payload.weightDeltaKg, null);
+    assert.equal(payload.bodyFatDeltaPercent, 0);
+  });
+
+  it("renders the empty case", () => {
+    assert.equal(
+      renderBodyCompositionText(buildBodyCompositionPayload([], 30)),
+      "No body composition data found for the last 30 days."
     );
   });
 });

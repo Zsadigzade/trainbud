@@ -1,7 +1,8 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import type { BodyCompositionEntry, ToolTextResult } from "../garmin/types.js";
+import type { BodyCompositionEntry, ToolResult } from "../garmin/types.js";
+import type { BodyCompositionPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
 import {
@@ -42,7 +43,74 @@ async function fetchBodyComposition(days: number): Promise<BodyCompositionEntry[
 
 // SECTION: Tool Handler
 
-export async function getBodyComposition(input: { days?: number }): Promise<ToolTextResult> {
+function delta(
+  current: number | null | undefined,
+  baseline: number | null | undefined
+): number | null {
+  if (current === null || current === undefined) {
+    return null;
+  }
+  if (baseline === null || baseline === undefined) {
+    return null;
+  }
+
+  return current - baseline;
+}
+
+export function buildBodyCompositionPayload(
+  entries: BodyCompositionEntry[],
+  requestedDays: number
+): BodyCompositionPayload {
+  // Entries are sorted newest first, so the last one in the range is the
+  // baseline the deltas are measured against.
+  const current = entries[0] ?? null;
+  const baseline = entries[entries.length - 1] ?? null;
+
+  const measured = (select: (entry: BodyCompositionEntry) => number | null): number[] =>
+    entries.map(select).filter((value): value is number => value !== null);
+
+  return {
+    requestedDays,
+    recordedDays: entries.length,
+    current,
+    baseline,
+    weightDeltaKg: delta(current?.weightKg, baseline?.weightKg),
+    bodyFatDeltaPercent: delta(current?.bodyFatPercent, baseline?.bodyFatPercent),
+    weightTrend: calculateTrend(measured((entry) => entry.weightKg), true),
+    bodyFatTrend: calculateTrend(measured((entry) => entry.bodyFatPercent), true),
+    muscleTrend: calculateTrend(measured((entry) => entry.muscleMassKg), false),
+    entries,
+  };
+}
+
+export function renderBodyCompositionText(payload: BodyCompositionPayload): string {
+  if (payload.recordedDays === 0) {
+    return `No body composition data found for the last ${payload.requestedDays} days.`;
+  }
+
+  const lines = payload.entries.slice(0, 10).map((entry) => {
+    return `${entry.date}: ${entry.weightKg?.toFixed(1) ?? "n/a"} kg | body fat ${entry.bodyFatPercent?.toFixed(1) ?? "n/a"}% | muscle ${entry.muscleMassKg?.toFixed(1) ?? "n/a"} kg`;
+  });
+
+  return [
+    `Body composition over ${payload.recordedDays} recorded days:`,
+    `Current weight: ${payload.current?.weightKg?.toFixed(1) ?? "n/a"} kg`,
+    `Current body fat: ${payload.current?.bodyFatPercent?.toFixed(1) ?? "n/a"}%`,
+    `Current muscle mass: ${payload.current?.muscleMassKg?.toFixed(1) ?? "n/a"} kg`,
+    `Weight change from baseline: ${payload.weightDeltaKg !== null ? `${payload.weightDeltaKg.toFixed(1)} kg` : "n/a"}`,
+    `Body fat change from baseline: ${payload.bodyFatDeltaPercent !== null ? `${payload.bodyFatDeltaPercent.toFixed(1)}%` : "n/a"}`,
+    `Weight trend: ${payload.weightTrend}`,
+    `Body fat trend: ${payload.bodyFatTrend}`,
+    `Muscle trend: ${payload.muscleTrend}`,
+    "",
+    "Recent entries:",
+    ...lines,
+  ].join("\n");
+}
+
+export async function getBodyComposition(
+  input: { days?: number }
+): Promise<ToolResult<BodyCompositionPayload>> {
   const days = input.days ?? 30;
   const cacheKey = buildToolCacheKey("get_body_composition", { days });
 
@@ -50,71 +118,12 @@ export async function getBodyComposition(input: { days?: number }): Promise<Tool
     return fetchBodyComposition(days);
   });
 
-  if (entries.length === 0) {
-    return {
-      type: "text",
-      text: `No body composition data found for the last ${days} days.`,
-    };
-  }
-
-  const current = entries[0];
-  const baseline = entries[entries.length - 1];
-
-  const weightTrend = calculateTrend(
-    entries.map((entry) => entry.weightKg).filter((value): value is number => value !== null),
-    true
-  );
-  const bodyFatTrend = calculateTrend(
-    entries
-      .map((entry) => entry.bodyFatPercent)
-      .filter((value): value is number => value !== null),
-    true
-  );
-  const muscleTrend = calculateTrend(
-    entries
-      .map((entry) => entry.muscleMassKg)
-      .filter((value): value is number => value !== null),
-    false
-  );
-
-  const weightDelta =
-    current?.weightKg !== null &&
-    current?.weightKg !== undefined &&
-    baseline?.weightKg !== null &&
-    baseline?.weightKg !== undefined
-      ? current.weightKg - baseline.weightKg
-      : null;
-
-  const bodyFatDelta =
-    current?.bodyFatPercent !== null &&
-    current?.bodyFatPercent !== undefined &&
-    baseline?.bodyFatPercent !== null &&
-    baseline?.bodyFatPercent !== undefined
-      ? current.bodyFatPercent - baseline.bodyFatPercent
-      : null;
-
-  const lines = entries.slice(0, 10).map((entry) => {
-    return `${entry.date}: ${entry.weightKg?.toFixed(1) ?? "n/a"} kg | body fat ${entry.bodyFatPercent?.toFixed(1) ?? "n/a"}% | muscle ${entry.muscleMassKg?.toFixed(1) ?? "n/a"} kg`;
-  });
-
-  const text = [
-    `Body composition over ${entries.length} recorded days:`,
-    `Current weight: ${current?.weightKg?.toFixed(1) ?? "n/a"} kg`,
-    `Current body fat: ${current?.bodyFatPercent?.toFixed(1) ?? "n/a"}%`,
-    `Current muscle mass: ${current?.muscleMassKg?.toFixed(1) ?? "n/a"} kg`,
-    `Weight change from baseline: ${weightDelta !== null ? `${weightDelta.toFixed(1)} kg` : "n/a"}`,
-    `Body fat change from baseline: ${bodyFatDelta !== null ? `${bodyFatDelta.toFixed(1)}%` : "n/a"}`,
-    `Weight trend: ${weightTrend}`,
-    `Body fat trend: ${bodyFatTrend}`,
-    `Muscle trend: ${muscleTrend}`,
-    "",
-    "Recent entries:",
-    ...lines,
-  ].join("\n");
+  const payload = buildBodyCompositionPayload(entries, days);
 
   return {
     type: "text",
-    text,
+    text: renderBodyCompositionText(payload),
+    data: payload,
   };
 }
 

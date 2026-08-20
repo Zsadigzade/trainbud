@@ -2,7 +2,8 @@ import type { SleepData } from "../garmin/garminApiTypes.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import type { RecoveryStatusResult, RecoveryWeights, ToolTextResult } from "../garmin/types.js";
+import type { RecoveryStatusResult, RecoveryWeights, ToolResult } from "../garmin/types.js";
+import type { RecoveryPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { clamp, formatIsoDate, getDateRange, getYesterday } from "../utils/helpers.js";
 
@@ -197,12 +198,33 @@ async function fetchRecoverySignals(): Promise<{
 
 // SECTION: Tool Handler
 
+/**
+ * The date is passed in rather than read from the clock here, which is what
+ * keeps this pure and testable -- the handler below supplies it.
+ */
+export function renderRecoveryText(payload: RecoveryPayload): string {
+  const { recovery } = payload;
+
+  return [
+    `Recovery score: ${recovery.score}/100 (${recovery.status})`,
+    recovery.recommendation,
+    "",
+    "Component scores:",
+    `- HRV: ${recovery.components.hrvScore}`,
+    `- Sleep: ${recovery.components.sleepScore}`,
+    `- Stress: ${recovery.components.stressScore}`,
+    `- Resting HR: ${recovery.components.restingHrScore}`,
+    "",
+    `Date: ${payload.date}`,
+  ].join("\n");
+}
+
 export async function getRecoveryStatus(input: {
   hrv_weight?: number;
   sleep_weight?: number;
   stress_weight?: number;
   resting_hr_weight?: number;
-}): Promise<ToolTextResult> {
+}): Promise<ToolResult<RecoveryPayload>> {
   const weights = normalizeWeights({
     hrv: input.hrv_weight,
     sleep: input.sleep_weight,
@@ -240,22 +262,12 @@ export async function getRecoveryStatus(input: {
     return buildRecoveryStatus(components, weights);
   });
 
-  const text = [
-    `Recovery score: ${recovery.score}/100 (${recovery.status})`,
-    recovery.recommendation,
-    "",
-    "Component scores:",
-    `- HRV: ${recovery.components.hrvScore}`,
-    `- Sleep: ${recovery.components.sleepScore}`,
-    `- Stress: ${recovery.components.stressScore}`,
-    `- Resting HR: ${recovery.components.restingHrScore}`,
-    "",
-    `Date: ${formatIsoDate(new Date())}`,
-  ].join("\n");
+  const payload: RecoveryPayload = { date: formatIsoDate(new Date()), recovery };
 
   return {
     type: "text",
-    text,
+    text: renderRecoveryText(payload),
+    data: payload,
   };
 }
 

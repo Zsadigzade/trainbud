@@ -1,7 +1,9 @@
 import type { DailyStressSummary, Vo2MaxEntry } from "../garmin/rawApi.js";
 import type {
   ActivitySummary,
+  BodyCompositionEntry,
   HeartRateDaySummary,
+  RecoveryStatusResult,
   SleepNightSummary,
 } from "../garmin/types.js";
 
@@ -55,4 +57,22 @@ export interface Vo2MaxPayload {
   oldest: number | null;
   trend: string;
   entries: Vo2MaxEntry[];
+}
+
+export interface RecoveryPayload {
+  date: string;
+  recovery: RecoveryStatusResult;
+}
+
+export interface BodyCompositionPayload {
+  requestedDays: number;
+  recordedDays: number;
+  current: BodyCompositionEntry | null;
+  baseline: BodyCompositionEntry | null;
+  weightDeltaKg: number | null;
+  bodyFatDeltaPercent: number | null;
+  weightTrend: string;
+  bodyFatTrend: string;
+  muscleTrend: string;
+  entries: BodyCompositionEntry[];
 }
