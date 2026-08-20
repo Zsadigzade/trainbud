@@ -10,7 +10,7 @@ import { configureLogger, logger } from "./utils/logger.js";
 import { packageVersion } from "./version.js";
 import { runSetup } from "./setup.js";
 import { withGarminClient } from "./garmin/client.js";
-import { runIngest } from "./history/ingest.js";
+import { DEFAULT_SOURCES, runIngest } from "./history/ingest.js";
 import { startHistoryScheduler } from "./history/scheduler.js";
 import { closeHistoryDb, historyStats } from "./history/store.js";
 import { runDetectors } from "./detect/index.js";
@@ -154,14 +154,6 @@ async function runFindings(): Promise<void> {
   closeHistoryDb();
 }
 
-const INGEST_SOURCES: IngestSource[] = [
-  "sleep",
-  "heart_rate",
-  "stress",
-  "vo2max",
-  "body_composition",
-];
-
 async function runBackfill(options: {
   days?: number;
   delayMs?: number;
@@ -173,14 +165,14 @@ async function runBackfill(options: {
 
   const sources = options.source?.length
     ? options.source.map((name) => {
-        if (!INGEST_SOURCES.includes(name as IngestSource)) {
+        if (!DEFAULT_SOURCES.includes(name as IngestSource)) {
           throw new Error(
-            `Unknown source "${name}". Choose from: ${INGEST_SOURCES.join(", ")}`
+            `Unknown source "${name}". Choose from: ${DEFAULT_SOURCES.join(", ")}`
           );
         }
         return name as IngestSource;
       })
-    : INGEST_SOURCES;
+    : DEFAULT_SOURCES;
 
   const days = options.days ?? 365;
   const delayMs = options.delayMs ?? 1000;

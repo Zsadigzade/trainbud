@@ -49,7 +49,8 @@ const DEFAULT_DELAY_MS = 1000;
  */
 const DEFAULT_STOP_AFTER_EMPTY_DAYS = 60;
 
-const DEFAULT_SOURCES: IngestSource[] = [
+/** The sources a full run covers. Exported so no caller keeps its own copy. */
+export const DEFAULT_SOURCES: IngestSource[] = [
   "sleep",
   "heart_rate",
   "stress",
