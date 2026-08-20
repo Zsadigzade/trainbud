@@ -8,14 +8,23 @@
 // Merged in 1.2.0: resting/max heart rate now shares the Recovery card, and
 // VO2 max shares the Activity card, taking the carousel from 9 cards to 7.
 //
+// Reordered in 1.3.0. Cards 0-6 were the four numbers Garmin already shows on
+// the same wrist, so opening the app landed on data the user had just scrolled
+// past. TODAY comes first because it is the one screen Connect cannot draw —
+// what stands out, measured against this user's own baseline — and ASK second
+// because its questions are now generated from those findings. The metric cards
+// are all still here, one swipe further on, for when the number is what you
+// actually wanted.
+//
 module Cards {
-    const OVERVIEW   = 0;   // 2x2 grid: recovery, sleep, stress, VO2 max
-    const RECOVERY   = 1;   // recovery score + ring, with resting/max HR
-    const SLEEP      = 2;   // hours + quality score
-    const ACTIVITY   = 3;   // latest workout, with VO2 max and trend
-    const STRESS     = 4;   // daily average
-    const AI_INSIGHT = 5;   // daily one-line AI tip
-    const ASK_AI     = 6;   // preset prompt menu + paged result
+    const TODAY      = 0;   // findings against the user's own baselines
+    const ASK_AI     = 1;   // prompts generated from those findings
+    const AI_INSIGHT = 2;   // daily one-line AI tip
+    const OVERVIEW   = 3;   // 2x2 grid: recovery, sleep, stress, VO2 max
+    const RECOVERY   = 4;   // recovery score + ring, with resting/max HR
+    const SLEEP      = 5;   // hours + quality score
+    const ACTIVITY   = 6;   // latest workout, with VO2 max and trend
+    const STRESS     = 7;   // daily average
 
-    const COUNT      = 7;
+    const COUNT      = 8;
 }

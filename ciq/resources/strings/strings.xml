@@ -10,6 +10,15 @@
     <string id="CardHeartRate">Heart Rate</string>
     <string id="CardAiInsight">AI Insight</string>
     <string id="CardAskAi">Ask AI</string>
+    <string id="CardToday">Today</string>
+    <!-- Shown until there is enough history to compare a day against a
+         baseline. An empty findings list and an unknown answer must not look
+         the same: without this the app tells a brand-new user that nothing
+         stands out, which it cannot possibly know yet. -->
+    <string id="TodayGathering">Still gathering</string>
+    <string id="TodayGatheringDays">of 14 days</string>
+    <string id="TodayNothing">Nothing stands out</string>
+    <string id="TodayNothingHint">against your baselines</string>
     <string id="Loading">Loading...</string>
     <string id="ConfigError">Set Server URL in the Connect IQ app settings</string>
     <string id="FetchError">Could not reach TrainBud</string>

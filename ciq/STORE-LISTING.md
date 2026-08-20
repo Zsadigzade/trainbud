@@ -23,28 +23,43 @@ Health & Fitness
 
 ## Version
 
-1.2.0
+1.3.0
 
 ## Short description
 
-Your training and recovery data on your wrist, with optional AI answers — recovery, sleep, activity, stress, VO2 max.
+Sees what stands out in your training history — resting heart rate, sleep debt, load — and lets you ask about it from your wrist.
 
 ## Full description
 
-TrainBud puts your training and recovery numbers on your watch face, and lets you ask an AI assistant about them without reaching for your phone.
+Your watch already shows you today's numbers. TrainBud's companion server keeps a year
+of them, and tells you what actually stands out — measured against your own baseline,
+not a population average.
 
-A glance shows your recovery score and last night's sleep without opening anything.
-Open it for the full set, then swipe or tap through seven cards:
+TrainBud opens on Today: the things worth knowing, in plain language.
+• "Resting heart rate 4 bpm above your 28-day baseline, 3 days running"
+• "5.6 h of sleep short of your usual 6.3 h over the last 7 nights"
+• "This week's training load is 1.6x your four-week average"
+
+Findings describe what was measured and what it means for training. They are never a
+diagnosis, and the app says when it does not yet have enough history to compare
+anything — a new watch has no baseline for the first two weeks, and TrainBud tells you
+that rather than pretending everything is fine.
+
+The Ask card offers questions drawn from those same findings, so instead of the same
+five generic prompts every day you get "Why is my resting HR up?" on the day it is.
+
+The numbers are all still there, one swipe on:
 • Overview — recovery, sleep, stress and VO2 max in one grid
 • Recovery — score with a colour-coded ring, plus resting and maximum heart rate
 • Sleep — hours and quality score
 • Activity — latest workout with duration, distance, average heart rate and VO2 max
 • Stress — daily average
-• AI Insight — a daily one-line tip generated from your own numbers
-• Ask AI — pick a preset question and read the answer on your watch
+• AI Insight — a daily one-line tip built from what stood out
 
-Values are colour-coded so status is readable at a glance. If the server is briefly
-unreachable, the widget shows your last cached summary with an "updated X ago" marker.
+The glance shows the most important finding when there is one, and your recovery and
+sleep when there is not. Values are colour-coded so status is readable without opening
+anything. If the server is briefly unreachable, the widget shows your last cached
+summary with an "updated X ago" marker.
 
 SETUP REQUIRED — THIS APP NEEDS YOUR OWN SERVER
 TrainBud is the watch front end for a free, open-source companion server that you run
@@ -108,6 +123,21 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > # pair the simulated watch via the dashboard, then File > Save Screenshot per card
 > ```
 > Capture at least: glance, Overview, Recovery, and Ask AI with a real answer.
+
+## What changed in 1.3.0
+
+- **Today card, now the first screen.** Findings computed on the companion server
+  against the user's own 28-day baselines: resting heart rate elevation, sleep debt,
+  overnight HRV trend breaks, and acute-to-chronic training load. The metric cards are
+  unchanged and moved one position later.
+- **Ask prompts are generated per day** from those findings, replacing five fixed
+  strings. The built-in five remain as the fallback when the server sends none.
+- **Glance carries the top finding** when there is one.
+- **Cold start is explicit.** Under two weeks of history, the app says how many days it
+  has rather than reporting that nothing stands out.
+- **Fixed: long activity names ran off both edges of the screen.** The value was drawn
+  in a fixed large font and trimmed by character count; it now measures the text and
+  steps the font down until it fits.
 
 ## Review notes for Garmin
 

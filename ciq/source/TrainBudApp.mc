@@ -31,14 +31,14 @@ class TrainBudApp extends Application.AppBase {
     // Stamped into pairing telemetry so the server log names the exact binary
     // that is running. Guessing which build the simulator had loaded wasted
     // several cycles.
-    const BUILD_ID = "b3-poll-params";
+    const BUILD_ID = "1.3.0-today-card";
 
     // Console tracing. The simulator's CIQ_LOG.YML records crashes only, but
     // System.println goes to the monkeydo console, which nobody had been
     // reading — a day was spent inferring control flow from server traffic that
     // this would have shown directly. Flip to false for the store build; see
     // the debug checklist in ciq/STORE-LISTING.md.
-    const DEBUG_LOG = true;
+    const DEBUG_LOG = false;
 
     // Sent on every request. The ngrok free tier answers any GET whose
     // User-Agent looks like a browser with an HTML interstitial under a 200,
@@ -145,7 +145,15 @@ class TrainBudApp extends Application.AppBase {
     function getAskMenuIndex()    as Number             { return _askMenuIndex; }
 
     function setStatus(status as String) as Void  { _status = status; }
-    function setSummary(data as Dictionary or Null) as Void { _summary = data; }
+    function setSummary(data as Dictionary or Null) as Void {
+        _summary = data;
+
+        // A new summary can carry fewer prompts than the last one, which would
+        // leave the menu cursor pointing past the end of the array.
+        if (_askMenuIndex >= getPromptCount()) {
+            _askMenuIndex = 0;
+        }
+    }
     function setUpdatedAt(v as String or Null) as Void { _updatedAt = v; }
     function setCachedAt(v as Number or Null) as Void  { _cachedAt = v; }
 
@@ -170,11 +178,12 @@ class TrainBudApp extends Application.AppBase {
     }
 
     function nextAskMenuItem() as Void {
-        _askMenuIndex = (_askMenuIndex + 1) % PROMPT_COUNT;
+        _askMenuIndex = (_askMenuIndex + 1) % getPromptCount();
     }
 
     function prevAskMenuItem() as Void {
-        _askMenuIndex = (_askMenuIndex + PROMPT_COUNT - 1) % PROMPT_COUNT;
+        var count = getPromptCount();
+        _askMenuIndex = (_askMenuIndex + count - 1) % count;
     }
 
     // -------------------------------------------------------------------------
@@ -554,7 +563,42 @@ class TrainBudApp extends Application.AppBase {
     // Prompt flow
     // -------------------------------------------------------------------------
 
+    // The prompts the server generated from today's findings, if it sent any.
+    //
+    // Returns null rather than an empty array so callers fall back cleanly:
+    // a watch talking to an older server, or one rendering a cached summary
+    // from before this field existed, still gets the built-in five.
+    private function getServerPrompts() as Array or Null {
+        if (_summary == null) { return null; }
+
+        var prompts = _summary.get("prompts");
+        if (prompts == null || !(prompts instanceof Array)) { return null; }
+        if ((prompts as Array).size() == 0) { return null; }
+
+        return prompts as Array;
+    }
+
+    // How many entries the Ask menu has. The server sends five, but reading the
+    // length rather than assuming it means a short list cannot walk off the end
+    // of the array.
+    function getPromptCount() as Number {
+        var prompts = getServerPrompts();
+        if (prompts == null) { return PROMPT_COUNT; }
+
+        var size = prompts.size();
+        return size < PROMPT_COUNT ? size : PROMPT_COUNT;
+    }
+
     function getPromptText(index as Number) as String {
+        var prompts = getServerPrompts();
+        if (prompts != null && index >= 0 && index < prompts.size()) {
+            var text = prompts[index];
+            if (text instanceof String) { return text as String; }
+        }
+
+        // The built-in five. They read the same on an app with no memory at
+        // all, which is exactly why the server generates better ones -- but
+        // they are the right thing to show when it has not.
         if (index == 0) { return WatchUi.loadResource(Rez.Strings.AskPrompt1) as String; }
         if (index == 1) { return WatchUi.loadResource(Rez.Strings.AskPrompt2) as String; }
         if (index == 2) { return WatchUi.loadResource(Rez.Strings.AskPrompt3) as String; }

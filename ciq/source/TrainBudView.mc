@@ -140,7 +140,7 @@ class TrainBudView extends WatchUi.View {
             Graphics.TEXT_JUSTIFY_CENTER);
 
         var idx    = app.getAskMenuIndex();
-        var count  = app.PROMPT_COUNT;
+        var count  = app.getPromptCount();
 
         // Draw prev/next prompts faded, current highlighted
         var prompts = new [count] as Array<String>;
@@ -363,6 +363,7 @@ class TrainBudView extends WatchUi.View {
         summary as Dictionary or Null,
         roundScreen as Boolean
     ) as Void {
+        if (cardIndex == Cards.TODAY)      { drawTodayCard(dc, summary); return; }
         if (cardIndex == Cards.OVERVIEW)   { drawOverviewCard(dc, summary); return; }
         if (cardIndex == Cards.RECOVERY)   { drawRecoveryCard(dc, summary, roundScreen); return; }
         if (cardIndex == Cards.AI_INSIGHT) { drawAiInsightCard(dc, summary); return; }
@@ -385,8 +386,7 @@ class TrainBudView extends WatchUi.View {
         dc.drawText(dc.getWidth() / 2, 28, Graphics.FONT_SMALL, title, Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(valueColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2 - 8, Graphics.FONT_NUMBER_HOT,
-            value, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        drawFittedValue(dc, dc.getWidth() / 2, dc.getHeight() / 2 - 8, value);
 
         // The subtitle and the footnote were 26 pixels apart with a FONT_TINY
         // line between them, so on the Activity card "1h 23m . 0 km . 114 bpm"
@@ -409,6 +409,137 @@ class TrainBudView extends WatchUi.View {
             dc.drawText(dc.getWidth() / 2, footnoteY, Graphics.FONT_XTINY,
                 footnote, Graphics.TEXT_JUSTIFY_CENTER);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Today card
+    //
+    // The one screen Connect cannot draw. Every other card in this app is a
+    // number Garmin already shows on the same wrist; this one says what stands
+    // out about those numbers, measured against this user's own baseline.
+    //
+    // Three states, and the difference between the last two is the point:
+    // "nothing stands out" is a conclusion, "still gathering" is an admission.
+    // Rendering an empty findings list as the first would tell a user with a
+    // four-day-old watch that everything is fine, which the app cannot know.
+    // -------------------------------------------------------------------------
+
+    private function drawTodayCard(dc as Dc, summary as Dictionary or Null) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, 24, Graphics.FONT_SMALL,
+            WatchUi.loadResource(Rez.Strings.CardToday) as String,
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        if (summary == null) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.NoData) as String, "");
+            return;
+        }
+
+        // A summary cached before this field existed has no coverage at all.
+        // Treated as not-ready, which is the honest reading: we do not know.
+        var coverage = summary.get("coverage");
+        var ready = false;
+        var days = 0;
+        if (coverage != null && coverage instanceof Dictionary) {
+            var cd = coverage as Dictionary;
+            var readyValue = cd.get("ready");
+            var daysValue  = cd.get("days");
+            ready = (readyValue != null && readyValue instanceof Boolean) ? readyValue as Boolean : false;
+            days  = (daysValue != null && daysValue instanceof Number) ? daysValue as Number : 0;
+        }
+
+        if (!ready) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.TodayGathering) as String,
+                days.toString() + " " + (WatchUi.loadResource(Rez.Strings.TodayGatheringDays) as String));
+            return;
+        }
+
+        var findings = summary.get("findings");
+        var list = (findings != null && findings instanceof Array) ? findings as Array : ([] as Array);
+
+        if (list.size() == 0) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.TodayNothing) as String,
+                WatchUi.loadResource(Rez.Strings.TodayNothingHint) as String);
+            return;
+        }
+
+        drawFindings(dc, cx, cy, list);
+    }
+
+    private function drawTodayMessage(
+        dc as Dc,
+        cx as Number,
+        cy as Number,
+        title as String,
+        hint as String
+    ) as Void {
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, cy - 8, Graphics.FONT_SMALL, title,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        if (hint.length() > 0) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, cy + 18, Graphics.FONT_XTINY, hint,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
+    }
+
+    // At most two. A third would not fit at a legible size, and the server
+    // already sorts them worst-first, so the two shown are the two that matter.
+    private function drawFindings(dc as Dc, cx as Number, cy as Number, list as Array) as Void {
+        var shown = list.size() < 2 ? list.size() : 2;
+        var lines = [] as Array<String>;
+        var colors = [] as Array<Number>;
+
+        for (var i = 0; i < shown; i += 1) {
+            var item = list[i];
+            if (!(item instanceof Dictionary)) { continue; }
+
+            var entry = item as Dictionary;
+            var headline = entry.get("headline");
+            if (headline == null || !(headline instanceof String)) { continue; }
+
+            var color = severityColor(entry.get("severity"));
+            var wrapped = wrapText(headline as String, 24);
+
+            for (var j = 0; j < wrapped.size(); j += 1) {
+                lines.add(wrapped[j] as String);
+                colors.add(color);
+            }
+
+            // Blank spacer between findings, so two of them do not read as one.
+            if (i < shown - 1) {
+                lines.add("");
+                colors.add(Graphics.COLOR_BLACK);
+            }
+        }
+
+        var lineH = dc.getFontHeight(Graphics.FONT_XTINY);
+        var startY = cy - ((lines.size() - 1) * lineH) / 2;
+
+        for (var i = 0; i < lines.size(); i += 1) {
+            var text = lines[i] as String;
+            if (text.length() == 0) { continue; }
+
+            dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, startY + i * lineH, Graphics.FONT_XTINY, text,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
+    }
+
+    private function severityColor(severity as Object or Null) as Number {
+        if (severity != null && severity instanceof String) {
+            var name = severity as String;
+            if (name.equals("warn"))   { return Graphics.COLOR_RED; }
+            if (name.equals("notice")) { return Graphics.COLOR_YELLOW; }
+        }
+        return Graphics.COLOR_LT_GRAY;
     }
 
     // -------------------------------------------------------------------------
@@ -778,6 +909,56 @@ class TrainBudView extends WatchUi.View {
     private function truncate(text as String, maxLen as Number) as String {
         if (text.length() <= maxLen) { return text; }
         return text.substring(0, maxLen - 3) + "...";
+    }
+
+    // The card value is drawn in FONT_NUMBER_HOT, which is sized for two or
+    // three digits. On the Activity card the value is the workout's name, and
+    // "Strength" already ran off both edges of a 390 px round screen -- the old
+    // guard was truncate(name, 14), which counts characters, and characters are
+    // not pixels. Step down through the fonts until one fits, and only then
+    // trim, measuring as we go.
+    private function drawFittedValue(dc as Dc, cx as Number, cy as Number, text as String) as Void {
+        var maxWidth = (dc.getWidth() * 85) / 100;
+        var fonts = [
+            Graphics.FONT_NUMBER_HOT,
+            Graphics.FONT_NUMBER_MEDIUM,
+            Graphics.FONT_LARGE,
+            Graphics.FONT_MEDIUM,
+            Graphics.FONT_SMALL
+        ] as Array<Graphics.FontDefinition>;
+
+        for (var i = 0; i < fonts.size(); i += 1) {
+            var font = fonts[i];
+            if (dc.getTextWidthInPixels(text, font) <= maxWidth) {
+                dc.drawText(cx, cy, font, text,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+                return;
+            }
+        }
+
+        // Longer than the smallest font can render: trim by measured width.
+        var smallest = fonts[fonts.size() - 1];
+        dc.drawText(cx, cy, smallest, fitToWidth(dc, text, smallest, maxWidth),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    private function fitToWidth(
+        dc as Dc,
+        text as String,
+        font as Graphics.FontDefinition,
+        maxWidth as Number
+    ) as String {
+        if (dc.getTextWidthInPixels(text, font) <= maxWidth) { return text; }
+
+        var trimmed = text;
+        while (trimmed.length() > 1) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+            if (dc.getTextWidthInPixels(trimmed + "...", font) <= maxWidth) {
+                return trimmed + "...";
+            }
+        }
+
+        return trimmed;
     }
 
     private function wrapText(text as String, maxChars as Number) as Array<String> {

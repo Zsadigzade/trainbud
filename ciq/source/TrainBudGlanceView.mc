@@ -54,6 +54,23 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             Graphics.TEXT_JUSTIFY_LEFT
         );
 
+        // The watch is a widget with no background service, so nothing here can
+        // be pushed to -- a flag is only ever seen because the user happened to
+        // scroll past. That makes this strip the only proactive surface the app
+        // has, so when something stands out it takes the space the numbers
+        // would have used. The numbers are one tap away; the flag is not.
+        var flag = readTopFinding();
+        if (flag != null) {
+            dc.setColor(flag.get(:color) as Number, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(
+                0, height - 2,
+                Graphics.FONT_GLANCE,
+                fitToWidth(dc, flag.get(:text) as String, Graphics.FONT_GLANCE, width),
+                Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+            return;
+        }
+
         var overview = readOverview();
         if (overview == null) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
@@ -123,6 +140,67 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             Graphics.FONT_GLANCE_NUMBER, value,
             Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
         );
+    }
+
+    // The worst finding from the cached summary, if the server sent any and
+    // there was enough history for them to mean anything. Null otherwise, which
+    // is what falls the glance back to the numbers.
+    private function readTopFinding() as Dictionary or Null {
+        var stored = Application.Storage.getValue(STORAGE_SUMMARY_KEY);
+        if (stored == null || !(stored instanceof Dictionary)) { return null; }
+
+        var summary = stored as Dictionary;
+
+        var coverage = summary.get("coverage");
+        if (coverage == null || !(coverage instanceof Dictionary)) { return null; }
+        var ready = (coverage as Dictionary).get("ready");
+        if (ready == null || !(ready instanceof Boolean) || !(ready as Boolean)) { return null; }
+
+        var findings = summary.get("findings");
+        if (findings == null || !(findings instanceof Array)) { return null; }
+        if ((findings as Array).size() == 0) { return null; }
+
+        var first = (findings as Array)[0];
+        if (!(first instanceof Dictionary)) { return null; }
+
+        var headline = (first as Dictionary).get("headline");
+        if (headline == null || !(headline instanceof String)) { return null; }
+
+        return {
+            :text  => headline as String,
+            :color => severityColor((first as Dictionary).get("severity"))
+        };
+    }
+
+    // Kept in sync with TrainBudView.severityColor.
+    private function severityColor(severity as Object or Null) as Number {
+        if (severity != null && severity instanceof String) {
+            var name = severity as String;
+            if (name.equals("warn"))   { return Graphics.COLOR_RED; }
+            if (name.equals("notice")) { return Graphics.COLOR_YELLOW; }
+        }
+        return Graphics.COLOR_LT_GRAY;
+    }
+
+    // The glance strip is a few characters wide and headlines are sentences, so
+    // this trims by measured width rather than by character count.
+    private function fitToWidth(
+        dc as Dc,
+        text as String,
+        font as Graphics.FontDefinition,
+        maxWidth as Number
+    ) as String {
+        if (dc.getTextWidthInPixels(text, font) <= maxWidth) { return text; }
+
+        var trimmed = text;
+        while (trimmed.length() > 1) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+            if (dc.getTextWidthInPixels(trimmed + "...", font) <= maxWidth) {
+                return trimmed + "...";
+            }
+        }
+
+        return trimmed;
     }
 
     // Reads the cached daily_overview written by the main view's last fetch.
