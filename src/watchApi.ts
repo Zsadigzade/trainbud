@@ -1,7 +1,26 @@
 import { executeTool } from "./tools/index.js";
 import { generateDailyInsight } from "./promptApi.js";
+import type { RecoveryStatusResult } from "./garmin/types.js";
+import type {
+  HeartRatePayload,
+  LatestActivityPayload,
+  RecoveryPayload,
+  SleepPayload,
+  StressPayload,
+  Vo2MaxPayload,
+} from "./tools/payloads.js";
 
 // SECTION: Watch API
+//
+// The watch reads this JSON and nothing else, so the shapes below are a
+// contract with a build that is already on someone's wrist: fields may be
+// added, never renamed or removed.
+//
+// These used to be reconstructed by matching regexes against the prose each
+// tool printed -- `Recovery score:\s*(null|\d+)\/100`, `(\d+)h`, `resting \d+
+// bpm, max (\d+) bpm`. That made every renderer's wording load-bearing for the
+// watch while looking like formatting, and none of it was covered by a test.
+// The tools now return typed payloads and these are plain mappers over them.
 
 export interface WatchRecovery {
   score: number;
@@ -56,147 +75,65 @@ export interface WatchSummary {
   updated_at: string;
 }
 
-function isNoData(text: string): boolean {
-  return /^No .+ found/i.test(text.trim());
+// SECTION: Payload to card mappers
+
+const RECOVERY_LABELS: Record<RecoveryStatusResult["status"], string> = {
+  recovered: "Ready",
+  good: "Light",
+  fatigued: "Rest",
+};
+
+export function toWatchRecovery(payload: RecoveryPayload | null): WatchRecovery | null {
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    score: payload.recovery.score,
+    label: RECOVERY_LABELS[payload.recovery.status],
+  };
 }
 
-function averageComponentScores(text: string): number | null {
-  const components = [...text.matchAll(/- (?:HRV|Sleep|Stress|Resting HR):\s*(\d+)/gi)];
-  if (components.length === 0) {
+export function toWatchSleep(payload: SleepPayload | null): WatchSleep | null {
+  const night = payload?.nights[0];
+  if (!payload || !night) {
     return null;
   }
 
-  const total = components.reduce((sum, match) => sum + Number.parseInt(match[1] ?? "", 10), 0);
-  return Math.round(total / components.length);
-}
-
-function parseRecovery(text: string): WatchRecovery | null {
-  if (isNoData(text)) {
-    return null;
-  }
-
-  const headerMatch = text.match(/Recovery score:\s*(null|\d+)\/100\s*(?:\(([^)]+)\))?/i);
-  if (!headerMatch) {
-    return null;
-  }
-
-  const rawScore = headerMatch[1]?.toLowerCase();
-  const status = headerMatch[2]?.trim().toLowerCase() ?? "";
-  const score =
-    rawScore === "null" || !rawScore
-      ? averageComponentScores(text)
-      : Number.parseInt(rawScore, 10);
-
-  if (score === null || !Number.isFinite(score)) {
-    return null;
-  }
-
-  let label = "Moderate";
-  if (status === "recovered") {
-    label = "Ready";
-  } else if (status === "fatigued") {
-    label = "Rest";
-  } else if (status === "good") {
-    label = "Light";
-  }
-
-  return { score, label };
-}
-
-function parseDurationHours(duration: string): number | null {
-  const minutes = parseDurationMinutes(duration);
-  if (minutes === null) {
-    return null;
-  }
-
-  return Math.round((minutes / 60) * 10) / 10;
-}
-
-function parseDurationMinutes(duration: string): number | null {
-  const hourMatch = duration.match(/(\d+)h/);
-  const minuteMatch = duration.match(/(\d+)m/);
-  const secondMatch = duration.match(/(\d+)s/);
-  const hours = hourMatch ? Number.parseInt(hourMatch[1] ?? "", 10) : 0;
-  const minutes = minuteMatch ? Number.parseInt(minuteMatch[1] ?? "", 10) : 0;
-  const seconds = secondMatch ? Number.parseInt(secondMatch[1] ?? "", 10) : 0;
-
-  if (!hourMatch && !minuteMatch && !secondMatch) {
-    return null;
-  }
-
-  return Math.round(hours * 60 + minutes + seconds / 60);
-}
-
-function parseSleep(text: string): WatchSleep | null {
-  if (isNoData(text)) {
-    return null;
-  }
-
-  const avgScoreMatch = text.match(/Average sleep score:\s*(\d+)/i);
-  const nightBlocks = text.split(/\n(?=\d{4}-\d{2}-\d{2}:)/);
-  const latestNight = nightBlocks.length > 1 ? nightBlocks[1] : nightBlocks[0];
-
-  const totalSleepMatch = latestNight?.match(/Total sleep:\s*([^\n]+)/i);
-  const scoreMatch = latestNight?.match(/Score:\s*(\d+)/i);
-
-  const hours = totalSleepMatch ? parseDurationHours(totalSleepMatch[1] ?? "") : null;
-  const score = scoreMatch
-    ? Number.parseInt(scoreMatch[1] ?? "", 10)
-    : avgScoreMatch
-      ? Number.parseInt(avgScoreMatch[1] ?? "", 10)
-      : null;
-
-  if (hours === null && score === null) {
-    return null;
-  }
+  const score = night.sleepScore ?? payload.averageScore;
 
   let label = "Fair";
-  const effectiveScore = score ?? 0;
-  if (effectiveScore >= 80) {
+  if (score !== null && score >= 80) {
     label = "Great";
-  } else if (effectiveScore >= 60) {
+  } else if (score !== null && score >= 60) {
     label = "Good";
-  } else if (effectiveScore > 0 && effectiveScore < 60) {
+  } else if (score !== null && score > 0) {
     label = "Poor";
   }
 
   return {
-    hours: hours ?? 0,
+    hours: Math.round((night.totalSleepSeconds / 3600) * 10) / 10,
     score,
     label,
   };
 }
 
-function parseActivity(text: string): WatchActivity | null {
-  if (isNoData(text)) {
+export function toWatchActivity(payload: LatestActivityPayload | null): WatchActivity | null {
+  const activity = payload?.activity;
+  if (!activity) {
     return null;
   }
-
-  const nameMatch = text.match(/^Activity:\s*(.+)$/m);
-  const dateMatch = text.match(/^Date:\s*(.+)$/m);
-  const distanceKmMatch = text.match(/^Distance:\s*([\d.]+)\s*km/mi);
-  const distanceMMatch = text.match(/^Distance:\s*([\d.]+)\s*m$/mi);
-
-  if (!nameMatch) {
-    return null;
-  }
-
-  let distanceKm: number | null = null;
-  if (distanceKmMatch) {
-    distanceKm = Math.round(Number.parseFloat(distanceKmMatch[1] ?? "") * 100) / 100;
-  } else if (distanceMMatch) {
-    distanceKm = Math.round((Number.parseFloat(distanceMMatch[1] ?? "") / 1000) * 100) / 100;
-  }
-
-  const durationMatch = text.match(/^Duration:\s*([^\n]+)/m);
-  const avgHrMatch = text.match(/^Avg HR:\s*(\d+)\s*bpm/mi);
 
   return {
-    name: nameMatch[1]?.trim() ?? "Activity",
-    distance_km: distanceKm,
-    duration_min: durationMatch ? parseDurationMinutes(durationMatch[1] ?? "") : null,
-    avg_hr: avgHrMatch ? Number.parseInt(avgHrMatch[1] ?? "", 10) : null,
-    date: dateMatch?.[1]?.trim() ?? "",
+    name: activity.name,
+    distance_km:
+      activity.distanceMeters === null
+        ? null
+        : Math.round((activity.distanceMeters / 1000) * 100) / 100,
+    duration_min:
+      activity.durationSeconds === null ? null : Math.round(activity.durationSeconds / 60),
+    avg_hr: activity.averageHeartRate,
+    date: activity.startTimeLocal,
   };
 }
 
@@ -210,114 +147,104 @@ function stressLabel(avg: number): string {
   return "High";
 }
 
-function parseStress(text: string): WatchStress | null {
-  if (isNoData(text)) {
+export function toWatchStress(payload: StressPayload | null): WatchStress | null {
+  if (!payload || payload.averageStress === null) {
     return null;
   }
 
-  const avgMatch = text.match(/Average stress:\s*(\d+)/i);
-  if (!avgMatch) {
-    return null;
-  }
-
-  const avg = Number.parseInt(avgMatch[1] ?? "", 10);
-  return { avg, label: stressLabel(avg) };
+  return { avg: payload.averageStress, label: stressLabel(payload.averageStress) };
 }
 
-function parseVo2Max(text: string): WatchVo2Max | null {
-  if (isNoData(text)) {
+export function toWatchVo2Max(payload: Vo2MaxPayload | null): WatchVo2Max | null {
+  if (!payload || payload.current === null) {
     return null;
   }
 
-  const currentMatch = text.match(/Current VO2 max:\s*([\d.]+)/i);
-  const trendMatch = text.match(/Trend:\s*(\w+)/i);
+  return { value: Math.round(payload.current * 10) / 10, trend: payload.trend };
+}
 
-  if (!currentMatch) {
+export function toWatchHeartRate(payload: HeartRatePayload | null): WatchHeartRate | null {
+  if (!payload || payload.currentResting === null) {
     return null;
   }
+
+  return { resting: payload.currentResting, max: payload.days[0]?.maxHeartRate ?? null };
+}
+
+// SECTION: Summary assembly
+
+export interface WatchSummaryParts {
+  recovery: RecoveryPayload | null;
+  sleep: SleepPayload | null;
+  activity: LatestActivityPayload | null;
+  stress: StressPayload | null;
+  vo2max: Vo2MaxPayload | null;
+  heartRate: HeartRatePayload | null;
+  updatedAt: string;
+}
+
+export function buildWatchSummaryFrom(
+  parts: WatchSummaryParts
+): Omit<WatchSummary, "ai_insight"> {
+  const recovery = toWatchRecovery(parts.recovery);
+  const sleep = toWatchSleep(parts.sleep);
+  const stress = toWatchStress(parts.stress);
+  const vo2max = toWatchVo2Max(parts.vo2max);
 
   return {
-    value: Math.round(Number.parseFloat(currentMatch[1] ?? "") * 10) / 10,
-    trend: trendMatch?.[1]?.trim() ?? "stable",
+    daily_overview: {
+      recovery: recovery?.score ?? null,
+      sleep_h: sleep?.hours ?? null,
+      stress: stress?.avg ?? null,
+      vo2max: vo2max?.value ?? null,
+    },
+    recovery,
+    sleep,
+    activity: toWatchActivity(parts.activity),
+    stress,
+    vo2max,
+    heart_rate: toWatchHeartRate(parts.heartRate),
+    updated_at: parts.updatedAt,
   };
 }
 
-function parseHeartRate(text: string): WatchHeartRate | null {
-  if (isNoData(text)) {
-    return null;
-  }
-
-  const restingMatch = text.match(/Current resting HR:\s*(\d+)\s*bpm/i);
-  if (!restingMatch) {
-    return null;
-  }
-
-  const recentMaxMatch = text.match(/resting \d+ bpm, max (\d+) bpm/i);
-  const max = recentMaxMatch ? Number.parseInt(recentMaxMatch[1] ?? "", 10) : null;
-
-  return {
-    resting: Number.parseInt(restingMatch[1] ?? "", 10),
-    max,
-  };
-}
-
-function buildDailyOverview(
-  recovery: WatchRecovery | null,
-  sleep: WatchSleep | null,
-  stress: WatchStress | null,
-  vo2max: WatchVo2Max | null
-): WatchDailyOverview {
-  return {
-    recovery: recovery?.score ?? null,
-    sleep_h: sleep?.hours ?? null,
-    stress: stress?.avg ?? null,
-    vo2max: vo2max?.value ?? null,
-  };
-}
-
-async function safeExecuteTool(name: string, args: Record<string, unknown>): Promise<string | null> {
+/**
+ * One failing tool must not empty the whole screen -- the watch renders each
+ * card independently and shows "No data" for the ones that are missing.
+ */
+async function payloadOf<T>(name: string, args: Record<string, unknown>): Promise<T | null> {
   try {
     const result = await executeTool(name, args);
-    if (isNoData(result.text)) {
-      return null;
-    }
-    return result.text;
+    return (result.data as T) ?? null;
   } catch {
     return null;
   }
 }
 
 export async function buildWatchSummary(): Promise<WatchSummary> {
-  const [recoveryText, sleepText, activityText, stressText, vo2Text, heartRateText] =
-    await Promise.all([
-      safeExecuteTool("get_recovery_status", {}),
-      safeExecuteTool("get_sleep_data", { nights: 1 }),
-      safeExecuteTool("get_latest_activity", {}),
-      safeExecuteTool("get_stress_levels", { days: 7 }),
-      safeExecuteTool("get_vo2_max_trends", { days: 30 }),
-      safeExecuteTool("get_heart_rate_trends", { days: 7 }),
-    ]);
+  const [recovery, sleep, activity, stress, vo2max, heartRate] = await Promise.all([
+    payloadOf<RecoveryPayload>("get_recovery_status", {}),
+    payloadOf<SleepPayload>("get_sleep_data", { nights: 1 }),
+    payloadOf<LatestActivityPayload>("get_latest_activity", {}),
+    payloadOf<StressPayload>("get_stress_levels", { days: 7 }),
+    payloadOf<Vo2MaxPayload>("get_vo2_max_trends", { days: 30 }),
+    payloadOf<HeartRatePayload>("get_heart_rate_trends", { days: 7 }),
+  ]);
 
-  const recovery = recoveryText ? parseRecovery(recoveryText) : null;
-  const sleep = sleepText ? parseSleep(sleepText) : null;
-  const activity = activityText ? parseActivity(activityText) : null;
-  const stress = stressText ? parseStress(stressText) : null;
-  const vo2max = vo2Text ? parseVo2Max(vo2Text) : null;
-  const heartRate = heartRateText ? parseHeartRate(heartRateText) : null;
-
-  const partialSummary = {
-    daily_overview: buildDailyOverview(recovery, sleep, stress, vo2max),
-    recovery,
-    sleep,
-    activity,
-    stress,
-    vo2max,
-    heart_rate: heartRate,
-    ai_insight: null as string | null,
-    updated_at: new Date().toISOString(),
+  const summary: WatchSummary = {
+    ...buildWatchSummaryFrom({
+      recovery,
+      sleep,
+      activity,
+      stress,
+      vo2max,
+      heartRate,
+      updatedAt: new Date().toISOString(),
+    }),
+    ai_insight: null,
   };
 
-  partialSummary.ai_insight = await generateDailyInsight(partialSummary);
+  summary.ai_insight = await generateDailyInsight(summary);
 
-  return partialSummary;
+  return summary;
 }

@@ -8,7 +8,7 @@ import { stressToolDefinitions } from "./stress.js";
 import { trainingInsightsToolDefinitions } from "./trainingInsights.js";
 import { vo2MaxToolDefinitions } from "./vo2Max.js";
 import type { ToolDefinition } from "./types.js";
-import type { ToolTextResult } from "../garmin/types.js";
+import type { ToolResult } from "../garmin/types.js";
 import { parseIsoDate } from "../utils/helpers.js";
 
 // SECTION: Tool Registry
@@ -35,7 +35,7 @@ export function getToolByName(name: string): ToolDefinition | undefined {
 export async function executeTool(
   name: string,
   args: Record<string, unknown> | undefined
-): Promise<ToolTextResult> {
+): Promise<ToolResult<unknown>> {
   const tool = getToolByName(name);
 
   if (!tool) {
