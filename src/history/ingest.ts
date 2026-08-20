@@ -8,6 +8,7 @@ import {
 } from "../garmin/daily.js";
 import type { GarminConnectInstance } from "../garmin/garminConnect.js";
 import { logger } from "../utils/logger.js";
+import { writeFixture } from "./capture.js";
 import {
   appendRawPayload,
   listIngestedDates,
@@ -47,6 +48,8 @@ export interface IngestOptions {
   now?: DateTime;
   signal?: AbortSignal;
   onProgress?: (progress: IngestProgress) => void;
+  /** Write each redacted response here, for use as a test fixture. */
+  captureDir?: string;
 }
 
 export interface IngestProgress {
@@ -273,6 +276,10 @@ export async function runIngest(
 
       appendRawPayload(unit.date, unit.source, raw, stampedAt);
       putMetrics(unit.date, metrics, stampedAt);
+
+      if (options.captureDir) {
+        writeFixture(options.captureDir, unit.source, unit.date, raw);
+      }
 
       outcome = metrics.length > 0 ? "data" : "empty";
       result.fetched += 1;

@@ -129,6 +129,7 @@ async function runBackfill(options: {
   days?: number;
   delayMs?: number;
   source?: string[];
+  capture?: string;
 }): Promise<void> {
   assertGarminCredentials();
 
@@ -150,6 +151,9 @@ async function runBackfill(options: {
     `Backfilling ${days} days from ${sources.length} sources, ${delayMs}ms apart.`
   );
   console.log("Safe to interrupt — every day is checkpointed and the next run resumes.");
+  if (options.capture) {
+    console.log(`Capturing redacted responses to ${options.capture} — read them before committing.`);
+  }
   console.log("");
 
   const result = await withGarminClient(async (client) =>
@@ -157,6 +161,7 @@ async function runBackfill(options: {
       days,
       delayMs,
       sources,
+      captureDir: options.capture,
       onProgress: (progress) => {
         // One line per day so an hour-long run is legible and a stall is
         // obvious. This is the only feedback the user gets while it walks a
@@ -304,7 +309,8 @@ export function createCliProgram(): Command {
       "Limit to one source (repeatable)",
       (value: string, previous: string[] = []) => [...previous, value]
     )
-    .action(async (options: { days?: number; delayMs?: number; source?: string[] }) => {
+    .option("--capture <dir>", "Also write each redacted response there, as a test fixture")
+    .action(async (options: { days?: number; delayMs?: number; source?: string[]; capture?: string }) => {
       try {
         await runBackfill(options);
       } catch (error) {
