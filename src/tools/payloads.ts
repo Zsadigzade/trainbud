@@ -1,4 +1,9 @@
-import type { ActivitySummary, SleepNightSummary } from "../garmin/types.js";
+import type { DailyStressSummary, Vo2MaxEntry } from "../garmin/rawApi.js";
+import type {
+  ActivitySummary,
+  HeartRateDaySummary,
+  SleepNightSummary,
+} from "../garmin/types.js";
 
 // SECTION: Structured tool payloads
 //
@@ -24,4 +29,30 @@ export interface ActivitiesRangePayload {
   endDate: string;
   truncated: boolean;
   activities: ActivitySummary[];
+}
+
+export interface HeartRatePayload {
+  requestedDays: number;
+  recordedDays: number;
+  currentResting: number | null;
+  averageResting: number | null;
+  trend: string;
+  days: HeartRateDaySummary[];
+}
+
+export interface StressPayload {
+  requestedDays: number;
+  recordedDays: number;
+  averageStress: number | null;
+  trend: string;
+  days: DailyStressSummary[];
+}
+
+export interface Vo2MaxPayload {
+  requestedDays: number;
+  recordedDays: number;
+  current: number | null;
+  oldest: number | null;
+  trend: string;
+  entries: Vo2MaxEntry[];
 }

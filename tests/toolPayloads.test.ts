@@ -6,6 +6,9 @@ import {
   renderActivitiesRangeText,
   renderLatestActivityText,
 } from "../src/tools/activities.js";
+import { buildHeartRatePayload, renderHeartRateText } from "../src/tools/heartRate.js";
+import { buildStressPayload, renderStressText } from "../src/tools/stress.js";
+import { buildVo2MaxPayload, renderVo2MaxText } from "../src/tools/vo2Max.js";
 import type { ActivitySummary, SleepNightSummary } from "../src/garmin/types.js";
 
 function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
@@ -131,5 +134,88 @@ describe("activity payloads", () => {
       buildActivitiesRangePayload([activity()], "2026-08-01", "2026-08-19", false)
     );
     assert.doesNotMatch(complete, /500 activities/);
+  });
+});
+
+describe("heart rate payload", () => {
+  it("takes the current resting HR from the newest day", () => {
+    const payload = buildHeartRatePayload(
+      [
+        { date: "2026-08-19", restingHeartRate: 52, maxHeartRate: 171, minHeartRate: 46, averageHeartRate: 68 },
+        { date: "2026-08-18", restingHeartRate: 50, maxHeartRate: 165, minHeartRate: 45, averageHeartRate: 66 },
+      ],
+      30
+    );
+
+    assert.equal(payload.currentResting, 52);
+    assert.equal(payload.averageResting, 51);
+    assert.equal(payload.recordedDays, 2);
+  });
+
+  it("renders the empty case with the requested day count", () => {
+    assert.equal(
+      renderHeartRateText(buildHeartRatePayload([], 30)),
+      "No heart rate data found for the last 30 days."
+    );
+  });
+
+  // The old renderer called Math.round(average([])) here and printed
+  // "Average resting HR: NaN bpm".
+  it("survives days that recorded no resting HR", () => {
+    const payload = buildHeartRatePayload(
+      [{ date: "2026-08-19", restingHeartRate: null, maxHeartRate: null, minHeartRate: null, averageHeartRate: 70 }],
+      7
+    );
+
+    assert.equal(payload.currentResting, null);
+    assert.equal(payload.averageResting, null);
+    assert.match(renderHeartRateText(payload), /^Current resting HR: n\/a bpm$/m);
+    assert.match(renderHeartRateText(payload), /^Average resting HR: n\/a bpm$/m);
+  });
+});
+
+describe("stress payload", () => {
+  it("averages only measured days", () => {
+    const payload = buildStressPayload(
+      [
+        { date: "2026-08-19", averageStress: 34, maxStress: 88, restStress: null, stressDurationSeconds: null },
+        { date: "2026-08-18", averageStress: null, maxStress: null, restStress: null, stressDurationSeconds: null },
+        { date: "2026-08-17", averageStress: 30, maxStress: 80, restStress: null, stressDurationSeconds: null },
+      ],
+      7
+    );
+
+    assert.equal(payload.averageStress, 32);
+    assert.equal(payload.recordedDays, 3);
+  });
+
+  it("renders the empty case", () => {
+    assert.equal(
+      renderStressText(buildStressPayload([], 7)),
+      "No stress data found for the last 7 days."
+    );
+  });
+});
+
+describe("vo2 max payload", () => {
+  it("reports current and oldest across the range", () => {
+    const payload = buildVo2MaxPayload(
+      [
+        { date: "2026-08-19", vo2Max: 46, vo2MaxCycling: null },
+        { date: "2026-07-19", vo2Max: 44, vo2MaxCycling: null },
+      ],
+      30
+    );
+
+    assert.equal(payload.current, 46);
+    assert.equal(payload.oldest, 44);
+    assert.equal(payload.recordedDays, 2);
+  });
+
+  it("renders the empty case", () => {
+    assert.equal(
+      renderVo2MaxText(buildVo2MaxPayload([], 30)),
+      "No VO2 max data found for the last 30 days."
+    );
   });
 });

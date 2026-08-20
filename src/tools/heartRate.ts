@@ -1,7 +1,8 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import type { HeartRateDaySummary, ToolTextResult } from "../garmin/types.js";
+import type { HeartRateDaySummary, ToolResult } from "../garmin/types.js";
+import type { HeartRatePayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
 import {
@@ -52,7 +53,50 @@ async function fetchHeartRateDays(days: number): Promise<HeartRateDaySummary[]> 
 
 // SECTION: Tool Handler
 
-export async function getHeartRateTrends(input: { days?: number }): Promise<ToolTextResult> {
+export function buildHeartRatePayload(
+  days: HeartRateDaySummary[],
+  requestedDays: number
+): HeartRatePayload {
+  const restingValues = days
+    .map((day) => day.restingHeartRate)
+    .filter((value): value is number => value !== null);
+
+  return {
+    requestedDays,
+    recordedDays: days.length,
+    currentResting: restingValues[0] ?? null,
+    // A day can be recorded with no resting reading at all. This was
+    // Math.round(average([])) before, which printed "Average resting HR: NaN
+    // bpm" on any range where nothing measured.
+    averageResting: restingValues.length > 0 ? Math.round(average(restingValues)) : null,
+    trend: calculateTrend(restingValues, true),
+    days,
+  };
+}
+
+export function renderHeartRateText(payload: HeartRatePayload): string {
+  if (payload.recordedDays === 0) {
+    return `No heart rate data found for the last ${payload.requestedDays} days.`;
+  }
+
+  const recentLines = payload.days.slice(0, 7).map((day) => {
+    return `${day.date}: resting ${day.restingHeartRate ?? "n/a"} bpm, max ${day.maxHeartRate ?? "n/a"} bpm`;
+  });
+
+  return [
+    `Heart rate trends over ${payload.recordedDays} days:`,
+    `Current resting HR: ${payload.currentResting ?? "n/a"} bpm`,
+    `Average resting HR: ${payload.averageResting ?? "n/a"} bpm`,
+    `Trend: ${payload.trend}`,
+    "",
+    "Recent days:",
+    ...recentLines,
+  ].join("\n");
+}
+
+export async function getHeartRateTrends(
+  input: { days?: number }
+): Promise<ToolResult<HeartRatePayload>> {
   const days = input.days ?? 30;
   const cacheKey = buildToolCacheKey("get_heart_rate_trends", { days });
 
@@ -60,38 +104,12 @@ export async function getHeartRateTrends(input: { days?: number }): Promise<Tool
     return fetchHeartRateDays(days);
   });
 
-  if (summaries.length === 0) {
-    return {
-      type: "text",
-      text: `No heart rate data found for the last ${days} days.`,
-    };
-  }
-
-  const restingValues = summaries
-    .map((summary) => summary.restingHeartRate)
-    .filter((value): value is number => value !== null);
-
-  const trend = calculateTrend(restingValues, true);
-  const currentResting = restingValues[0] ?? null;
-  const baselineResting = average(restingValues);
-
-  const recentLines = summaries.slice(0, 7).map((summary) => {
-    return `${summary.date}: resting ${summary.restingHeartRate ?? "n/a"} bpm, max ${summary.maxHeartRate ?? "n/a"} bpm`;
-  });
-
-  const text = [
-    `Heart rate trends over ${summaries.length} days:`,
-    `Current resting HR: ${currentResting ?? "n/a"} bpm`,
-    `Average resting HR: ${Math.round(baselineResting)} bpm`,
-    `Trend: ${trend}`,
-    "",
-    "Recent days:",
-    ...recentLines,
-  ].join("\n");
+  const payload = buildHeartRatePayload(summaries, days);
 
   return {
     type: "text",
-    text,
+    text: renderHeartRateText(payload),
+    data: payload,
   };
 }
 
