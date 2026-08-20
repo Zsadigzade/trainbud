@@ -36,6 +36,7 @@ const EMPTY_PARTS = {
   stress: null,
   vo2max: null,
   heartRate: null,
+  context: [],
   updatedAt: "2026-08-19T20:00:00.000Z",
 };
 
@@ -138,5 +139,29 @@ describe("the context the model is given", () => {
     );
 
     assert.match(text, /nothing on record/i);
+  });
+});
+
+describe("prompts on the watch payload", () => {
+  it("ships five prompts drawn from what fired", () => {
+    const summary = buildWatchSummaryFrom({
+      ...EMPTY_PARTS,
+      findings: [finding()],
+      coverage: { days: 73, ready: true },
+    });
+
+    assert.equal(summary.prompts.length, 5);
+    assert.match(summary.prompts[0] ?? "", /resting HR/i);
+  });
+
+  it("ships cold-start prompts before there is enough history", () => {
+    const summary = buildWatchSummaryFrom({
+      ...EMPTY_PARTS,
+      findings: [],
+      coverage: { days: 2, ready: false },
+    });
+
+    assert.equal(summary.prompts.length, 5);
+    assert.match(summary.prompts[0] ?? "", /how much data/i);
   });
 });

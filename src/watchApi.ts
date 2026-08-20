@@ -1,6 +1,9 @@
 import { executeTool } from "./tools/index.js";
 import { generateDailyInsight } from "./promptApi.js";
+import { DateTime } from "luxon";
 import { runDetectors } from "./detect/index.js";
+import { buildPromptSuggestions } from "./promptSuggestions.js";
+import { activeContext, type ContextEntry } from "./history/context.js";
 import type { Finding } from "./detect/findings.js";
 import type { RecoveryStatusResult } from "./garmin/types.js";
 import type {
@@ -91,6 +94,12 @@ export interface WatchSummary {
   heart_rate: WatchHeartRate | null;
   findings: WatchFinding[];
   coverage: WatchCoverage;
+  /**
+   * The five Ask prompts for today. The watch reads these instead of the
+   * hardcoded strings in strings.xml, so the menu asks about what actually
+   * happened rather than the same five questions every day.
+   */
+  prompts: string[];
   ai_insight: string | null;
   updated_at: string;
 }
@@ -210,6 +219,7 @@ export interface WatchSummaryParts {
   heartRate: HeartRatePayload | null;
   findings: Finding[];
   coverage: WatchCoverage;
+  context: ContextEntry[];
   updatedAt: string;
 }
 
@@ -236,6 +246,10 @@ export function buildWatchSummaryFrom(
     heart_rate: toWatchHeartRate(parts.heartRate),
     findings: toWatchFindings(parts.findings),
     coverage: parts.coverage,
+    prompts: buildPromptSuggestions(
+      { findings: parts.findings, coverage: parts.coverage },
+      parts.context
+    ),
     updated_at: parts.updatedAt,
   };
 }
@@ -277,6 +291,7 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       heartRate,
       findings: detection.findings,
       coverage: detection.coverage,
+      context: activeContext(DateTime.local().toISODate() ?? ""),
       updatedAt: new Date().toISOString(),
     }),
     ai_insight: null,

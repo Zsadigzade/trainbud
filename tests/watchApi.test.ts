@@ -176,6 +176,7 @@ describe("watch mappers", () => {
       heartRate: null,
       findings: [],
       coverage: { days: 0, ready: false },
+      context: [],
       updatedAt: "2026-08-19T20:00:00.000Z",
     });
 
