@@ -1,15 +1,12 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
+import { fetchBodyCompositionDay } from "../garmin/daily.js";
 import type { BodyCompositionEntry, ToolResult } from "../garmin/types.js";
 import type { BodyCompositionPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
-import {
-  calculateTrend,
-  formatIsoDate,
-  getDateRange,
-} from "../utils/helpers.js";
+import { calculateTrend, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Body Composition Mapping
 
@@ -18,14 +15,7 @@ async function fetchBodyComposition(days: number): Promise<BodyCompositionEntry[
 
   const entries = await withGarminClient(async (client) => {
     const batches = await mapInBatches(dates, async (date) => {
-      const weightData = await client.getDailyWeightData(date);
-      return weightData.dateWeightList.map((entry) => ({
-        date: entry.calendarDate || formatIsoDate(date),
-        weightKg: entry.weight ?? null,
-        bodyFatPercent: entry.bodyFat ?? null,
-        muscleMassKg: entry.muscleMass ?? null,
-        bmi: entry.bmi ?? null,
-      }));
+      return (await fetchBodyCompositionDay(client, date)).mapped ?? [];
     });
 
     return batches.flat();

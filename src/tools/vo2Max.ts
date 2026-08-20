@@ -1,7 +1,8 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import { fetchMaxMetrics, mapMaxMetrics, type Vo2MaxEntry } from "../garmin/rawApi.js";
+import { fetchVo2MaxDay } from "../garmin/daily.js";
+import type { Vo2MaxEntry } from "../garmin/rawApi.js";
 import type { ToolResult } from "../garmin/types.js";
 import type { Vo2MaxPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
@@ -14,8 +15,7 @@ async function fetchVo2MaxDays(days: number): Promise<Vo2MaxEntry[]> {
   return withGarminClient(async (client) => {
     const entries = await mapInBatches(dates, async (date) => {
       try {
-        const payload = await fetchMaxMetrics(client, date);
-        return mapMaxMetrics(date, payload);
+        return (await fetchVo2MaxDay(client, date)).mapped;
       } catch {
         return null;
       }

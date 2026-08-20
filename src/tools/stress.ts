@@ -1,11 +1,8 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import {
-  fetchDailyStress,
-  mapDailyStress,
-  type DailyStressSummary,
-} from "../garmin/rawApi.js";
+import { fetchStressDay } from "../garmin/daily.js";
+import type { DailyStressSummary } from "../garmin/rawApi.js";
 import type { ToolResult } from "../garmin/types.js";
 import type { StressPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
@@ -18,8 +15,7 @@ async function fetchStressDays(days: number): Promise<DailyStressSummary[]> {
   return withGarminClient(async (client) => {
     const summaries = await mapInBatches(dates, async (date) => {
       try {
-        const payload = await fetchDailyStress(client, date);
-        return mapDailyStress(date, payload);
+        return (await fetchStressDay(client, date)).mapped;
       } catch {
         return null;
       }

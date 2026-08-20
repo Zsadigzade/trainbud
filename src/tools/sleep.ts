@@ -1,39 +1,14 @@
-import type { SleepData } from "../garmin/garminApiTypes.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
+import { fetchSleepDay } from "../garmin/daily.js";
 import type { SleepNightSummary, ToolResult } from "../garmin/types.js";
 import type { SleepPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
-import {
-  formatDuration,
-  formatIsoDate,
-  getDateRange,
-} from "../utils/helpers.js";
+import { formatDuration, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Sleep Mapping
-
-function mapSleepData(date: Date, sleepData: SleepData): SleepNightSummary | null {
-  const dailySleep = sleepData.dailySleepDTO;
-
-  if (!dailySleep) {
-    return null;
-  }
-
-  return {
-    date: formatIsoDate(date),
-    totalSleepSeconds: dailySleep.sleepTimeSeconds,
-    deepSleepSeconds: dailySleep.deepSleepSeconds,
-    lightSleepSeconds: dailySleep.lightSleepSeconds,
-    remSleepSeconds: dailySleep.remSleepSeconds,
-    awakeCount: dailySleep.awakeCount,
-    sleepScore: dailySleep.sleepScores?.overall?.value ?? null,
-    avgSleepStress: dailySleep.avgSleepStress ?? null,
-    avgOvernightHrv: sleepData.avgOvernightHrv ?? null,
-    hrvStatus: sleepData.hrvStatus ?? null,
-  };
-}
 
 async function fetchSleepNights(days: number): Promise<SleepNightSummary[]> {
   const dates = getDateRange(days);
@@ -41,8 +16,7 @@ async function fetchSleepNights(days: number): Promise<SleepNightSummary[]> {
   return withGarminClient(async (client) => {
     const nights = await mapInBatches(dates, async (date) => {
       try {
-        const sleepData = await client.getSleepData(date);
-        return mapSleepData(date, sleepData);
+        return (await fetchSleepDay(client, date)).mapped;
       } catch {
         return null;
       }

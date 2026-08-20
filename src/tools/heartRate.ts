@@ -1,16 +1,12 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
+import { fetchHeartRateDay } from "../garmin/daily.js";
 import type { HeartRateDaySummary, ToolResult } from "../garmin/types.js";
 import type { HeartRatePayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
 import { mapInBatches } from "../utils/batch.js";
-import {
-  average,
-  calculateTrend,
-  formatIsoDate,
-  getDateRange,
-} from "../utils/helpers.js";
+import { average, calculateTrend, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Heart Rate Mapping
 
@@ -20,28 +16,7 @@ async function fetchHeartRateDays(days: number): Promise<HeartRateDaySummary[]> 
   return withGarminClient(async (client) => {
     const summaries = await mapInBatches(dates, async (date) => {
       try {
-        const heartRate = await client.getHeartRate(date);
-        if (!heartRate) {
-          return null;
-        }
-
-        const samples = (heartRate.heartRateValues ?? [])
-          .flat()
-          .filter((entry): entry is { heartrate: number } => entry != null)
-          .map((entry) => entry.heartrate);
-        const averageHeartRate = samples.length > 0 ? average(samples) : null;
-
-        if (heartRate.restingHeartRate == null && averageHeartRate == null) {
-          return null;
-        }
-
-        return {
-          date: formatIsoDate(date),
-          restingHeartRate: heartRate.restingHeartRate ?? null,
-          maxHeartRate: heartRate.maxHeartRate ?? null,
-          minHeartRate: heartRate.minHeartRate ?? null,
-          averageHeartRate,
-        };
+        return (await fetchHeartRateDay(client, date)).mapped;
       } catch {
         return null;
       }
