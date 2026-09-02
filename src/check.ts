@@ -4,6 +4,7 @@ import { assertGarminCredentials, appConfig, deprecatedEnvNames, getEnvFilePath 
 import { executeTool, listRegisteredToolNames } from "./tools/index.js";
 import { configureLogger } from "./utils/logger.js";
 import { getDataDir, getLegacyDataDir } from "./paths.js";
+import { isAiConfigured } from "./promptApi.js";
 
 // SECTION: Live Diagnostics
 
@@ -30,7 +31,7 @@ export interface ToolCheckResult {
 // diagnoses the whole stack rather than one layer of it.
 // -----------------------------------------------------------------------------
 
-function checkSetup(): ToolCheckResult[] {
+export function checkSetup(): ToolCheckResult[] {
   const results: ToolCheckResult[] = [];
   const add = (name: string, ok: boolean, summary: string, warning = false): void => {
     results.push({ name, ok, summary, warning, section: "Setup" });
@@ -91,7 +92,12 @@ function checkSetup(): ToolCheckResult[] {
     publicUrl.length === 0
   );
 
-  const aiKey = appConfig.anthropicApiKey.length > 0;
+  // isAiConfigured(), not appConfig.anthropicApiKey. The dashboard writes the
+  // key to the settings table, which is the route the setup guide tells users
+  // to take, and reading the environment alone reported every one of those keys
+  // as missing. resolveAnthropicKey() was written for exactly this and this
+  // call site never used it.
+  const aiKey = isAiConfigured();
   add("AI features", true, aiKey ? "key present" : "no key — AI cards stay empty (optional)", !aiKey);
 
   return results;

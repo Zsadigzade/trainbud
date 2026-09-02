@@ -116,6 +116,36 @@ been drawn on any watch: 1.3.0 shipped its `.iq` without a single render.
   already measures and steps down; the character cut is gone. This was the last
   item open on that card.
 
+### Fixed — "AI unavailable" meant four different things
+
+Reported as "it still shows AI Unavailable". The cause on this install was that
+**no Anthropic key had ever been configured**: the settings table was empty,
+`.env` had no `ANTHROPIC_API_KEY`, and the only two prompt jobs ever created, on
+2026-08-17 and 2026-08-19, both failed with
+`ANTHROPIC_API_KEY not configured`. AI is bring-your-own-key and genuinely could
+not run. The defect is that the watch could not say so.
+
+- **`/api/watch` now carries `ai_configured`.** `ai_insight: null` meant three
+  different things — no key, a failed call, or today's insight not generated
+  yet — and the watch drew one screen for all of them. The Ask card now shows
+  **"AI not set up / Add an API key in the dashboard"** instead of offering five
+  questions that cannot succeed, and the AI Insight card no longer tells a user
+  with no key that there is "No insight today", which is a claim about today. A
+  summary from an older server carries no such field; missing is read as
+  configured, so nothing is asserted on no evidence.
+
+- **The watch threw away the reason a prompt failed.** `GET /api/prompt/<id>`
+  returns the server's error string, and `onPromptStatusReceived` read only
+  `status` — so a missing API key and a provider outage rendered identically.
+  The reason is now drawn under the message, along with a timeout and the HTTP
+  code from a failed submit.
+
+- **`trainbud check` reported AI status from the environment only.** It read
+  `appConfig.anthropicApiKey` instead of `isAiConfigured()`, so a key saved
+  through the dashboard — the route the setup guide tells users to take — was
+  reported as absent forever. `resolveAnthropicKey()` exists for exactly this
+  and this call site never used it.
+
 ### Fixed — dependencies
 
 - `qs` 6.15.3 → 6.16.0 and `fast-uri` 3.1.5 → 3.1.7, clearing one high and one

@@ -95,6 +95,14 @@
     <string id="AiThinking">Asking AI...</string>
     <string id="AiError">AI unavailable</string>
     <string id="AiNoInsight">No insight today</string>
+    <!-- AI has never been set up on this server, which is a different thing
+         from a call that failed and needs a different action from the user.
+         The watch drew "AI unavailable" for both, and for a server that simply
+         had not generated today's insight yet. On this install the only two
+         prompts ever submitted failed with "ANTHROPIC_API_KEY not configured"
+         and the watch never said so. -->
+    <string id="AiNotSetUp">AI not set up</string>
+    <string id="AiSetUpHint">Add an API key in the dashboard</string>
     <string id="AskPrompt1">Should I train today?</string>
     <string id="AskPrompt2">How is my recovery?</string>
     <string id="AskPrompt3">Optimize my sleep tonight</string>

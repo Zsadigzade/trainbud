@@ -1,5 +1,5 @@
 import { executeTool } from "./tools/index.js";
-import { generateDailyInsight } from "./promptApi.js";
+import { generateDailyInsight, isAiConfigured } from "./promptApi.js";
 import { DateTime } from "luxon";
 import { runDetectors } from "./detect/index.js";
 import { buildPromptSuggestions } from "./promptSuggestions.js";
@@ -101,6 +101,18 @@ export interface WatchSummary {
    */
   prompts: string[];
   ai_insight: string | null;
+  /**
+   * Whether an AI key is configured at all, from either the dashboard or the
+   * environment.
+   *
+   * ai_insight being null does not answer that question: it is also null when
+   * a key exists and the call failed, and when today's insight has simply not
+   * been generated yet. The watch drew one "AI unavailable" screen for all
+   * three, which told the user nothing they could act on -- the same fault the
+   * single "Pairing failed" message had. With this flag the watch can say
+   * "AI is not set up" and name the dashboard.
+   */
+  ai_configured: boolean;
   updated_at: string;
 }
 
@@ -221,6 +233,7 @@ export interface WatchSummaryParts {
   coverage: WatchCoverage;
   context: ContextEntry[];
   updatedAt: string;
+  aiConfigured: boolean;
 }
 
 export function buildWatchSummaryFrom(
@@ -250,6 +263,7 @@ export function buildWatchSummaryFrom(
       { findings: parts.findings, coverage: parts.coverage },
       parts.context
     ),
+    ai_configured: parts.aiConfigured,
     updated_at: parts.updatedAt,
   };
 }
@@ -293,6 +307,7 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       coverage: detection.coverage,
       context: activeContext(DateTime.local().toISODate() ?? ""),
       updatedAt: new Date().toISOString(),
+      aiConfigured: isAiConfigured(),
     }),
     ai_insight: null,
   };

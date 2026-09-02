@@ -114,6 +114,15 @@ class TrainBudApp extends Application.AppBase {
     private var _promptPageIndex  as Number = 0;
     private var _promptPageCount  as Number = 0;
 
+    // Why the last prompt failed, as the server described it.
+    //
+    // The server puts a real reason in the job record -- on this install, every
+    // prompt ever submitted failed with "ANTHROPIC_API_KEY not configured" --
+    // and the watch read only the status field and drew "AI unavailable". The
+    // one fact that would have told the user what to do was on the wire and
+    // thrown away, which is exactly what the single "Pairing failed" screen did.
+    private var _promptError as String or Null = null;
+
     // Ask AI menu state
     private var _askMenuIndex     as Number = 0;
 
@@ -160,6 +169,21 @@ class TrainBudApp extends Application.AppBase {
     function getPairExpiresAt() as Number or Null        { return _pairExpiresAt; }
 
     function getPromptStatus()    as String             { return _promptStatus; }
+    function getPromptError()     as String or Null     { return _promptError; }
+
+    /** Whether the server has an AI key at all.
+     *
+     *  Absent from summaries produced by a server older than 1.3.1, and from
+     *  any cached before this field existed. Missing is treated as configured,
+     *  so an old server keeps its previous behaviour rather than being reported
+     *  as unconfigured on no evidence.
+     */
+    function isAiConfigured() as Boolean {
+        if (_summary == null) { return true; }
+        var flag = _summary.get("ai_configured");
+        if (flag == null || !(flag instanceof Boolean)) { return true; }
+        return flag as Boolean;
+    }
     function getPromptResult()    as String or Null     { return _promptResult; }
     function getPromptPageIndex() as Number             { return _promptPageIndex; }
     function getPromptPageCount() as Number             { return _promptPageCount; }
@@ -675,6 +699,7 @@ class TrainBudApp extends Application.AppBase {
         var prompt = getPromptText(_askMenuIndex);
         _promptJobId    = null;
         _promptResult   = null;
+        _promptError    = null;
         _promptStatus   = "submitting";
         _promptPageIndex = 0;
         _promptPageCount = 0;
@@ -707,6 +732,7 @@ class TrainBudApp extends Application.AppBase {
             }
         }
         _promptStatus = "error";
+        _promptError = "HTTP " + responseCode.toString();
         WatchUi.requestUpdate();
     }
 
@@ -733,6 +759,7 @@ class TrainBudApp extends Application.AppBase {
         stopPromptTimers();
         if (!_promptStatus.equals("done")) {
             _promptStatus = "error";
+            _promptError = "Timed out";
             WatchUi.requestUpdate();
         }
     }
@@ -773,6 +800,13 @@ class TrainBudApp extends Application.AppBase {
             WatchUi.requestUpdate();
         } else if (s.equals("error")) {
             stopPromptTimers();
+            // Carry the server's reason to the screen. It is the difference
+            // between "no API key" and "the provider refused", and the user
+            // can act on the first.
+            var reason = d.get("error");
+            _promptError = reason != null && reason instanceof String
+                ? reason as String
+                : null;
             _promptStatus = "error";
             WatchUi.requestUpdate();
         }
@@ -782,6 +816,7 @@ class TrainBudApp extends Application.AppBase {
         stopPromptTimers();
         _promptJobId  = null;
         _promptResult = null;
+        _promptError  = null;
         _promptStatus = "idle";
         _promptPageIndex = 0;
         _promptPageCount = 0;

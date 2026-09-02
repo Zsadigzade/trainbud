@@ -60,6 +60,13 @@ class TrainBudView extends WatchUi.View {
 
         // Ask AI menu
         if (cardIndex == Cards.ASK_AI) {
+            // Nothing on this card can work without a key on the server, so
+            // say that instead of offering five questions that will all fail.
+            if (!app.isAiConfigured()) {
+                drawAiSetupNeeded(dc);
+                return;
+            }
+
             var promptStatus = app.getPromptStatus();
             if (promptStatus.equals("idle")) {
                 drawAskAiMenu(dc, app);
@@ -68,7 +75,7 @@ class TrainBudView extends WatchUi.View {
             } else if (promptStatus.equals("done")) {
                 drawPromptResult(dc, app);
             } else {
-                drawMessage(dc, WatchUi.loadResource(Rez.Strings.AiError) as String);
+                drawPromptError(dc, app);
             }
             return;
         }
@@ -218,6 +225,80 @@ class TrainBudView extends WatchUi.View {
             }
         }
 
+    }
+
+    /** Reads the payload flag directly, for the card drawers that are handed a
+        summary rather than the app. Missing means an older server: treated as
+        configured, so nothing is claimed on no evidence. */
+    private function isAiConfiguredIn(summary as Dictionary) as Boolean {
+        var flag = summary.get("ai_configured");
+        if (flag == null || !(flag instanceof Boolean)) { return true; }
+        return flag as Boolean;
+    }
+
+    // AI has no key on the server.
+    //
+    // Distinct from a failed call, and from a day with no insight yet. Those
+    // three all rendered as "AI unavailable", which names no action; this one
+    // has an action and it is the only one the user can take.
+    private function drawAiSetupNeeded(dc as Dc) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
+
+        var hint = wrapToWidth(dc, WatchUi.loadResource(Rez.Strings.AiSetUpHint) as String,
+            Graphics.FONT_XTINY, lineH);
+        var y = cy - ((titleH + (hint.size() * lineH)) / 2);
+
+        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_SMALL,
+            fitLine(dc, WatchUi.loadResource(Rez.Strings.AiNotSetUp) as String,
+                Graphics.FONT_SMALL, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
+        y += titleH;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < hint.size(); i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, hint[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+    }
+
+    // A failed answer, with the reason the server gave.
+    //
+    // "AI unavailable" was the whole screen. The server records why each job
+    // failed and returns it on /api/prompt/<id>; the watch read the status and
+    // dropped the reason, so a missing API key and a provider outage looked
+    // identical from the wrist.
+    private function drawPromptError(dc as Dc, app as TrainBudApp) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
+
+        var reason = app.getPromptError();
+        var lines = reason == null
+            ? ([] as Array<String>)
+            : wrapToWidth(dc, reason as String, Graphics.FONT_XTINY, lineH * 2);
+        var shown = lines.size() > 3 ? 3 : lines.size();
+
+        var y = cy - ((titleH + (shown * lineH)) / 2);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_SMALL,
+            fitLine(dc, WatchUi.loadResource(Rez.Strings.AiError) as String,
+                Graphics.FONT_SMALL, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
+        y += titleH;
+
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < shown; i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, lines[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -805,7 +886,13 @@ class TrainBudView extends WatchUi.View {
             WatchUi.loadResource(Rez.Strings.CardAiInsight) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
-        var insight = WatchUi.loadResource(Rez.Strings.AiNoInsight) as String;
+        // "No insight today" is a claim about today. It was also what a user
+        // with no API key saw, every day, forever -- ai_insight is null in both
+        // cases and the card could not tell them apart. Say which it is.
+        var insight = WatchUi.loadResource(
+            summary != null && !isAiConfiguredIn(summary)
+                ? Rez.Strings.AiNotSetUp
+                : Rez.Strings.AiNoInsight) as String;
         if (summary != null) {
             var ai = summary.get("ai_insight");
             if (ai != null && ai instanceof String) {
