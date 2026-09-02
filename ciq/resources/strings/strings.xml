@@ -7,7 +7,6 @@
     <string id="CardActivity">Activity</string>
     <string id="CardStress">Stress</string>
     <string id="CardVo2Max">VO2 Max</string>
-    <string id="CardHeartRate">Heart Rate</string>
     <string id="CardAiInsight">AI Insight</string>
     <string id="CardAskAi">Ask AI</string>
     <string id="CardToday">Today</string>
@@ -20,13 +19,10 @@
     <string id="TodayNothing">Nothing stands out</string>
     <string id="TodayNothingHint">against your baselines</string>
     <string id="Loading">Loading...</string>
-    <string id="ConfigError">Set Server URL in the Connect IQ app settings</string>
-    <string id="FetchError">Could not reach TrainBud</string>
     <string id="NoData">No data</string>
     <!-- Compact placeholder for the four-cell overview grid, where "No data"
          is wide enough to overlap the neighbouring cell and its own label. -->
     <string id="NoDataShort">--</string>
-    <string id="TapHint">Tap or swipe to switch</string>
     <string id="StalePrefix">Updated</string>
     <string id="StaleSuffix">ago</string>
     <string id="LabelRecovery">Rec</string>
@@ -35,12 +31,67 @@
     <string id="LabelVo2">VO2</string>
     <string id="LabelResting">Resting</string>
     <string id="LabelMax">Max</string>
+    <!-- Compact form for the Recovery card on a small round screen, where
+         "Resting 48  Max 178" does not fit and truncating it loses the
+         maximum heart rate entirely. The number is worth more than the
+         word. -->
+    <string id="LabelRestingShort">Rest</string>
+
+    <!-- First run, no server configured.
+
+         This replaces a single line reading "Set Server URL in the Connect IQ
+         app settings", which was almost never reached: the build shipped a
+         default URL, so a fresh install skipped straight past this state and
+         failed to pair against a dead host instead. Now that the default is
+         empty this is what a new user actually sees first, so it has to say
+         what TrainBud is and where the server comes from, not just name a
+         settings field. -->
+    <string id="SetupTitle">Setup required</string>
+    <string id="SetupBody">TrainBud needs your own server. Set Server URL in the app settings.</string>
+    <string id="SetupUrl">github.com/Zsadigzade/trainbud</string>
+
+    <!-- Pairing failure, split by cause.
+
+         There used to be exactly one message, "Pairing failed. Tap to retry.",
+         for every outcome: no phone, wrong URL, a dead tunnel answering 404, a
+         captive portal answering 200 with HTML, and a server that was up and
+         refusing. Each needs a different action from the user, and the single
+         message told them none of it. -->
+    <string id="PairErrUnreachable">Cannot reach server</string>
+    <string id="PairErrNotServer">Not a TrainBud server</string>
+    <string id="PairErrRefused">Server refused pairing</string>
+    <string id="HintNoPhone">Phone not connected</string>
+    <string id="HintHttps">Use an https:// URL</string>
+    <string id="HintBadCert">Certificate refused. Use a trusted one.</string>
+    <string id="HintCheckUrl">Check the Server URL</string>
+    <string id="HintTooMany">Too many tries. Wait a minute.</string>
+    <!-- The raw Connect IQ code, always shown under the message. Negative codes
+         are Connect IQ constants rather than HTTP statuses, and having the
+         number on the watch face is what finally identified -200 and -400 in
+         the 2026-08 pairing investigation. Keep it. -->
+    <string id="ErrorCodePrefix">Error</string>
+
     <string id="PairingTitle">Pair Watch</string>
     <string id="PairingInstructions">Open dashboard &amp; enter code:</string>
-    <string id="PairingPolling">Waiting for approval...</string>
-    <string id="PairingError">Pairing failed. Tap to retry.</string>
-    <string id="ErrorCodePrefix">Error</string>
-    <string id="NoPhoneHint">Phone not connected</string>
+
+    <string id="FetchError">Could not reach TrainBud</string>
+
+    <!-- Action hints come in pairs, chosen at runtime from
+         System.getDeviceSettings().isTouchScreen.
+
+         Five products in the manifest have no touch screen at all: fr55 (the
+         device this was reported from), fr745, and the three Instinct 3
+         variants. Every hint in the app told those users to tap something.
+
+         Carousel navigation has no hint of its own: the page dots show position,
+         and UP/DOWN paging inside an app is a device-wide convention. A
+         permanent line of instruction is not worth the room on a 208 px
+         screen. -->
+    <string id="RetryTouch">Tap to retry</string>
+    <string id="RetryButton">START to retry</string>
+    <string id="SelectTouch">Tap to select</string>
+    <string id="SelectButton">START to select</string>
+
     <string id="AiThinking">Asking AI...</string>
     <string id="AiError">AI unavailable</string>
     <string id="AiNoInsight">No insight today</string>
@@ -49,10 +100,12 @@
     <string id="AskPrompt3">Optimize my sleep tonight</string>
     <string id="AskPrompt4">Summarize my week</string>
     <string id="AskPrompt5">Am I overtraining?</string>
-    <string id="AskHint">Tap to ask AI</string>
-    <string id="AskSelectHint">Tap to select</string>
     <string id="ResultPrefix">AI:</string>
-    <string id="AiDisclaimer">General wellness info only. Not medical advice.</string>
+    <!-- Shown on the last page of an AI answer. It existed as a string from
+         1.2.0 and was never drawn anywhere, so the app made training and
+         recovery statements on a health device with no disclaimer on screen at
+         all. The store listing carried one; the watch did not. -->
+    <string id="AiDisclaimer">Wellness info only. Not medical advice.</string>
     <string id="GlanceTitle">TrainBud</string>
     <string id="GlanceNoData">Open to sync</string>
 </strings>

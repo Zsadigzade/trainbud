@@ -10,3 +10,7 @@ ciq/developer_key.der
 coverage/
 .DS_Store
 *.tsbuildinfo
+
+# Local-only Connect IQ dev overlay: bakes a personal tunnel URL into a
+# sideload build. The .example template is committed; the real file is not.
+ciq/resources-dev/settings/properties.xml

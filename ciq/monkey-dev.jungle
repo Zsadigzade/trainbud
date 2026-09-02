@@ -1,0 +1,22 @@
+# Local-only overlay: bake a server URL into a sideload or simulator build.
+#
+# The store build ships an EMPTY ServerUrl on purpose. A default used to be
+# baked in -- one developer's personal ngrok tunnel -- and every store install
+# skipped the setup screen and failed to pair against it. See the comment in
+# resources/settings/properties.xml.
+#
+# Sideloaded apps get no settings screen, so development still needs a way to
+# put a URL on the device. That is what this overlay is for, and resources-dev
+# is gitignored so the URL never reaches a commit or a store package.
+#
+# Setup, once:
+#   cp resources-dev/settings/properties.xml.example resources-dev/settings/properties.xml
+#   # then edit it to your own tunnel URL
+#
+# Usage:
+#   monkeyc -f "monkey.jungle;monkey-dev.jungle" -o bin\TrainBud-dev.prg \
+#           -y developer_key.der -d fr55 -w
+#   .\build.ps1 -Device fr55 -Dev
+#
+# Never build the store package with this overlay.
+base.resourcePath = $(base.resourcePath);resources-dev

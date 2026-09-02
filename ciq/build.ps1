@@ -1,8 +1,29 @@
 # Build TrainBud Connect IQ widget (Windows)
-# Usage: .\ciq\build.ps1 [-Device fenix847mm]
+#
+# Usage:
+#   .\ciq\build.ps1                        # store build, one device
+#   .\ciq\build.ps1 -Device fr55
+#   .\ciq\build.ps1 -Device fr55 -Dev      # bake a Server URL in, for sideloading
+#   .\ciq\build.ps1 -Device fr55 -NoGlance # force the widget, not the glance, in the simulator
+#   .\ciq\build.ps1 -Package               # the .iq store package, every device
 
 param(
-    [string]$Device = "fenix847mm"
+    [string]$Device = "fenix847mm",
+
+    # Layers resources-dev over the shipped properties so the build carries a
+    # Server URL. Sideloaded apps get no settings screen, so this is the only
+    # way to point one at a server. The store build ships an EMPTY default on
+    # purpose -- it shipped a personal ngrok tunnel from 1.2.0 to 1.3.0 and no
+    # store user could pair. Never use this switch for a submission.
+    [switch]$Dev,
+
+    # The simulator renders the glance for any app that has one and gives no way
+    # to step from the glance into the widget, so a normal build can only be
+    # watched sitting in the glance list.
+    [switch]$NoGlance,
+
+    # Export every device in the manifest as ciq/bin/TrainBud.iq.
+    [switch]$Package
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +31,6 @@ $CiqRoot = $PSScriptRoot
 $SdkRoot = Get-Content "$env:APPDATA\Garmin\ConnectIQ\current-sdk.cfg" -Raw
 $SdkBin = Join-Path $SdkRoot.TrimEnd('\') "bin"
 $KeyPath = Join-Path $CiqRoot "developer_key.der"
-$OutPath = Join-Path $CiqRoot "bin\TrainBud.prg"
 
 if (-not (Test-Path $SdkBin)) {
     throw "Connect IQ SDK not found. Install SDK Manager and set active SDK."
@@ -24,13 +44,38 @@ if (-not (Test-Path $KeyPath)) {
     Pop-Location
 }
 
-New-Item -ItemType Directory -Force -Path (Split-Path $OutPath) | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $CiqRoot "bin") | Out-Null
+
+$Jungles = @("monkey.jungle")
+if ($Dev) {
+    $DevProps = Join-Path $CiqRoot "resources-dev\settings\properties.xml"
+    if (-not (Test-Path $DevProps)) {
+        throw "-Dev needs resources-dev\settings\properties.xml. Copy properties.xml.example to it and set your tunnel URL."
+    }
+    $Jungles += "monkey-dev.jungle"
+}
+if ($NoGlance) { $Jungles += "monkey-noglance.jungle" }
+$JungleArg = $Jungles -join ";"
 
 Push-Location $CiqRoot
-& (Join-Path $SdkBin "monkeyc.bat") -f monkey.jungle -o $OutPath -y $KeyPath -d $Device -w
+if ($Package) {
+    if ($Dev) { Pop-Location; throw "Refusing to package with -Dev: that bakes a personal Server URL into the store build." }
+    $OutPath = Join-Path $CiqRoot "bin\TrainBud.iq"
+    & (Join-Path $SdkBin "monkeyc.bat") -e -f $JungleArg -o $OutPath -y $KeyPath -w -r
+} else {
+    $Suffix = ""
+    if ($Dev) { $Suffix += "-dev" }
+    if ($NoGlance) { $Suffix += "-noglance" }
+    $OutPath = Join-Path $CiqRoot "bin\TrainBud$Suffix.prg"
+    & (Join-Path $SdkBin "monkeyc.bat") -f $JungleArg -o $OutPath -y $KeyPath -d $Device -w
+}
 Pop-Location
 
+if ($LASTEXITCODE -ne 0) { throw "monkeyc failed with exit code $LASTEXITCODE" }
+
 Write-Host ""
-Write-Host "Built: $OutPath"
-Write-Host "Simulator: monkeydo $OutPath $Device"
-Write-Host "Sideload:  copy to watch via Garmin Express or CIQ app loader"
+Write-Host "Built: $OutPath  (jungles: $JungleArg)"
+if (-not $Package) {
+    Write-Host "Simulator: monkeydo $OutPath $Device"
+    Write-Host "Sideload:  copy to watch via Garmin Express or CIQ app loader"
+}

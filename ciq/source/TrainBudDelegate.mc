@@ -95,6 +95,89 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
     }
 
     // -------------------------------------------------------------------------
+    // Buttons
+    //
+    // BehaviorDelegate maps the DOWN and UP keys to these on every device, and
+    // neither was implemented: on the five products in the manifest with no
+    // touch screen -- fr55, fr745 and the three Instinct 3 variants -- the
+    // carousel could only ever move forwards, one START press at a time, and
+    // the Ask menu could not be scrolled at all. Everything below mirrors
+    // onSwipe: DOWN behaves as a left swipe, UP as a right swipe.
+    // -------------------------------------------------------------------------
+
+    function onNextPage() as Boolean {
+        return step(true);
+    }
+
+    function onPreviousPage() as Boolean {
+        return step(false);
+    }
+
+    private function step(forward as Boolean) as Boolean {
+        var app = Application.getApp() as TrainBudApp;
+
+        if (app.getCardIndex() == Cards.ASK_AI) {
+            var promptStatus = app.getPromptStatus();
+
+            if (promptStatus.equals("idle")) {
+                // Past the last prompt, leave the card forwards.
+                //
+                // The menu used to wrap, and going back from the first item
+                // left the card while going forward from the last did not, so
+                // the carousel dead-ended here: Ask is card 1, and the six
+                // metric cards after it could only be reached by paging
+                // backwards from Today. Leaving at both ends makes the loop
+                // traversable in either direction.
+                if (forward) {
+                    if (app.getAskMenuIndex() < app.getPromptCount() - 1) {
+                        app.nextAskMenuItem();
+                    } else {
+                        app.nextCard();
+                    }
+                } else if (app.getAskMenuIndex() > 0) {
+                    app.prevAskMenuItem();
+                } else {
+                    app.prevCard();
+                }
+                WatchUi.requestUpdate();
+                return true;
+            }
+
+            if (promptStatus.equals("done")) {
+                if (forward) {
+                    app.nextPromptPage();
+                } else if (app.getPromptPageIndex() > 0) {
+                    app.prevPromptPage();
+                } else {
+                    app.clearPrompt();
+                }
+                WatchUi.requestUpdate();
+                return true;
+            }
+
+            return true;
+        }
+
+        var status = app.getStatus();
+        if (status.equals("ready") || status.equals("stale")) {
+            if (forward) { app.nextCard(); } else { app.prevCard(); }
+            WatchUi.requestUpdate();
+            return true;
+        }
+
+        // Not on a card yet: a page press on an error or setup screen is a
+        // retry, the same as a tap. Without this the only way off those screens
+        // on a button watch was START, which is not what a stuck user presses.
+        if (status.equals("error") || status.equals("config")
+            || status.equals("pairing_error")) {
+            handleSelect();
+            return true;
+        }
+
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
     // Swipe
     // -------------------------------------------------------------------------
 
@@ -107,9 +190,14 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
         // Ask AI card
         if (cardIndex == Cards.ASK_AI) {
             if (promptStatus.equals("idle")) {
-                // Swipe up/down or left/right cycles through prompts
+                // Swipe up/down or left/right moves through the prompts, and
+                // off the card at either end -- see the note in step().
                 if (direction == WatchUi.SWIPE_UP || direction == WatchUi.SWIPE_LEFT) {
-                    app.nextAskMenuItem();
+                    if (app.getAskMenuIndex() < app.getPromptCount() - 1) {
+                        app.nextAskMenuItem();
+                    } else {
+                        app.nextCard();
+                    }
                     WatchUi.requestUpdate();
                 } else if (direction == WatchUi.SWIPE_DOWN || direction == WatchUi.SWIPE_RIGHT) {
                     if (app.getAskMenuIndex() > 0) {

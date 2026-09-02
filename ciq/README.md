@@ -28,13 +28,38 @@ The widget calls `GET /api/watch` on your running `trainbud serve` instance (via
 
 ## Configure the widget
 
-After sideloading, open **Garmin Connect Mobile** → your device → **Connect IQ** → **TrainBud** → settings:
+Open **Garmin Connect Mobile** → your device → **Connect IQ** → **TrainBud** → settings:
 
 | Setting | Value |
 |---------|-------|
 | **Server URL** | Your tunnel URL, e.g. `https://abc.trycloudflare.com` (no trailing slash) |
 
-Sync the watch. On first open the widget will display a pairing code — approve it in the dashboard to complete setup. No manual API key entry required.
+Sync the watch. On first open the widget shows a pairing code — approve it in the
+dashboard to complete setup. No manual API key entry required.
+
+Until a URL is set the widget shows a **Setup required** screen pointing at the
+setup guide. That is deliberate.
+
+> **The store build ships no default Server URL, and must not.** It carried one
+> from 1.2.0 to 1.3.0 — a personal ngrok tunnel — and every store install
+> skipped the setup screen and failed to pair against it. A Forerunner 55 user
+> reported it on 2026-09-02; it had been broken for every user on every device
+> the whole time. See `resources/settings/properties.xml`.
+
+### Sideloading, where there is no settings screen
+
+Sideloaded apps get no Connect IQ settings screen, so development needs a baked
+URL. That is what `monkey-dev.jungle` is for — it layers `resources-dev` over
+the shipped properties, and `resources-dev/settings/properties.xml` is
+gitignored so the URL never reaches a commit or a store package.
+
+```powershell
+cp resources-dev\settings\properties.xml.example resources-dev\settings\properties.xml
+# edit it to your own tunnel URL, then:
+monkeyc -f "monkey.jungle;monkey-dev.jungle" -o bin\TrainBud-dev.prg -y developer_key.der -d fr55 -w
+```
+
+Never build the store package with that overlay.
 
 ## Build and sideload
 
@@ -66,7 +91,10 @@ connectiq
 1. Add **TrainBud** to your watch's glance list or app list
 2. The **glance** shows recovery and sleep without opening anything — it reads the
    last cached summary, so it renders instantly and never blocks on the network
-3. Open it to fetch fresh data, then **tap** or **swipe left/right** through 7 cards:
+3. Open it to fetch fresh data, then move through the cards. On a touch watch,
+   tap or swipe left/right. On a button watch — fr55, fr745 and the three
+   Instinct 3 variants — **UP** and **DOWN** page through them and **START**
+   selects. On-screen hints name whichever applies to your device.
    - **Overview** — recovery, sleep, stress and VO2 max in a 2×2 grid
    - **Recovery** — score with colour ring (round watches) or bar, plus resting and max HR
    - **Sleep** — hours + quality score
@@ -81,7 +109,9 @@ Page dots at the bottom show your position in the carousel.
 > Recovery and Activity in 1.2.0 — resting HR is read alongside recovery, and VO2
 > max is one number that did not justify its own swipe.
 
-Tap or swipe on error/config screens to retry. If the server is unreachable, the widget shows your last cached summary with a stale indicator.
+Tap, swipe, or press START/UP/DOWN on an error or setup screen to retry. If the
+server is unreachable the widget shows your last cached summary with a stale
+indicator.
 
 ## Connect IQ Store
 
@@ -121,12 +151,22 @@ Each field is `null` if that metric is unavailable — the widget shows "No data
 
 ## Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| "Set URL + API key..." | Configure settings in Garmin Connect Mobile and sync |
-| "Could not reach TrainBud" | Ensure `trainbud serve` and tunnel are running; URL must be HTTPS |
-| -400 on device | Response must be JSON object with `Content-Type: application/json` (TrainBud handles this) |
-| Stale data | Re-open the widget to fetch again; cached data shows with a yellow "Updated Xm ago" banner |
+Every negative code below is a **Connect IQ constant, not an HTTP status**.
+Read the sign first: `-200` is not "HTTP 200". The full list is in the SDK docs
+at `doc/Toybox/Communications.html`.
+
+| On the watch | What it means | Fix |
+|--------------|---------------|-----|
+| **Setup required** | No Server URL is set | Enter it in Connect IQ app settings and sync |
+| **Not a TrainBud server** | Something answered and it was not us: a stopped tunnel, a captive portal, the wrong address | Check the URL shown under the message |
+| **Cannot reach server** + `-104` | No phone connection | Reconnect the watch to the phone |
+| **Cannot reach server** + `-1001`, URL shown as `http://` | Connect IQ requires HTTPS | Use an `https://` URL; plain HTTP is refused even on loopback |
+| **Cannot reach server** + `-1001`, URL already `https://` | The certificate was refused | Use a publicly trusted certificate; self-signed is rejected, in the simulator too |
+| **Server refused pairing** + `429` | Rate limited | Wait a minute and retry |
+| `-200` | The request was refused **on the device** before it was sent, for an invalid header | Content-Type must be a `Communications.REQUEST_CONTENT_TYPE_*` constant; never send `Accept`; never send an empty `:headers => {}` |
+| `-400` | The response body was not the JSON that was asked for | Usually an HTML error or interstitial page; check what the URL actually serves |
+| "Could not reach TrainBud" | Paired, but the summary fetch failed | Ensure `trainbud serve` and the tunnel are running |
+| Stale data | Serving cache | Re-open the widget; cached data shows a yellow "Updated Xm ago" banner |
 
 ## Connect IQ Store
 

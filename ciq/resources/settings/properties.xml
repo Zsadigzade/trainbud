@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <properties>
-    <!-- Default server. This was empty, which meant a fresh install had nowhere
-         to talk to: getServerUrl() returned null, fetchSummary() bailed to the
-         "config" screen, and pairing could never start. The URL only looked
-         present because the simulator's own settings file under bin/ still held
-         a value typed in by hand months ago; a clean build regenerates that file
-         with an empty default and the app goes dead.
+    <!-- No default server, deliberately.
 
-         Sideloaded installs have no settings screen at all, so a build with no
-         default is unusable there by construction. -->
-    <property id="ServerUrl" type="string">https://backpedal-immorally-cathouse.ngrok-free.dev</property>
+         From 1.2.0 through 1.3.0 this shipped as one developer's personal
+         free-tier ngrok tunnel, named in the 1.3.1 changelog entry and
+         deliberately not repeated in a file that ships. Every store install
+         therefore found a non-empty ServerUrl,
+         skipped the setup screen entirely, POSTed /api/pair at a host that was
+         usually offline, and rendered "Pairing failed" forever. It was reported
+         from a Forerunner 55 on 2026-09-02 and it affected every user on every
+         device; nobody who installed from the store could ever pair.
+
+         Worse when the tunnel was up: a stranger's watch minted a pairing code
+         against the developer's own health server, one approval click away from
+         handing out a bearer token to somebody else's Garmin data.
+
+         The earlier justification for a baked default was that sideloaded
+         installs get no settings screen. That is true, and it is a developer
+         problem rather than a user one: build with monkey-dev.jungle to
+         sideload, which layers resources-dev over this file. See ciq/README.md.
+
+         An empty value makes getServerUrl() return null, which is what routes a
+         fresh install to the "Setup required" screen, the honest answer to a
+         watch that has no server to talk to yet. -->
+    <property id="ServerUrl" type="string"></property>
 </properties>

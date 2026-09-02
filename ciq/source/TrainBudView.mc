@@ -1,6 +1,9 @@
 import Toybox.Application;
+import Toybox.Communications;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Math;
+import Toybox.System;
 import Toybox.Time;
 import Toybox.WatchUi;
 
@@ -39,7 +42,7 @@ class TrainBudView extends WatchUi.View {
         }
 
         if (status.equals("config")) {
-            drawMessage(dc, WatchUi.loadResource(Rez.Strings.ConfigError) as String);
+            drawSetupScreen(dc);
             return;
         }
 
@@ -116,13 +119,21 @@ class TrainBudView extends WatchUi.View {
         // Poll telemetry: attempts made and the last response code. A stalled
         // pairing otherwise looks the same whether the poll is being refused on
         // the device or the code simply has not been approved yet.
-        var attempts = app.getPairPollAttempts();
-        var polls = app.getPairPollCount();
-        var pollCode = app.getPairPollCode();
-        dc.drawText(cx, dc.getHeight() - 8, Graphics.FONT_XTINY,
-            attempts.toString() + "/" + polls.toString()
-                + (pollCode == null ? "" : " " + pollCode.toString()),
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        //
+        // Debug builds only. To a user this read as "9/8 200" in the corner of
+        // the pairing screen, which is unexplainable noise; to whoever is
+        // debugging it is the difference between a poll that never ran and one
+        // that ran and was discarded on the device.
+        if (app.isDebugBuild()) {
+            var attempts = app.getPairPollAttempts();
+            var polls = app.getPairPollCount();
+            var pollCode = app.getPairPollCode();
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, dc.getHeight() - 8, Graphics.FONT_XTINY,
+                attempts.toString() + "/" + polls.toString()
+                    + (pollCode == null ? "" : " " + pollCode.toString()),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -131,12 +142,25 @@ class TrainBudView extends WatchUi.View {
 
     private function drawAskAiMenu(dc as Dc, app as TrainBudApp) as Void {
         var cx = dc.getWidth() / 2;
-        var w  = dc.getWidth();
         var h  = dc.getHeight();
+        var lineH = dc.getFontHeight(Graphics.FONT_XTINY);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, 20, Graphics.FONT_SMALL,
             WatchUi.loadResource(Rez.Strings.CardAskAi) as String,
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        // The action hint sits under the title, centred.
+        //
+        // It used to be right-justified against the screen edge at the vertical
+        // centre, which is exactly where the selected prompt is drawn: on the
+        // 208 px Forerunner 55 they printed on top of each other and the card
+        // read "Why is my re[STA]sting HR up?". A round screen has no usable
+        // margin at its widest point, so nothing belongs out there.
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, 20 + dc.getFontHeight(Graphics.FONT_SMALL), Graphics.FONT_XTINY,
+            WatchUi.loadResource(
+                isTouch() ? Rez.Strings.SelectTouch : Rez.Strings.SelectButton) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
         var idx    = app.getAskMenuIndex();
@@ -153,22 +177,25 @@ class TrainBudView extends WatchUi.View {
         // Current item
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, midY, Graphics.FONT_TINY,
-            truncate(prompts[idx], 26),
+            fitLine(dc, prompts[idx], Graphics.FONT_TINY,
+                midY - (dc.getFontHeight(Graphics.FONT_TINY) / 2)),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
         // Prev item (faded)
         if (idx > 0) {
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, midY - 28, Graphics.FONT_XTINY,
-                truncate(prompts[idx - 1], 28),
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, midY - lineH - 10, Graphics.FONT_XTINY,
+                fitLine(dc, prompts[idx - 1], Graphics.FONT_XTINY,
+                    midY - lineH - 10 - (lineH / 2)),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
 
         // Next item (faded)
         if (idx < count - 1) {
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, midY + 28, Graphics.FONT_XTINY,
-                truncate(prompts[idx + 1], 28),
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, midY + lineH + 10, Graphics.FONT_XTINY,
+                fitLine(dc, prompts[idx + 1], Graphics.FONT_XTINY,
+                    midY + lineH + 10 - (lineH / 2)),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
 
@@ -176,21 +203,21 @@ class TrainBudView extends WatchUi.View {
         var dotY = h - 16;
         var dotSpacing = 12;
         var startX = cx - ((count - 1) * dotSpacing) / 2;
+        // Filled for the current item, outlined for the rest. This was a filled
+        // white circle against filled COLOR_DK_GRAY ones, and DK_GRAY is not in
+        // the Forerunner 55's palette: it snapped to black on a black background
+        // and only the selected dot was ever visible there. Shape survives any
+        // palette; colour does not.
         for (var i = 0; i < count; i += 1) {
             if (i == idx) {
                 dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
                 dc.fillCircle(startX + i * dotSpacing, dotY, 4);
             } else {
-                dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-                dc.fillCircle(startX + i * dotSpacing, dotY, 3);
+                dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+                dc.drawCircle(startX + i * dotSpacing, dotY, 3);
             }
         }
 
-        // Tap hint
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(w - 8, midY, Graphics.FONT_XTINY,
-            WatchUi.loadResource(Rez.Strings.AskSelectHint) as String,
-            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
     // -------------------------------------------------------------------------
@@ -213,8 +240,26 @@ class TrainBudView extends WatchUi.View {
         dc.drawText(cx, cy, Graphics.FONT_XTINY, text,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
+        // On the last page, say what this text is. The disclaimer string has
+        // existed since 1.2.0 and was never drawn: the app has been making
+        // training and recovery statements on a health device with nothing on
+        // screen to qualify them. The listing carried a disclaimer; the watch,
+        // where the sentence is actually read, did not.
+        if (page == pages - 1) {
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            var noteH = dc.getFontHeight(Graphics.FONT_XTINY);
+            var noteY = dc.getHeight() - 12 - (noteH * 2);
+            var note  = wrapToWidth(dc, WatchUi.loadResource(Rez.Strings.AiDisclaimer) as String,
+                Graphics.FONT_XTINY, noteY - (dc.getHeight() / 2));
+            for (var n = 0; n < note.size() && n < 2; n += 1) {
+                dc.drawText(cx, noteY + (n * noteH), Graphics.FONT_XTINY,
+                    note[n] as String,
+                    Graphics.TEXT_JUSTIFY_CENTER);
+            }
+        }
+
         if (pages > 1) {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, dc.getHeight() - 8, Graphics.FONT_XTINY,
                 (page + 1).toString() + "/" + pages.toString(),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
@@ -225,75 +270,253 @@ class TrainBudView extends WatchUi.View {
     // Shared helpers
     // -------------------------------------------------------------------------
 
+    // Ask the device, do not measure it.
+    //
+    // This was `dc.getWidth() == dc.getHeight() && dc.getWidth() >= 240`, a
+    // guess that gets the Forerunner 55 wrong: it is round and 208x208, so the
+    // >= 240 arm classified it as rectangular and it drew the recovery bar on a
+    // round screen instead of the ring. Every device in the manifest reports its
+    // own shape and there is no reason to infer it from pixels.
     private function isRoundScreen(dc as Dc) as Boolean {
-        return dc.getWidth() == dc.getHeight() && dc.getWidth() >= 240;
+        var shape = System.getDeviceSettings().screenShape;
+        return shape == System.SCREEN_SHAPE_ROUND;
     }
 
-    // Shows the transport/HTTP code alongside the message. Connect IQ reports
-    // "no phone connection" as -104 and a request timeout as -400, and without
-    // the number on screen those are indistinguishable from a server fault.
+    /** True on the five button-only products in the manifest: fr55, fr745 and
+        the three Instinct 3 variants. Every action hint in this app used to say
+        "tap", which none of them can do. */
+    private function isTouch() as Boolean {
+        var touch = System.getDeviceSettings().isTouchScreen;
+        return touch != null && touch;
+    }
+
+    private function retryHint() as String {
+        return WatchUi.loadResource(
+            isTouch() ? Rez.Strings.RetryTouch : Rez.Strings.RetryButton) as String;
+    }
+
+    // Secondary text and the track behind a value.
+    //
+    // COLOR_DK_GRAY (0x555555) is not in the Forerunner 55's eight-colour
+    // palette and snaps to black, on a black background, so inactive page dots,
+    // faded menu items, card footnotes and the ring track were all invisible on
+    // that device. COLOR_LT_GRAY snaps to white instead, which is readable
+    // everywhere; hierarchy is carried by font size and by filled-versus-outline
+    // dots, neither of which depends on the palette.
+    private function dimColor() as Number {
+        return Graphics.COLOR_LT_GRAY;
+    }
+
+    // First run with no server configured.
+    //
+    // Reached only since 1.3.1: the build used to ship a default ServerUrl
+    // pointing at one developer's personal tunnel, so a fresh install skipped
+    // this state entirely and went straight to a pairing attempt against a host
+    // that was usually gone. This is the screen that should have been there.
+    private function drawSetupScreen(dc as Dc) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
+
+        var title = WatchUi.loadResource(Rez.Strings.SetupTitle) as String;
+        var body  = wrapToWidth(dc, WatchUi.loadResource(Rez.Strings.SetupBody) as String,
+            Graphics.FONT_XTINY, 0);
+        var urlLines = wrapToWidth(dc, WatchUi.loadResource(Rez.Strings.SetupUrl) as String,
+            Graphics.FONT_XTINY, lineH * 3);
+
+        var height = titleH + (body.size() * lineH) + lineH + (urlLines.size() * lineH);
+        var y = cy - (height / 2);
+
+        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_SMALL, title, Graphics.TEXT_JUSTIFY_CENTER);
+        y += titleH;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < body.size(); i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, body[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+
+        y += lineH;
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        for (var u = 0; u < urlLines.size(); u += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, urlLines[u] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+    }
+
+    // One screen per cause, not one screen for all of them.
+    //
+    // This used to say "Pairing failed. Tap to retry." whatever had happened,
+    // which is the screen the Forerunner 55 report was made from. The failure
+    // there was a dead tunnel answering an HTML error page, and the one thing
+    // the user could act on -- the Server URL -- was never mentioned. The raw
+    // Connect IQ code stays on screen underneath: negative codes are Connect IQ
+    // constants rather than HTTP statuses, and having the number visible is what
+    // identified -200 and -400 during the 2026-08 investigation.
+    //
+    // Laid out with a running cursor rather than fixed offsets. The blocks are
+    // one or two lines depending on the message and the screen, and a fixed
+    // layout either overlapped them or left a gap; on the 208 px Forerunner 55
+    // the https hint and the URL landed on top of each other.
     private function drawPairingError(dc as Dc, app as TrainBudApp) as Void {
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
 
-        // Wrapped: unwrapped, this rendered as "airing failed. Tap to retr" on a
-        // round screen, losing both ends of the only instruction it gives.
-        var titleLines = wrapText(WatchUi.loadResource(Rez.Strings.PairingError) as String, 18);
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        for (var i = 0; i < titleLines.size(); i += 1) {
-            dc.drawText(cx, cy - 40 + (i * 20), Graphics.FONT_SMALL,
-                titleLines[i] as String,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        var failClass = app.getPairFailClass();
+        var code      = app.getPairErrorCode();
+
+        var titleRes = Rez.Strings.PairErrUnreachable;
+        if (failClass == PairFail.NOT_SERVER) {
+            titleRes = Rez.Strings.PairErrNotServer;
+        } else if (failClass == PairFail.REFUSED) {
+            titleRes = Rez.Strings.PairErrRefused;
         }
 
-        var code = app.getPairErrorCode();
-        if (code != null) {
-            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, cy + 10, Graphics.FONT_XTINY,
-                (WatchUi.loadResource(Rez.Strings.ErrorCodePrefix) as String) + " " + code.toString(),
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        var hint    = failureHint(app, failClass, code);
+        var showUrl = failClass == PairFail.NOT_SERVER
+            || code == Communications.SECURE_CONNECTION_REQUIRED;
+        var url     = showUrl ? displayUrl(app.getServerUrl()) : null;
 
-            if (code == -104) {
-                dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(cx, cy + 34, Graphics.FONT_XTINY,
-                    WatchUi.loadResource(Rez.Strings.NoPhoneHint) as String,
-                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            } else if (code == -1001) {
-                // SECURE_CONNECTION_REQUIRED. Show the URL actually in use: the
-                // baked default and a value stored from an earlier pairing are
-                // different sources, and only one of them is visible in the build.
-                var serverUrl = app.getServerUrl();
-                dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-                var urlLines = wrapText(serverUrl == null ? "<no url>" : serverUrl as String, 26);
-                var urlShown = urlLines.size() > 3 ? 3 : urlLines.size();
-                for (var u = 0; u < urlShown; u += 1) {
-                    dc.drawText(cx, cy + 32 + (u * 14), Graphics.FONT_XTINY,
-                        urlLines[u] as String,
-                        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-                }
-            } else {
-                // A 2xx with an unexpected body: show what actually arrived.
-                var body = app.getPairErrorBody();
-                if (body != null) {
-                    dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-                    var lines = wrapText(body as String, 24);
-                    var shown = lines.size() > 4 ? 4 : lines.size();
-                    for (var i = 0; i < shown; i += 1) {
-                        dc.drawText(cx, cy + 32 + (i * 15), Graphics.FONT_XTINY,
-                            lines[i] as String,
-                            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-                    }
+        // Measure first, then place, so the block ends up centred whatever it
+        // turned out to contain.
+        var title     = WatchUi.loadResource(titleRes) as String;
+        var titleWrap = wrapToWidth(dc, title, Graphics.FONT_SMALL, -titleH);
+        var height    = titleWrap.size() * titleH + lineH;   // title + retry line
+        var hintWrap  = null;
+        var urlWrap   = null;
+        if (hint != null) {
+            hintWrap = wrapToWidth(dc, hint as String, Graphics.FONT_XTINY, 0);
+            height += hintWrap.size() * lineH;
+        }
+        if (url != null) {
+            urlWrap = wrapToWidth(dc, url as String, Graphics.FONT_XTINY, lineH * 2);
+            height += urlWrap.size() * lineH;
+        }
+        if (code != null) { height += lineH; }
+
+        var y = cy - (height / 2);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < titleWrap.size(); i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_SMALL, titleWrap[i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += titleH;
+        }
+
+        // The one sentence that says what to do about it.
+        if (hintWrap != null) {
+            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+            for (var h = 0; h < hintWrap.size(); h += 1) {
+                dc.drawText(cx, y, Graphics.FONT_XTINY, hintWrap[h] as String,
+                    Graphics.TEXT_JUSTIFY_CENTER);
+                y += lineH;
+            }
+        }
+
+        // The address actually in use, whenever the address is the suspect. It
+        // can come from the app setting or from a value stored by an earlier
+        // pairing, and only one of those is visible anywhere else.
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        if (urlWrap != null) {
+            for (var u = 0; u < urlWrap.size(); u += 1) {
+                dc.drawText(cx, y, Graphics.FONT_XTINY, urlWrap[u] as String,
+                    Graphics.TEXT_JUSTIFY_CENTER);
+                y += lineH;
+            }
+        }
+
+        // Code and retry hint on separate lines. Together they were 32
+        // characters and lost one off each end of a round 208 px screen.
+        if (code != null) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY,
+                (WatchUi.loadResource(Rez.Strings.ErrorCodePrefix) as String)
+                    + " " + code.toString(),
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+        dc.drawText(cx, y, Graphics.FONT_XTINY, retryHint(),
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        // What actually came back, debug builds only. It is the fastest way to
+        // recognise an interstitial or a captive portal, and it is noise to a
+        // user who has already been told to check the URL.
+        if (app.isDebugBuild()) {
+            var body = app.getPairErrorBody();
+            if (body != null) {
+                y += lineH;
+                var lines = wrapToWidth(dc, body as String, Graphics.FONT_XTINY, lineH * 3);
+                for (var b = 0; b < lines.size() && b < 2; b += 1) {
+                    dc.drawText(cx, y, Graphics.FONT_XTINY, lines[b] as String,
+                        Graphics.TEXT_JUSTIFY_CENTER);
+                    y += lineH;
                 }
             }
         }
+    }
+
+    // The server URL as it should be read on a wrist.
+    //
+    // "https://" is eight characters of a fifty-character line on a screen that
+    // fits about twenty-four, and it is the same on every working URL, so it is
+    // dropped. "http://" is kept deliberately: on a SECURE_CONNECTION_REQUIRED
+    // failure the missing "s" is the entire diagnosis, and hiding the scheme
+    // would hide the answer.
+    private function displayUrl(url as String or Null) as String {
+        if (url == null) { return "<no url>"; }
+        var u = url as String;
+        if (u.length() > 8 && u.substring(0, 8).equals("https://")) {
+            return u.substring(8, u.length());
+        }
+        return u;
+    }
+
+    /** The actionable sentence for a failure, or null when the class name
+        already says everything that can be said. */
+    private function failureHint(
+        app as TrainBudApp,
+        failClass as Number,
+        code as Number or Null
+    ) as String or Null {
+        if (code != null) {
+            if (code == Communications.BLE_CONNECTION_UNAVAILABLE) {
+                return WatchUi.loadResource(Rez.Strings.HintNoPhone) as String;
+            }
+            // SECURE_CONNECTION_REQUIRED is two different problems wearing one
+            // number. Connect IQ returns it for a plain http:// URL, and also
+            // for an https:// URL whose certificate it will not accept, which
+            // is what a self-hosted user with a self-signed certificate gets.
+            // Telling that user to "use an https:// URL" when they already are
+            // is the same dead end the old single "Pairing failed" message was.
+            if (code == Communications.SECURE_CONNECTION_REQUIRED) {
+                var configured = app.getServerUrl();
+                var isHttps = configured != null
+                    && (configured as String).length() > 8
+                    && (configured as String).substring(0, 8).equals("https://");
+                return WatchUi.loadResource(
+                    isHttps ? Rez.Strings.HintBadCert : Rez.Strings.HintHttps) as String;
+            }
+            if (code == 429) {
+                return WatchUi.loadResource(Rez.Strings.HintTooMany) as String;
+            }
+        }
+        if (failClass == PairFail.NOT_SERVER) {
+            return WatchUi.loadResource(Rez.Strings.HintCheckUrl) as String;
+        }
+        return null;
     }
 
     // Wraps rather than drawing one long line. "Pairing failed. Tap to retry."
     // ran off both edges of a round screen and rendered as "airing failed. Tap
     // to retr", which loses the instruction the message exists to give.
     private function drawMessage(dc as Dc, message as String) as Void {
-        var lines  = wrapText(message, 20);
-        var lineH  = 22;
+        var lines  = wrapToWidth(dc, message, Graphics.FONT_SMALL, 0);
+        var lineH  = dc.getFontHeight(Graphics.FONT_SMALL);
         var startY = (dc.getHeight() / 2) - (((lines.size() - 1) * lineH) / 2);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
@@ -304,16 +527,6 @@ class TrainBudView extends WatchUi.View {
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
         }
-    }
-
-    private function drawHint(dc as Dc) as Void {
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            dc.getWidth() / 2, dc.getHeight() - 4,
-            Graphics.FONT_XTINY,
-            WatchUi.loadResource(Rez.Strings.TapHint) as String,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
     }
 
     // Position indicator. Replaces the static "tap or swipe" hint, which told
@@ -333,8 +546,8 @@ class TrainBudView extends WatchUi.View {
                 dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
                 dc.fillCircle(x, y, radius + 1);
             } else {
-                dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-                dc.fillCircle(x, y, radius);
+                dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+                dc.drawCircle(x, y, radius);
             }
         }
     }
@@ -397,7 +610,8 @@ class TrainBudView extends WatchUi.View {
         if ((subtitle as String).length() > 0) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(dc.getWidth() / 2, subtitleY, Graphics.FONT_TINY,
-                subtitle, Graphics.TEXT_JUSTIFY_CENTER);
+                fitLine(dc, subtitle, Graphics.FONT_TINY, subtitleY),
+                Graphics.TEXT_JUSTIFY_CENTER);
         }
 
         // Secondary metric folded onto this card (VO2 max on Activity).
@@ -405,9 +619,10 @@ class TrainBudView extends WatchUi.View {
             var footnoteY = (subtitle as String).length() > 0
                 ? subtitleY + dc.getFontHeight(Graphics.FONT_TINY)
                 : subtitleY;
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.drawText(dc.getWidth() / 2, footnoteY, Graphics.FONT_XTINY,
-                footnote, Graphics.TEXT_JUSTIFY_CENTER);
+                fitLine(dc, footnote, Graphics.FONT_XTINY, footnoteY),
+                Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -479,13 +694,20 @@ class TrainBudView extends WatchUi.View {
         title as String,
         hint as String
     ) as Void {
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, cy - 8, Graphics.FONT_SMALL, title,
+        dc.drawText(cx, cy - 8, Graphics.FONT_SMALL,
+            fitLine(dc, title, Graphics.FONT_SMALL, cy - 8 - (titleH / 2)),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
         if (hint.length() > 0) {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, cy + 18, Graphics.FONT_XTINY, hint,
+            // Stacked off the title's real height rather than a fixed 26 px.
+            var hintY = cy - 8 + (titleH / 2) + (dc.getFontHeight(Graphics.FONT_XTINY) / 2);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, hintY, Graphics.FONT_XTINY,
+                fitLine(dc, hint, Graphics.FONT_XTINY,
+                    hintY - (dc.getFontHeight(Graphics.FONT_XTINY) / 2)),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
@@ -493,6 +715,31 @@ class TrainBudView extends WatchUi.View {
     // At most two. A third would not fit at a legible size, and the server
     // already sorts them worst-first, so the two shown are the two that matter.
     private function drawFindings(dc as Dc, cx as Number, cy as Number, list as Array) as Void {
+        // Findings live in the band between the card title and the page dots,
+        // and they are centred in that band rather than on the screen.
+        //
+        // Centring on the screen put the first line through the word "Today" on
+        // the Forerunner 55, and wrapping to a fixed 24 characters clipped it at
+        // both ends -- "Resting HR 4 bpm above" rendered as "esting HR 4 bpm
+        // above". Neither had ever been seen, because this card had never been
+        // drawn on any watch before 1.3.1.
+        var titleH  = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH   = dc.getFontHeight(Graphics.FONT_XTINY);
+        var bandTop = 24 + titleH + 2;
+        var bandBot = dc.getHeight() - 20;          // page dots sit below this
+        var bandH   = bandBot - bandTop;
+        if (bandH < lineH) { return; }
+
+        // A round screen is narrowest at whichever end of the band is farther
+        // from the centre. Wrapping to that width is slightly conservative and
+        // cannot clip, wherever the block finally lands.
+        var topOff = bandTop - cy;
+        var botOff = bandBot - cy;
+        if (topOff < 0) { topOff = -topOff; }
+        if (botOff < 0) { botOff = -botOff; }
+        var narrowest = topOff > botOff ? topOff : botOff;
+
+        var maxLines = bandH / lineH;
         var shown = list.size() < 2 ? list.size() : 2;
         var lines = [] as Array<String>;
         var colors = [] as Array<Number>;
@@ -506,22 +753,25 @@ class TrainBudView extends WatchUi.View {
             if (headline == null || !(headline instanceof String)) { continue; }
 
             var color = severityColor(entry.get("severity"));
-            var wrapped = wrapText(headline as String, 24);
+            var wrapped = wrapToWidth(dc, headline as String, Graphics.FONT_XTINY, narrowest);
 
             for (var j = 0; j < wrapped.size(); j += 1) {
+                if (lines.size() >= maxLines) { break; }
                 lines.add(wrapped[j] as String);
                 colors.add(color);
             }
 
             // Blank spacer between findings, so two of them do not read as one.
-            if (i < shown - 1) {
+            if (i < shown - 1 && lines.size() < maxLines) {
                 lines.add("");
                 colors.add(Graphics.COLOR_BLACK);
             }
         }
 
-        var lineH = dc.getFontHeight(Graphics.FONT_XTINY);
-        var startY = cy - ((lines.size() - 1) * lineH) / 2;
+        if (lines.size() == 0) { return; }
+
+        var blockH = lines.size() * lineH;
+        var startY = bandTop + ((bandH - blockH) / 2);
 
         for (var i = 0; i < lines.size(); i += 1) {
             var text = lines[i] as String;
@@ -529,7 +779,7 @@ class TrainBudView extends WatchUi.View {
 
             dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, startY + i * lineH, Graphics.FONT_XTINY, text,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+                Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -563,9 +813,8 @@ class TrainBudView extends WatchUi.View {
             }
         }
 
-        // Wrap text: split into ~22-char lines for small watch
-        var lines = wrapText(insight, 22);
-        var lineH = 20;
+        var lines  = wrapToWidth(dc, insight, Graphics.FONT_XTINY, 0);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
         var startY = cy - ((lines.size() - 1) * lineH) / 2;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
@@ -691,7 +940,7 @@ class TrainBudView extends WatchUi.View {
             var maxRadius   = (dc.getWidth() / 2) - 12;
             var clearance   = cy - titleBottom - 6;
             var radius      = clearance < maxRadius ? clearance : maxRadius;
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.drawArc(cx, cy, radius, Graphics.ARC_CLOCKWISE, 90, 90 - 360);
 
             // The end angle is measured clockwise from the top -- 90 minus the
@@ -705,23 +954,43 @@ class TrainBudView extends WatchUi.View {
         } else if (hasScore) {
             var barWidth = dc.getWidth() - 40;
             var fillWidth = (barWidth * score) / 100;
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.fillRectangle(20, cy + 8, barWidth, 8);
             dc.setColor(color, Graphics.COLOR_TRANSPARENT);
             dc.fillRectangle(20, cy + 8, fillWidth, 8);
         }
 
+        // "No data" must not go anywhere near FONT_NUMBER_HOT: that face has
+        // digits and separators only, so every letter in it draws as an empty
+        // box. Same trap as the Sleep card's "6.3h".
+        var scoreText = hasScore
+            ? score.toString()
+            : WatchUi.loadResource(Rez.Strings.NoData) as String;
+        var scoreFont = hasScore ? Graphics.FONT_NUMBER_HOT : Graphics.FONT_MEDIUM;
+
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, cy - 8, Graphics.FONT_NUMBER_HOT,
-            hasScore ? score.toString() : WatchUi.loadResource(Rez.Strings.NoData) as String,
+        dc.drawText(cx, cy - 8, scoreFont, scoreText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
+        // Everything below the score is stacked off the score's real height.
+        //
+        // The label was at a fixed cy+36 and the heart rate at cy+62, which are
+        // sized for a small screen: FONT_NUMBER_HOT is about 60 px tall on the
+        // 208 px Forerunner 55 and roughly twice that on a 454 px fenix, where
+        // "Ready" printed through the bottom of the "91". Measure the number,
+        // then put the label under it.
+        var scoreBottom = cy - 8 + (Graphics.getFontHeight(scoreFont) / 2)
+            - Graphics.getFontDescent(scoreFont);
+        var labelY = scoreBottom + 6;
         if ((label as String).length() > 0) {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, cy + 36, Graphics.FONT_TINY, label, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, labelY, Graphics.FONT_TINY,
+                fitLine(dc, label as String, Graphics.FONT_TINY, labelY),
+                Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        drawRestingHeartRate(dc, summary, cx, cy + 62);
+        drawRestingHeartRate(dc, summary, cx,
+            labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2);
     }
 
     // Resting and max heart rate share the Recovery card: resting HR is how the
@@ -742,13 +1011,32 @@ class TrainBudView extends WatchUi.View {
         var max     = hd.get("max");
         if (resting == null) { return; }
 
+        var maxLabel = WatchUi.loadResource(Rez.Strings.LabelMax) as String;
         var text = WatchUi.loadResource(Rez.Strings.LabelResting) as String + " " + resting.toString();
         if (max != null) {
-            text = text + "  " + WatchUi.loadResource(Rez.Strings.LabelMax) as String + " " + max.toString();
+            text = text + "  " + maxLabel + " " + max.toString();
+        }
+
+        // Shorten the label before letting the number be cut off.
+        //
+        // "Resting 48  Max 178" is wider than a 208 px round screen allows at
+        // this height, and plain truncation rendered "Resting 48  Ma..." --
+        // spending the space on the word and throwing away the maximum heart
+        // rate, which is the only part the user cannot already guess.
+        if (max != null) {
+            var available = lineWidthAt(dc,
+                y + Graphics.getFontHeight(Graphics.FONT_XTINY)
+                  - Graphics.getFontDescent(Graphics.FONT_XTINY) - (dc.getHeight() / 2));
+            if (dc.getTextWidthInPixels(text, Graphics.FONT_XTINY) > available) {
+                text = (WatchUi.loadResource(Rez.Strings.LabelRestingShort) as String)
+                    + " " + resting.toString() + "  " + maxLabel + " " + max.toString();
+            }
         }
 
         dc.setColor(heartRateColor(resting as Number), Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, y, Graphics.FONT_XTINY, text, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, y, Graphics.FONT_XTINY,
+            fitLine(dc, text, Graphics.FONT_XTINY, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     // -------------------------------------------------------------------------
@@ -796,7 +1084,12 @@ class TrainBudView extends WatchUi.View {
                 var dur      = ad.get("duration_min");
                 var avgHr    = ad.get("avg_hr");
                 var parts    = [] as Array<String>;
-                if (name != null) { result[:value] = truncate(name as String, 14); }
+                // Not truncated here. drawFittedValue steps down through the
+                // fonts and then trims by measured width, which is the only way
+                // to know what fits; cutting to 14 characters first threw away
+                // room that a smaller font would have had. This was the last
+                // open item on the Activity card.
+                if (name != null) { result[:value] = name as String; }
                 if (dur != null)      { parts.add(formatDuration(dur as Number)); }
                 // Connect reports 0 km for workouts that do not cover ground, so
                 // a strength session read "1h 23m . 0 km . 114 bpm". A distance
@@ -906,11 +1199,6 @@ class TrainBudView extends WatchUi.View {
         return result;
     }
 
-    private function truncate(text as String, maxLen as Number) as String {
-        if (text.length() <= maxLen) { return text; }
-        return text.substring(0, maxLen - 3) + "...";
-    }
-
     // The card value is drawn in FONT_NUMBER_HOT, which is sized for two or
     // three digits. On the Activity card the value is the workout's name, and
     // "Strength" already ran off both edges of a 390 px round screen -- the old
@@ -919,13 +1207,27 @@ class TrainBudView extends WatchUi.View {
     // trim, measuring as we go.
     private function drawFittedValue(dc as Dc, cx as Number, cy as Number, text as String) as Void {
         var maxWidth = (dc.getWidth() * 85) / 100;
-        var fonts = [
-            Graphics.FONT_NUMBER_HOT,
-            Graphics.FONT_NUMBER_MEDIUM,
-            Graphics.FONT_LARGE,
-            Graphics.FONT_MEDIUM,
-            Graphics.FONT_SMALL
-        ] as Array<Graphics.FontDefinition>;
+
+        // The FONT_NUMBER_* faces carry digits and separators and nothing else,
+        // so any letter in them draws as an empty box. The Sleep card's "6.3h"
+        // rendered as "6.3" followed by a hollow yellow rectangle on the
+        // Forerunner 55 -- and the box has a width, so the fits-in-this-font
+        // check passed and it never stepped down to a font with letters.
+        // Only offer the number faces when there is nothing but a number.
+        var fonts = isNumericText(text)
+            ? ([
+                Graphics.FONT_NUMBER_HOT,
+                Graphics.FONT_NUMBER_MEDIUM,
+                Graphics.FONT_LARGE,
+                Graphics.FONT_MEDIUM,
+                Graphics.FONT_SMALL
+              ] as Array<Graphics.FontDefinition>)
+            : ([
+                Graphics.FONT_LARGE,
+                Graphics.FONT_MEDIUM,
+                Graphics.FONT_SMALL,
+                Graphics.FONT_TINY
+              ] as Array<Graphics.FontDefinition>);
 
         for (var i = 0; i < fonts.size(); i += 1) {
             var font = fonts[i];
@@ -948,6 +1250,9 @@ class TrainBudView extends WatchUi.View {
         font as Graphics.FontDefinition,
         maxWidth as Number
     ) as String {
+        // lineWidthAt returns 0 at the very top and bottom of a round screen.
+        // Trimming to a zero budget would eat the whole string.
+        if (maxWidth <= 0) { return text; }
         if (dc.getTextWidthInPixels(text, font) <= maxWidth) { return text; }
 
         var trimmed = text;
@@ -959,6 +1264,86 @@ class TrainBudView extends WatchUi.View {
         }
 
         return trimmed;
+    }
+
+    /** Truncates a single line to whatever fits at the height it is drawn.
+
+        Text is drawn top-anchored, so it spans yTop to yTop + fontHeight, and
+        on a round screen the edge of that span furthest from the centre is the
+        one that clips. Measuring only at yTop reported more room than the line
+        actually had. */
+    private function fitLine(
+        dc as Dc,
+        text as String,
+        font as Graphics.FontType,
+        yTop as Number
+    ) as String {
+        // The glyphs, not the font box. getFontHeight is ascent plus descent,
+        // and the descent is empty space under most characters -- charging the
+        // line for it made "Rest 48  Max 178" look 20 px wider than it draws,
+        // and it was truncated with room to spare.
+        var cy  = dc.getHeight() / 2;
+        var top = yTop - cy;
+        var bot = yTop + Graphics.getFontHeight(font) - Graphics.getFontDescent(font) - cy;
+        if (top < 0) { top = -top; }
+        if (bot < 0) { bot = -bot; }
+        return fitToWidth(dc, text, font, lineWidthAt(dc, top > bot ? top : bot));
+    }
+
+    /** True when every character is one the FONT_NUMBER_* faces actually have:
+        digits, and the separators that appear between them. */
+    private function isNumericText(text as String) as Boolean {
+        var chars = text.toCharArray();
+        for (var i = 0; i < chars.size(); i += 1) {
+            var c = chars[i];
+            var isDigit = c >= '0' && c <= '9';
+            var isSep   = c == '.' || c == ':' || c == '-' || c == ' ' || c == ',';
+            if (!isDigit && !isSep) { return false; }
+        }
+        return true;
+    }
+
+    // How wide a line can be at a given distance from the vertical centre.
+    //
+    // A round screen is a circle, so a line near the top or bottom has far less
+    // room than one through the middle: on the 208 px Forerunner 55 the centre
+    // fits about 34 characters and a line 60 px above it fits 27. Wrapping to a
+    // fixed character count ignored that, and "Cannot reach server" rendered as
+    // "annot reach serve" -- a character lost off each end, the same failure the
+    // old single-line "Pairing failed" message had.
+    private function lineWidthAt(dc as Dc, dyFromCenter as Number) as Number {
+        var w = dc.getWidth();
+        if (!isRoundScreen(dc)) { return w - 12; }
+
+        var r  = w / 2;
+        var dy = dyFromCenter < 0 ? -dyFromCenter : dyFromCenter;
+        if (dy >= r) { return 0; }
+
+        var half  = Math.sqrt((r * r) - (dy * dy)).toNumber();
+        var avail = (half * 2) - 10;   // a small margin off the curve
+        return avail < 0 ? 0 : avail;
+    }
+
+    /** Wraps to the pixels actually available at dyFromCenter, in this font, on
+        this screen, rather than to a character count guessed per device. */
+    private function wrapToWidth(
+        dc as Dc,
+        text as String,
+        font as Graphics.FontType,
+        dyFromCenter as Number
+    ) as Array<String> {
+        var pixels = lineWidthAt(dc, dyFromCenter);
+        var len    = text.length();
+        if (len == 0) { return wrapText(text, 1); }
+
+        var textW = dc.getTextWidthInPixels(text, font);
+        if (textW <= 0 || pixels <= 0) { return wrapText(text, len); }
+
+        // Average width over this string, a far better estimate for this text
+        // than any fixed per-font constant.
+        var perChar = textW.toFloat() / len;
+        var chars   = (pixels / perChar).toNumber();
+        return wrapText(text, chars < 1 ? 1 : chars);
     }
 
     private function wrapText(text as String, maxChars as Number) as Array<String> {

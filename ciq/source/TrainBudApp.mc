@@ -8,6 +8,26 @@ import Toybox.Time;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
+//
+// How a pairing attempt failed, in the terms the user can act on.
+//
+// Every failure used to render one screen reading "Pairing failed. Tap to
+// retry.", which is equally true of a watch with no phone, a mistyped URL, a
+// dead tunnel answering 404, a captive portal answering 200 with HTML, and a
+// healthy server that said no. Those need four different actions from the user
+// and the message named none of them. The reporter on the Forerunner 55 saw
+// that screen because the build shipped a default URL pointing at a tunnel that
+// no longer existed; NOT_SERVER would have said so.
+//
+// A module rather than constants on the app class, so the view can name them
+// without holding an instance -- the same reason Cards exists.
+//
+module PairFail {
+    const UNREACHABLE = 0;  // nothing answered: transport error or 5xx
+    const NOT_SERVER  = 1;  // something answered, but it is not us
+    const REFUSED     = 2;  // our server answered and declined
+}
+
 class TrainBudApp extends Application.AppBase {
 
     // Storage keys
@@ -31,7 +51,7 @@ class TrainBudApp extends Application.AppBase {
     // Stamped into pairing telemetry so the server log names the exact binary
     // that is running. Guessing which build the simulator had loaded wasted
     // several cycles.
-    const BUILD_ID = "1.3.0-today-card";
+    const BUILD_ID = "1.3.1-setup-screen";
 
     // Console tracing. The simulator's CIQ_LOG.YML records crashes only, but
     // System.println goes to the monkeydo console, which nobody had been
@@ -62,6 +82,7 @@ class TrainBudApp extends Application.AppBase {
     // failure rendered the same "Pairing failed" screen, so a phone that was not
     // connected looked identical to a server that was down.
     private var _pairErrorCode as Number or Null = null;
+    private var _pairFailClass as Number = PairFail.UNREACHABLE;
 
     // First slice of the response body when pairing fails with a 2xx. A 200 with
     // an unexpected body means something answered that is not our server — a
@@ -439,6 +460,7 @@ class TrainBudApp extends Application.AppBase {
             }
         }
         _pairErrorCode = responseCode;
+        _pairFailClass = classifyPairFailure(responseCode);
 
         if (data == null) {
             _pairErrorBody = "<null body>";
@@ -451,7 +473,46 @@ class TrainBudApp extends Application.AppBase {
         WatchUi.requestUpdate();
     }
 
+    // Which of the three failure screens to draw.
+    //
+    // A negative code is a Connect IQ constant, not an HTTP status, and always
+    // means the request never completed: no phone, no HTTPS, a refused header,
+    // a body that did not parse. Read the sign first.
+    //
+    // A 404 is the interesting one, and it is what the Forerunner 55 report was:
+    // ngrok answers a request for a tunnel that is no longer running with a 404
+    // and an HTML error page. So does any web server that is not TrainBud. The
+    // user needs to hear "that address is not a TrainBud server", not "pairing
+    // failed" -- the address is the thing they can fix.
+    private function classifyPairFailure(responseCode as Number) as Number {
+        if (responseCode < 0) {
+            // These four all mean bytes came back and were not ours: HTML where
+            // JSON was asked for, a content type we cannot read, headers we
+            // cannot read, a body too big to hold. A tunnel interstitial, a
+            // captive portal and a plain error page all land here.
+            if (responseCode == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE
+                || responseCode == Communications.INVALID_HTTP_HEADER_FIELDS_IN_NETWORK_RESPONSE
+                || responseCode == Communications.NETWORK_RESPONSE_TOO_LARGE
+                || responseCode == Communications.UNSUPPORTED_CONTENT_TYPE_IN_RESPONSE) {
+                return PairFail.NOT_SERVER;
+            }
+            // Everything else negative is the request never completing: no
+            // phone, no HTTPS, a header refused on the device, a timeout.
+            return PairFail.UNREACHABLE;
+        }
+        if (responseCode == 429) { return PairFail.REFUSED; }
+        if (responseCode >= 500) { return PairFail.UNREACHABLE; }
+        // Anything else in the 2xx-4xx range came from a host that answered but
+        // does not serve POST /api/pair the way TrainBud does.
+        return PairFail.NOT_SERVER;
+    }
+
     function getPairErrorCode() as Number or Null { return _pairErrorCode; }
+    function getPairFailClass() as Number          { return _pairFailClass; }
+
+    /** True in a debug build. Gates on-screen diagnostics that mean nothing to
+        a user but were worth a day of investigation to whoever is debugging. */
+    function isDebugBuild() as Boolean { return DEBUG_LOG; }
     function getPairPollCount() as Number          { return _pairPollCount; }
     function getPairPollAttempts() as Number       { return _pairPollAttempts; }
     function getPairPollCode()  as Number or Null  { return _pairPollCode; }

@@ -2,6 +2,131 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — watch 1.3.1 - 2026-09-02
+
+Nobody who installed the watch app from the store could ever pair it. Reported
+from a Forerunner 55 on firmware 11.03; it affected every user on every device.
+
+### Fixed — watch
+
+- **The store build shipped a default Server URL pointing at a developer's
+  personal ngrok tunnel.** From 1.2.0 onward `properties.xml` carried
+  `https://backpedal-immorally-cathouse.ngrok-free.dev` as the default, so a
+  fresh install found a non-empty URL, skipped the setup screen entirely, POSTed
+  `/api/pair` at a host that was usually offline, and rendered "Pairing failed"
+  forever. The tunnel answers `ERR_NGROK_3200` when it is not running; the watch
+  read the HTML error page as `-400` and reported a pairing failure. The default
+  is now empty, which routes a fresh install to a **Setup required** screen
+  naming the setup guide. Sideloading keeps a baked URL through the new
+  `ciq/monkey-dev.jungle` overlay, which is gitignored and never in a store
+  build.
+
+  The same default was a privacy hazard in the other direction: while that
+  tunnel was up, a stranger's watch minted a pairing code against the
+  developer's own health server, one approval click away from handing out a
+  bearer token to somebody else's Garmin data.
+
+- **One "Pairing failed" screen became three, each naming what the user can
+  fix.** *Cannot reach server* (nothing answered), *Not a TrainBud server*
+  (something answered and it was not us — a dead tunnel, a captive portal, the
+  wrong address), *Server refused pairing*. The address in use is drawn on
+  screen whenever the address is the suspect, and `-104`, `-1001` and `429` get
+  their own one-line hints. `-1001` distinguishes a plain `http://` URL from an
+  `https://` one whose certificate was refused: the same code, two different
+  problems, and telling a self-hosted user to "use https" when they already do
+  is a dead end.
+
+- **Round screens were detected by measuring pixels rather than asking the
+  device.** `isRoundScreen()` was `width == height && width >= 240`, so the
+  Forerunner 55 — round, 208×208 — was treated as rectangular and drew the
+  recovery bar instead of the ring. Now `System.getDeviceSettings().screenShape`.
+
+- **Text wrapped to a fixed character count, which a circle does not honour.**
+  A line near the top of a round screen has far less room than one through the
+  middle; "Cannot reach server" rendered as "annot reach serve". Wrapping is now
+  measured in pixels against the chord width available at that height.
+
+- **The five button-only products could not navigate.** `BehaviorDelegate` maps
+  UP and DOWN to `onNextPage`/`onPreviousPage` and neither was implemented, so
+  on fr55, fr745 and the three Instinct 3 variants the carousel only moved
+  forwards one START press at a time and the Ask menu could not be scrolled at
+  all. Every on-screen hint also said "tap"; hints are now chosen from
+  `System.getDeviceSettings().isTouchScreen`.
+
+- **Grey was invisible on the Forerunner 55.** Its palette holds eight colours
+  and none of them is grey, so `COLOR_DK_GRAY` snapped to black on a black
+  background: inactive page dots, faded Ask items, card footnotes and the ring
+  track all vanished. Secondary elements use a colour that survives the palette,
+  and inactive dots are outlined rather than filled, so the hierarchy is carried
+  by shape.
+
+- **Pairing telemetry is debug-only.** The pairing screen drew `9/8 200` in the
+  corner of a store build — unexplainable to a user, and the difference between
+  a poll that never ran and one discarded on the device to anyone debugging.
+
+- **The AI disclaimer is now on screen.** The string existed from 1.2.0 and was
+  never drawn anywhere, so the app made training and recovery statements on a
+  health device with nothing to qualify them. It renders on the last page of an
+  answer.
+
+### Fixed — watch, found by drawing it
+
+Everything below was found by running 1.3.1 in the simulator on a Forerunner 55
+and a fenix 8 47mm and looking at every card. None of it was visible from the
+source, the type checker or a green build, and none of these screens had ever
+been drawn on any watch: 1.3.0 shipped its `.iq` without a single render.
+
+- **The Today card printed its first finding through its own title,** and cut a
+  character off each end of it: "Resting HR 4 bpm above" drew as "esting HR 4 bpm
+  above". It centred the text block on the screen rather than in the space below
+  the heading, and wrapped to a fixed 24 characters. This is card 0 — the first
+  thing a paired user sees.
+
+- **The Sleep card drew an empty yellow box next to "6.3".** The FONT_NUMBER_*
+  faces contain digits and separators and no letters, so the "h" rendered as a
+  missing-glyph box — and a box has a width, so the "does this fit" check passed
+  and the value never stepped down to a font that has letters. The Recovery
+  card's "No data" had the same fault waiting.
+
+- **The Ask AI card printed the selected prompt underneath its own hint:**
+  "Why is my re[STA]sting HR up?". The hint was right-justified against the
+  screen edge at the vertical centre, which on a circle is exactly where the
+  widest line already is.
+
+- **The carousel dead-ended on the Ask card.** Going back from the first prompt
+  left the card, but going forward from the last one wrapped around, so the six
+  metric cards after it could only be reached by paging *backwards* from Today.
+  It now leaves at both ends, on buttons and on swipe.
+
+- **The AI Insight card overlapped its own lines on large screens.** The line
+  step was a hardcoded 20 px, which is about right for the 208 px Forerunner 55
+  and much too small for a 454 px fenix. Every hardcoded line step is now
+  derived from the font.
+
+- **The Recovery card printed "Ready" through the bottom of the score,** for the
+  same reason: the label sat at a fixed offset from the centre while the score
+  is drawn in a font whose height nearly doubles between those two devices. The
+  label and the heart rate line are now stacked off the score's measured height.
+
+- **"Resting 48  Max 178" lost its last digits** at the bottom of a 208 px round
+  screen. It now shortens the *label* before the number: "Rest 48  Max 178".
+
+- Activity card: the workout name was cut to 14 characters before being drawn,
+  which threw away room a smaller font would have used. `drawFittedValue`
+  already measures and steps down; the character cut is gone. This was the last
+  item open on that card.
+
+### Fixed — dependencies
+
+- `qs` 6.15.3 → 6.16.0 and `fast-uri` 3.1.5 → 3.1.7, clearing one high and one
+  moderate advisory. `npm audit` is clean.
+
+### Removed
+
+- Dead resources and code: `drawHint()` and the `TapHint` string it drew
+  (replaced by page dots in 1.2.0), plus the unused `AskHint`, `PairingPolling`
+  and `CardHeartRate` strings.
+
 ## [0.3.1] - 2026-08-19
 
 Watch pairing works. It never had, on any build, and the cause was the last one

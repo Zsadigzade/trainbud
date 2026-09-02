@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copy to properties.xml (gitignored) and set your own tunnel URL.
+     Only ever loaded by monkey-dev.jungle; the store build ships an empty
+     ServerUrl and routes a fresh install to the Setup screen instead. -->
+<properties>
+    <property id="ServerUrl" type="string">https://your-tunnel.example.com</property>
+</properties>
