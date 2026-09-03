@@ -3,9 +3,30 @@ import type { GarminConnectInstance } from "./garminConnect.js";
 
 const GC_API = "https://connectapi.garmin.com";
 
+/**
+ * The calendar day this Date stands for, read in the zone it was built in.
+ *
+ * Every Date reaching here is LOCAL midnight -- `getDateRange` and
+ * `getDatesBetween` both go through `DateTime.local().startOf("day")`. Reading
+ * one of those `{ zone: "utc" }` does not convert it, it asks which UTC day
+ * that instant falls on, and for any zone east of UTC that is the day before.
+ * On this machine, Asia/Baku at UTC+4, local midnight on 2026-09-03 is
+ * 2026-09-02T20:00Z, so every stress and VO2 max request asked Connect about
+ * 2026-09-02 and the answer was then stamped 2026-09-02 as well -- plausible
+ * numbers filed under a day the user did not live, feeding the recovery score.
+ * Auckland is off by one the same way; Los Angeles happens to land right,
+ * which is the mirror image of the garmin-connect bug fixed in d64a78a.
+ *
+ * Asserting `toISOString()` is what let that one survive: it is a property of
+ * which midnight the Date sits on, not of the day Garmin is asked about. The
+ * test beside this one pins the day in the URL, in four zones.
+ */
 function toGarminDate(date: Date): string {
-  return DateTime.fromJSDate(date, { zone: "utc" }).toFormat("yyyy-MM-dd");
+  return DateTime.fromJSDate(date).toFormat("yyyy-MM-dd");
 }
+
+/** Exported for the timezone test: the bug is invisible from outside this module. */
+export const __toGarminDateForTest = toGarminDate;
 
 /**
  * Connect takes the date as a path segment here. Sent as a query parameter --
