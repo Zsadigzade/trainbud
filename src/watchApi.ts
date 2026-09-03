@@ -13,6 +13,7 @@ import { budgetState } from "./usage.js";
 import { buildWeekReview, type WeekReview } from "./detect/week.js";
 import { nextRace, type RaceCountdown } from "./detect/countdown.js";
 import { buildPromptSuggestions } from "./promptSuggestions.js";
+import { formatDistanceMeters } from "./utils/helpers.js";
 import { activeContext, upcomingContext, type ContextEntry } from "./history/context.js";
 import type { Finding } from "./detect/findings.js";
 import type { RecoveryStatusResult } from "./garmin/types.js";
@@ -50,7 +51,19 @@ export interface WatchSleep {
 
 export interface WatchActivity {
   name: string;
+  /**
+   * Kilometres, always. Kept unconditionally metric because a build already on
+   * someone's wrist reads this field and would silently relabel miles as km:
+   * fields may be added here, never redefined.
+   */
   distance_km: number | null;
+  /**
+   * The same distance already written in the user's own units, e.g. "3.11 mi".
+   * Added rather than converting the field above, for the reason given there.
+   * A watch too old to know about it goes on drawing kilometres, which is what
+   * it has always drawn.
+   */
+  distance_display: string | null;
   duration_min: number | null;
   avg_hr: number | null;
   date: string;
@@ -295,12 +308,18 @@ export function toWatchActivity(payload: LatestActivityPayload | null): WatchAct
     return null;
   }
 
+  const units = getProfile().units;
+
   return {
     name: activity.name,
     distance_km:
       activity.distanceMeters === null
         ? null
         : Math.round((activity.distanceMeters / 1000) * 100) / 100,
+    distance_display:
+      activity.distanceMeters === null || activity.distanceMeters <= 0
+        ? null
+        : formatDistanceMeters(activity.distanceMeters, units),
     duration_min:
       activity.durationSeconds === null ? null : Math.round(activity.durationSeconds / 60),
     avg_hr: activity.averageHeartRate,

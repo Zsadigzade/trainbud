@@ -17,19 +17,24 @@ import {
   parseActivityLocalDateTime,
 } from "../utils/helpers.js";
 
+import { getProfile } from "../profile.js";
+
 const ACTIVITIES_PAGE_SIZE = 100;
 const MAX_ACTIVITIES_FETCH = 500;
 
 // SECTION: Activity Mapping
 
-export function formatActivitySummary(activity: ActivitySummary): string {
+export function formatActivitySummary(
+  activity: ActivitySummary,
+  units: "metric" | "imperial" = "metric"
+): string {
   return [
     `Activity: ${activity.name}`,
     `Type: ${activity.type}`,
     `Date: ${activity.startTimeLocal}`,
-    `Distance: ${formatDistanceMeters(activity.distanceMeters)}`,
+    `Distance: ${formatDistanceMeters(activity.distanceMeters, units)}`,
     `Duration: ${formatDuration(activity.durationSeconds)}`,
-    `Pace: ${formatPaceMetersPerSecond(activity.averageSpeedMps)}`,
+    `Pace: ${formatPaceMetersPerSecond(activity.averageSpeedMps, units)}`,
     `Avg HR: ${activity.averageHeartRate ?? "n/a"} bpm`,
     `Max HR: ${activity.maxHeartRate ?? "n/a"} bpm`,
     `Elevation gain: ${activity.elevationGainMeters === null ? "n/a" : `${activity.elevationGainMeters.toFixed(0)} m`}`,
@@ -120,7 +125,10 @@ export async function getActivitiesPool(): Promise<ActivityPool> {
 
 // SECTION: Tool Handlers
 
-export function renderLatestActivityText(payload: LatestActivityPayload): string {
+export function renderLatestActivityText(
+  payload: LatestActivityPayload,
+  units: "metric" | "imperial" = "metric"
+): string {
   if (!payload.activity) {
     return payload.fromStore
       ? "Garmin could not be reached just now, and TrainBud's stored history holds no activities either."
@@ -136,7 +144,7 @@ export function renderLatestActivityText(payload: LatestActivityPayload): string
       ].join("\n")
     : "";
 
-  return note + formatActivitySummary(payload.activity);
+  return note + formatActivitySummary(payload.activity, units);
 }
 
 export async function getLatestActivity(): Promise<ToolResult<LatestActivityPayload>> {
@@ -156,7 +164,7 @@ export async function getLatestActivity(): Promise<ToolResult<LatestActivityPayl
 
   return {
     type: "text",
-    text: renderLatestActivityText(payload),
+    text: renderLatestActivityText(payload, getProfile().units),
     data: payload,
   };
 }
@@ -171,7 +179,10 @@ export function buildActivitiesRangePayload(
   return { startDate, endDate, truncated, activities, fromStore };
 }
 
-export function renderActivitiesRangeText(payload: ActivitiesRangePayload): string {
+export function renderActivitiesRangeText(
+  payload: ActivitiesRangePayload,
+  units: "metric" | "imperial" = "metric"
+): string {
   const storedNote = payload.fromStore
     ? [
         "Garmin could not be reached just now, so these come from TrainBud's own stored history rather than from Connect.",
@@ -194,7 +205,7 @@ export function renderActivitiesRangeText(payload: ActivitiesRangePayload): stri
 
     return [
       `${index + 1}. ${activity.name} (${activity.type})`,
-      `   ${activityDate} | ${formatDistanceMeters(activity.distanceMeters)} | ${formatDuration(activity.durationSeconds)}`,
+      `   ${activityDate} | ${formatDistanceMeters(activity.distanceMeters, units)} | ${formatDuration(activity.durationSeconds)}`,
     ].join("\n");
   });
 
@@ -226,7 +237,7 @@ export async function getActivitiesRange(
 
   return {
     type: "text",
-    text: renderActivitiesRangeText(payload),
+    text: renderActivitiesRangeText(payload, getProfile().units),
     data: payload,
   };
 }

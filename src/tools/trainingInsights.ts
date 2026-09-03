@@ -1,6 +1,7 @@
 import { filterActivitiesByRange } from "../utils/helpers.js";
 import { DateTime } from "luxon";
 import { getActivitiesPool, formatActivitySummary } from "./activities.js";
+import { getProfile } from "../profile.js";
 import { getSleepDataTool } from "./sleep.js";
 import { getRecoveryStatus } from "./recovery.js";
 import { getStressLevels } from "./stress.js";
@@ -32,7 +33,7 @@ export function renderTrainingInsightsText(
     `Period: ${payload.startDate} to ${payload.endDate}`,
     "",
     "## Latest activity",
-    payload.latest ? formatActivitySummary(payload.latest) : "No activities found.",
+    payload.latest ? formatActivitySummary(payload.latest, getProfile().units) : "No activities found.",
     "",
     "## Activities in period",
     ...activityLines,

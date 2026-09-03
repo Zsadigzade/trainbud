@@ -1856,7 +1856,17 @@ class TrainBudView extends WatchUi.View {
                 // Connect reports 0 km for workouts that do not cover ground, so
                 // a strength session read "1h 23m . 0 km . 114 bpm". A distance
                 // of zero is an absence, not a measurement.
-                if (distance != null && (distance as Float) > 0) { parts.add(metricText(distance) + " km"); }
+                // The server writes the distance in the user's own units and
+                // sends it as text; distance_km stays kilometres forever
+                // because a watch already on a wrist reads that field. Older
+                // servers send no display string, so the kilometre form is the
+                // fallback rather than the default.
+                var shown = ad.get("distance_display");
+                if (shown != null && shown instanceof String) {
+                    parts.add(shown as String);
+                } else if (distance != null && (distance as Float) > 0) {
+                    parts.add(metricText(distance) + " km");
+                }
                 if (avgHr != null)    { parts.add(avgHr.toString() + " bpm"); }
                 result[:subtitle] = joinParts(parts, " · ");
             }

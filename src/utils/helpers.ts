@@ -126,9 +126,36 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${remainingSeconds}s`;
 }
 
-export function formatDistanceMeters(meters: number | null | undefined): string {
+const METRES_PER_MILE = 1609.344;
+const METRES_PER_FOOT = 0.3048;
+
+/**
+ * Distance in the units the user thinks in.
+ *
+ * The unit is a parameter rather than a lookup so these stay pure functions --
+ * every caller already sits inside a tool that knows the profile, and reaching
+ * for a database from a string formatter is how a formatter becomes untestable.
+ *
+ * This exists because the setting shipped before the conversion did: the
+ * profile accepted `imperial`, the system prompt told the model to answer in
+ * miles, and every number it was given was still in kilometres. A setting that
+ * claims to change the units and does not is worse than no setting -- the
+ * reader has no way to tell which one they are looking at.
+ */
+export function formatDistanceMeters(
+  meters: number | null | undefined,
+  units: "metric" | "imperial" = "metric"
+): string {
   if (meters === null || meters === undefined || !Number.isFinite(meters)) {
     return "n/a";
+  }
+
+  if (units === "imperial") {
+    // A quarter of a mile is the point below which a runner thinks in feet.
+    if (meters >= METRES_PER_MILE / 4) {
+      return `${(meters / METRES_PER_MILE).toFixed(2)} mi`;
+    }
+    return `${(meters / METRES_PER_FOOT).toFixed(0)} ft`;
   }
 
   if (meters >= 1000) {
@@ -138,7 +165,10 @@ export function formatDistanceMeters(meters: number | null | undefined): string 
   return `${meters.toFixed(0)} m`;
 }
 
-export function formatPaceMetersPerSecond(metersPerSecond: number | null | undefined): string {
+export function formatPaceMetersPerSecond(
+  metersPerSecond: number | null | undefined,
+  units: "metric" | "imperial" = "metric"
+): string {
   if (
     metersPerSecond === null ||
     metersPerSecond === undefined ||
@@ -148,10 +178,18 @@ export function formatPaceMetersPerSecond(metersPerSecond: number | null | undef
     return "n/a";
   }
 
-  const secondsPerKm = 1000 / metersPerSecond;
-  const minutes = Math.floor(secondsPerKm / 60);
-  const seconds = Math.round(secondsPerKm % 60);
-  return `${minutes}:${seconds.toString().padStart(2, "0")} /km`;
+  const perUnit = units === "imperial" ? METRES_PER_MILE : 1000;
+  const secondsPerUnit = perUnit / metersPerSecond;
+  const minutes = Math.floor(secondsPerUnit / 60);
+  const seconds = Math.round(secondsPerUnit % 60);
+
+  // 4:60 /km is not a pace. Rounding the seconds can carry, and the carry has
+  // to reach the minutes or the string is wrong once every sixty paces.
+  const carried = seconds === 60;
+  const finalMinutes = carried ? minutes + 1 : minutes;
+  const finalSeconds = carried ? 0 : seconds;
+
+  return `${finalMinutes}:${finalSeconds.toString().padStart(2, "0")} ${units === "imperial" ? "/mi" : "/km"}`;
 }
 
 export function calculateTrend(values: number[], lowerIsBetter = false): TrendDirection {
