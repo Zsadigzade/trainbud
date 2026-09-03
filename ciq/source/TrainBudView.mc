@@ -84,6 +84,13 @@ class TrainBudView extends WatchUi.View {
                 return;
             }
 
+            // Checked before the menu, so the user is not offered five
+            // questions that will all be refused.
+            if (app.isBudgetExceeded()) {
+                drawBudgetReached(dc);
+                return;
+            }
+
             var promptStatus = app.getPromptStatus();
             if (promptStatus.equals("idle")) {
                 drawAskAiMenu(dc, app);
@@ -284,25 +291,49 @@ class TrainBudView extends WatchUi.View {
     // three all rendered as "AI unavailable", which names no action; this one
     // has an action and it is the only one the user can take.
     private function drawAiSetupNeeded(dc as Dc) as Void {
+        drawNotice(dc,
+            WatchUi.loadResource(Rez.Strings.AiNotSetUp) as String,
+            WatchUi.loadResource(Rez.Strings.AiSetUpHint) as String);
+    }
+
+    //
+    // The user's own monthly cap has been reached.
+    //
+    // Said here rather than after a round trip. The server refuses the request
+    // and returns the reason, but a watch that submits anyway spends a fetch, a
+    // spinner and about thirty seconds of polling to be told something it was
+    // already holding in the payload -- and on a screen where every question
+    // costs the user real money, "why did nothing happen" is the worst possible
+    // answer. Only ever reached when the user set a cap themselves; there is no
+    // default ceiling.
+    //
+    private function drawBudgetReached(dc as Dc) as Void {
+        drawNotice(dc,
+            WatchUi.loadResource(Rez.Strings.AiBudgetReached) as String,
+            WatchUi.loadResource(Rez.Strings.AiBudgetHint) as String);
+    }
+
+    /** A headline in amber over a wrapped explanation, centred as one block. */
+    private function drawNotice(dc as Dc, headline as String, hint as String) as Void {
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
         var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
         var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
 
-        var hint = wrapToWidth(dc, WatchUi.loadResource(Rez.Strings.AiSetUpHint) as String,
-            Graphics.FONT_XTINY, lineH);
-        var y = cy - ((titleH + (hint.size() * lineH)) / 2);
+        var lines = wrapToWidth(dc, hint, Graphics.FONT_XTINY, lineH);
+        var y = cy - ((titleH + (lines.size() * lineH)) / 2);
 
-        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        // Amber: this is a state of the app the user has to act on, which is
+        // exactly what the caution colour is reserved for.
+        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, y, Graphics.FONT_SMALL,
-            fitLine(dc, WatchUi.loadResource(Rez.Strings.AiNotSetUp) as String,
-                Graphics.FONT_SMALL, y),
+            fitLine(dc, headline, Graphics.FONT_SMALL, y),
             Graphics.TEXT_JUSTIFY_CENTER);
         y += titleH;
 
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        for (var i = 0; i < hint.size(); i += 1) {
-            dc.drawText(cx, y, Graphics.FONT_XTINY, hint[i] as String,
+        dc.setColor(Palette.PRIMARY, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < lines.size(); i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, lines[i] as String,
                 Graphics.TEXT_JUSTIFY_CENTER);
             y += lineH;
         }

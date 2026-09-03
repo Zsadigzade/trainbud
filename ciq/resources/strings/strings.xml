@@ -50,6 +50,10 @@
          than dropped: the Forerunner 55 holds fewer lines than a Fenix, and the
          second finding used to disappear with nothing to say it existed. -->
     <string id="FindingsMore">more</string>
+    <!-- The user's own monthly AI spending cap, set in the dashboard. Only
+         reachable when they set one: there is no default ceiling. -->
+    <string id="AiBudgetReached">Budget reached</string>
+    <string id="AiBudgetHint">Your monthly AI limit is used up. Raise or clear it in the dashboard.</string>
     <string id="Loading">Loading...</string>
     <string id="NoData">No data</string>
     <!-- Compact placeholder for the four-cell overview grid, where "No data"

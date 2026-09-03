@@ -61,11 +61,23 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         // would have used. The numbers are one tap away; the flag is not.
         var flag = readTopFinding();
         if (flag != null) {
+            // A dot carries the severity and the sentence stays white, the same
+            // rule the cards follow. The whole line used to be drawn in the
+            // severity colour, which is the least legible thing this app can do
+            // on a transflective screen in daylight -- and this strip is the
+            // one surface a user reads without deciding to.
+            var dotRadius = 3;
+            var dotGap    = 5;
+            var textX     = (dotRadius * 2) + dotGap;
+
             dc.setColor(flag.get(:color) as Number, Graphics.COLOR_TRANSPARENT);
+            dc.fillCircle(dotRadius, height - 2, dotRadius);
+
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                0, height - 2,
+                textX, height - 2,
                 Graphics.FONT_GLANCE,
-                fitToWidth(dc, flag.get(:text) as String, Graphics.FONT_GLANCE, width),
+                fitToWidth(dc, flag.get(:text) as String, Graphics.FONT_GLANCE, width - textX),
                 Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
             );
             return;
@@ -194,14 +206,18 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         };
     }
 
-    // Kept in sync with TrainBudView.severityColor.
+    // The glance runs in its own build scope and cannot reach the Palette
+    // module, so these values are duplicated here on purpose. They must match
+    // Palette.HARD and Palette.CAUTION -- including the reason those exact
+    // values were chosen, which is that the Forerunner 55 rounds every colour
+    // to one of eight.
     private function severityColor(severity as Object or Null) as Number {
         if (severity != null && severity instanceof String) {
             var name = severity as String;
-            if (name.equals("warn"))   { return Graphics.COLOR_RED; }
-            if (name.equals("notice")) { return Graphics.COLOR_YELLOW; }
+            if (name.equals("warn"))   { return 0xE5484D; }   // Palette.HARD
+            if (name.equals("notice")) { return 0xF5A623; }   // Palette.CAUTION
         }
-        return Graphics.COLOR_LT_GRAY;
+        return 0x8FA3BD;                                       // Palette.SECONDARY
     }
 
     // The glance strip is a few characters wide and headlines are sentences, so

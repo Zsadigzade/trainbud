@@ -77,7 +77,7 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             // pressing it still submitted a prompt: a request that can only come
             // back as an error, against a screen that is not offering anything.
             // Nothing visible happened, so the user pressed it again.
-            if (!app.isAiConfigured()) {
+            if (!app.isAiConfigured() || app.isBudgetExceeded()) {
                 app.nextCard();
                 WatchUi.requestUpdate();
                 return;
@@ -146,7 +146,10 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             // With no key the card shows one message and no menu, so paging
             // through invisible prompt entries left the user pressing DOWN
             // against a screen that never changed. Treat it as an ordinary card.
-            if (!app.isAiConfigured()) {
+            // Same for a spent budget: the card shows one message and no menu,
+            // so paging through invisible prompt entries would leave the user
+            // pressing DOWN against a screen that never changes.
+            if (!app.isAiConfigured() || app.isBudgetExceeded()) {
                 if (forward) { app.nextCard(); } else { app.prevCard(); }
                 WatchUi.requestUpdate();
                 return true;
@@ -232,7 +235,7 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
 
         // Ask AI card
         if (cardId.equals(Cards.ASK_AI)) {
-            if (!app.isAiConfigured()) {
+            if (!app.isAiConfigured() || app.isBudgetExceeded()) {
                 if (direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP) {
                     app.nextCard();
                 } else if (direction == WatchUi.SWIPE_RIGHT || direction == WatchUi.SWIPE_DOWN) {

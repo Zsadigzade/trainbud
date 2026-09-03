@@ -35,6 +35,7 @@ module ScreenTour {
     const WEEK             = 24;
     const WEEK_COLD        = 25;
     const WEEK_RACE        = 26;
+    const ASK_BUDGET       = 27;  // the user's own monthly AI cap, reached
     const ASK_MENU         = 9;
     const ASK_NO_KEY       = 10;
     const ASK_THINKING     = 11;
@@ -49,7 +50,7 @@ module ScreenTour {
     const SLEEP            = 20;
     const ACTIVITY         = 21;
     const STRESS           = 22;
-    const STATE_COUNT      = 27;
+    const STATE_COUNT      = 28;
 
     // Where the tour currently is. A module variable rather than a field on the
     // app, so the app carries none of this in a build a user can install.
@@ -80,7 +81,7 @@ module ScreenTour {
             "ask-thinking", "ask-answer", "ask-job-error", "ask-transport",
             "ask-timeout", "insight", "insight-no-key", "overview",
             "recovery", "sleep", "activity", "stress", "today-cold-start",
-            "week", "week-cold-start", "week-race-week"
+            "week", "week-cold-start", "week-race-week", "ask-budget"
         ];
         if (i < 0 || i >= names.size()) { return "?"; }
         return names[i] as String;
@@ -222,6 +223,14 @@ module ScreenTour {
 
         app.setCardById(Cards.ASK_AI);
 
+        // The user's own monthly cap, reached. Drawn here because every AI
+        // screen this app has ever shipped undrawn has shipped broken, twice.
+        if (index == ASK_BUDGET) {
+            summary.put("budget", { "exceeded" => true, "incomplete" => false });
+            app.setSummary(summary);
+            return;
+        }
+
         if (index == ASK_MENU || index == ASK_NO_KEY) { return; }
 
         if (index == ASK_THINKING) {
@@ -327,12 +336,12 @@ module ScreenTour {
                 "stress"     => "caution",
                 "resting_hr" => "unknown"
             },
-            "display" => {
-                "name"  => null,
-                "units" => "metric",
-                "cards" => ["today", "ask", "insight", "week", "overview",
-                            "recovery", "sleep", "activity", "stress"]
-            },
+            // No "display" block on purpose. The carousel it would carry is
+            // identical to Cards.defaultOrder(), so the app falls back to the
+            // same nine cards -- and on the Forerunner 55 those nine strings
+            // plus their array and dictionary are the difference between the
+            // tour fitting in memory and the simulator dying halfway through
+            // the run. The reorder path is covered by the server's own tests.
             "alert"  => { "level" => "warn", "count" => 2 },
             "budget" => { "exceeded" => false, "incomplete" => false }
         };
