@@ -31,17 +31,7 @@ export interface PromptJob {
 
 let _db: Database.Database | null = null;
 
-function getDb(): Database.Database {
-  if (_db) return _db;
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  _db = new Database(DB_PATH);
-
-  // This database holds the Anthropic API key the dashboard saves, in the clear.
-  // better-sqlite3 creates the file, so it never went through writeSecretFile
-  // and landed 0644 like any other SQLite file -- readable by every account on
-  // the machine, while .env and session.json next to it are 0600.
-  restrictExistingFile(DB_PATH);
-  _db.exec(`
+export const APP_DB_SCHEMA = `
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -61,9 +51,24 @@ function getDb(): Database.Database {
       created_at   INTEGER NOT NULL,
       completed_at INTEGER
     );
-  `);
+`;
 
-  reconcilePromptJobs(_db);
+function getDb(): Database.Database {
+  if (_db) return _db;
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  _db = new Database(DB_PATH);
+
+  // This database holds the Anthropic API key the dashboard saves, in the clear.
+  // better-sqlite3 creates the file, so it never went through writeSecretFile
+  // and landed 0644 like any other SQLite file -- readable by every account on
+  // the machine, while .env and session.json next to it are 0600.
+  restrictExistingFile(DB_PATH);
+  _db.exec(APP_DB_SCHEMA);
+
+  // Reconciling used to happen here, which meant every process that opened this
+  // file reclaimed every other process's in-flight work. See
+  // reconcileStalePromptJobs.
+  prunePromptJobs(_db);
   return _db;
 }
 
@@ -169,26 +174,55 @@ export function listPendingPairTokens(): PairToken[] {
 const PROMPT_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
+ * How old an unfinished job has to be before it counts as wreckage.
+ *
+ * The watch polls a job id for about thirty seconds and then gives up, so
+ * anything younger than that is, or was until moments ago, an answer somebody
+ * is waiting for. Five minutes leaves room for a slow model call as well.
+ */
+export const STALE_PROMPT_JOB_SECONDS = 5 * 60;
+
+/**
  * A job the process died in the middle of is not still running.
  *
- * Nothing reconciled these, so a `serve` killed mid-answer left a row reading
- * `running` for the rest of time. The watch polls a job id for thirty seconds
- * and then gives up, so nobody ever sees the truth -- but `status` counted them,
- * and any future queue built on this table would have inherited a pile of
- * permanently in-flight work.
+ * THIS USED TO RUN INSIDE `getDb()`, so the first time ANY process opened
+ * app.db it flipped every pending and running row to
+ * "The server stopped before this answer came back." -- including the rows
+ * belonging to a `serve` that was, at that moment, waiting on Anthropic. Every
+ * entry point opens this file, so asking a question on the watch and then
+ * running `trainbud doctor`, `status`, `findings` or a backfill killed the live
+ * answer from another process, and the watch drew "AI unavailable".
+ *
+ * Two changes, and both are needed. It is called once, from `serve` at startup,
+ * so a CLI command no longer writes to a server's table at all. And it will not
+ * touch a job younger than STALE_PROMPT_JOB_SECONDS, which is what protects a
+ * second server on the same box, and a restart racing an answer that is still
+ * in flight.
  */
-function reconcilePromptJobs(db: Database.Database): void {
-  const now = Math.floor(Date.now() / 1000);
-
+export function reconcileStalePromptJobs(
+  db: Database.Database,
+  now = Math.floor(Date.now() / 1000)
+): void {
   db.prepare(
     `UPDATE prompt_jobs
         SET status = 'error',
             error = 'The server stopped before this answer came back.',
             completed_at = ?
-      WHERE status IN ('pending', 'running')`
-  ).run(now);
+      WHERE status IN ('pending', 'running')
+        AND created_at < ?`
+  ).run(now, now - STALE_PROMPT_JOB_SECONDS);
 
+  prunePromptJobs(db, now);
+}
+
+/** Drop rows past the retention window. Safe from any process. */
+function prunePromptJobs(db: Database.Database, now = Math.floor(Date.now() / 1000)): void {
   db.prepare("DELETE FROM prompt_jobs WHERE created_at < ?").run(now - PROMPT_JOB_TTL_SECONDS);
+}
+
+/** Called once by `serve`, which is the only process that owns these jobs. */
+export function reconcilePromptJobsOnStartup(): void {
+  reconcileStalePromptJobs(getDb());
 }
 
 export function createPromptJob(id: string, prompt: string): PromptJob {

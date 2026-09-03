@@ -3,7 +3,7 @@ import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { closeCache } from "./garmin/cache.js";
-import { closeAppDb, setSetting } from "./appDb.js";
+import { closeAppDb, reconcilePromptJobsOnStartup, setSetting } from "./appDb.js";
 import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
 import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
@@ -443,6 +443,11 @@ export function createHttpMcpServer(): HttpMcpServer {
       assertGarminCredentials();
       assertApiKey();
       configureLogger(appConfig.logPath);
+
+      // The one process that owns prompt jobs, reclaiming its own wreckage
+      // exactly once. This used to happen on every app.db open in every
+      // process, which is how a CLI command killed a live watch answer.
+      reconcilePromptJobsOnStartup();
 
       // Load Claude key saved via dashboard into process.env if not already set
       const savedClaudeKey = (await import("./appDb.js")).getSetting("anthropic_api_key");
