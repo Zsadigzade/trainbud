@@ -34,6 +34,11 @@ module Fail {
     const NOT_SERVER   = 1;   // something answered, but it is not us
     const REFUSED      = 2;   // our server answered and declined
     const UNAUTHORIZED = 3;   // our server answered and does not know this key
+    // Pairing only: the code on screen is dead. Not a transport failure -- the
+    // request succeeded and the answer was "there is no such code" -- but it
+    // needs its own screen, because the action is "get a new code" and every
+    // other class here says something the user cannot act on.
+    const EXPIRED      = 4;
 
     //
     // Which class a response code falls into.

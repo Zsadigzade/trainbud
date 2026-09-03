@@ -492,6 +492,20 @@ class TrainBudApp extends Application.AppBase {
         _summaryErrorCode = responseCode;
         _summaryFailClass = Fail.classify(responseCode);
 
+        // A rotated key must not be hidden behind yesterday's numbers.
+        //
+        // Falling back to the cached summary is right for a dropped connection:
+        // stale data beats a blank screen, and the "Updated N ago" badge says it
+        // is stale. It is wrong for a 401. That state never recovers on its own
+        // -- the watch holds a key the server no longer has -- so the fallback
+        // meant the user saw plausible, ageing numbers forever and was never
+        // told the one thing they could act on, which is to pair again.
+        if (_summaryFailClass == Fail.UNAUTHORIZED) {
+            setStatus("error");
+            WatchUi.requestUpdate();
+            return;
+        }
+
         if (!loadCachedSummary()) {
             setSummary(null);
             setUpdatedAt(null);
@@ -674,9 +688,43 @@ class TrainBudApp extends Application.AppBase {
             + " data=" + (data == null ? "null" : data.toString()));
         WatchUi.requestUpdate();
 
+        // A 404 is a dead code, not a code that has not been approved yet.
+        //
+        // The server answers 404 when the code has expired or has already been
+        // consumed -- and it deletes the token the moment it hands the API key
+        // over. So both "you took longer than five minutes" and "this code was
+        // already used" arrived here and were treated as "still waiting": the
+        // screen kept showing a six-digit number that could never be approved,
+        // and the poll kept asking about it until the user gave up. Nothing on
+        // screen ever changed, which is the same silent-failure shape as the
+        // original "Pairing failed".
+        if (responseCode == 404) {
+            stopPairTimer();
+            _pairErrorCode = null;
+            _pairFailClass = Fail.EXPIRED;
+            _pairErrorBody = null;
+            setStatus("pairing_error");
+            WatchUi.requestUpdate();
+            return;
+        }
+
         if (responseCode != 200 || data == null || !(data instanceof Dictionary)) {
             return;
         }
+
+        // The code can also simply run out while the poll is still succeeding.
+        // Nothing checked, so an unapproved code was polled for as long as the
+        // app stayed open, against a token the server had already deleted.
+        if (isPairCodeExpired()) {
+            stopPairTimer();
+            _pairErrorCode = null;
+            _pairFailClass = Fail.EXPIRED;
+            _pairErrorBody = null;
+            setStatus("pairing_error");
+            WatchUi.requestUpdate();
+            return;
+        }
+
         var d = data as Dictionary;
         var approved = d.get("approved");
         if (approved == null || !(approved instanceof Boolean) || !(approved as Boolean)) {

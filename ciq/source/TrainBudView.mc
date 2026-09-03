@@ -573,6 +573,8 @@ class TrainBudView extends WatchUi.View {
             titleRes = Rez.Strings.PairErrRefused;
         } else if (failClass == Fail.UNAUTHORIZED) {
             titleRes = Rez.Strings.ErrUnauthorized;
+        } else if (failClass == Fail.EXPIRED) {
+            titleRes = Rez.Strings.PairErrExpired;
         }
 
         var hint    = failureHint(app, failClass, code);
@@ -707,6 +709,9 @@ class TrainBudView extends WatchUi.View {
         }
         if (failClass == Fail.UNAUTHORIZED) {
             return WatchUi.loadResource(Rez.Strings.HintRepair) as String;
+        }
+        if (failClass == Fail.EXPIRED) {
+            return WatchUi.loadResource(Rez.Strings.HintNewCode) as String;
         }
         return null;
     }

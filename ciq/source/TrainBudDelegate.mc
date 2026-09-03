@@ -73,6 +73,16 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
 
         // Ask AI card
         if (cardIndex == Cards.ASK_AI) {
+            // The card draws "AI not set up" when the server has no key, and
+            // pressing it still submitted a prompt: a request that can only come
+            // back as an error, against a screen that is not offering anything.
+            // Nothing visible happened, so the user pressed it again.
+            if (!app.isAiConfigured()) {
+                app.nextCard();
+                WatchUi.requestUpdate();
+                return;
+            }
+
             var promptStatus = app.getPromptStatus();
 
             if (promptStatus.equals("idle")) {
@@ -133,6 +143,15 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
         }
 
         if (app.getCardIndex() == Cards.ASK_AI) {
+            // With no key the card shows one message and no menu, so paging
+            // through invisible prompt entries left the user pressing DOWN
+            // against a screen that never changed. Treat it as an ordinary card.
+            if (!app.isAiConfigured()) {
+                if (forward) { app.nextCard(); } else { app.prevCard(); }
+                WatchUi.requestUpdate();
+                return true;
+            }
+
             var promptStatus = app.getPromptStatus();
 
             if (promptStatus.equals("idle")) {
@@ -213,6 +232,16 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
 
         // Ask AI card
         if (cardIndex == Cards.ASK_AI) {
+            if (!app.isAiConfigured()) {
+                if (direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP) {
+                    app.nextCard();
+                } else if (direction == WatchUi.SWIPE_RIGHT || direction == WatchUi.SWIPE_DOWN) {
+                    app.prevCard();
+                }
+                WatchUi.requestUpdate();
+                return true;
+            }
+
             if (promptStatus.equals("idle")) {
                 // Swipe up/down or left/right moves through the prompts, and
                 // off the card at either end -- see the note in step().

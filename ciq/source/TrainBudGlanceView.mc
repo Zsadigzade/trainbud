@@ -134,12 +134,34 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
+        // FONT_GLANCE_NUMBER carries digits and separators and no letters at
+        // all, so the "h" in "6.3h" draws as a missing-glyph box.
+        //
+        // This is the Sleep card's bug, in the one place it was not fixed. There,
+        // the box survived a fits-in-this-font check because a tofu box has a
+        // width; here there is no check to survive -- the number face was simply
+        // asked for a string with a letter in it. Both surfaces read the same
+        // field. Offer the number face only when there is nothing but a number.
         dc.setColor(valueColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             x + labelWidth, baseline,
-            Graphics.FONT_GLANCE_NUMBER, value,
+            isNumericText(value) ? Graphics.FONT_GLANCE_NUMBER : Graphics.FONT_GLANCE,
+            value,
             Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
         );
+    }
+
+    /** True when every character is one the FONT_GLANCE_NUMBER face actually
+        has: digits, and the separators that appear between them. */
+    private function isNumericText(text as String) as Boolean {
+        var chars = text.toCharArray();
+        for (var i = 0; i < chars.size(); i += 1) {
+            var c = chars[i];
+            var isDigit = c >= '0' && c <= '9';
+            var isSep   = c == '.' || c == ':' || c == '-' || c == ' ' || c == ',';
+            if (!isDigit && !isSep) { return false; }
+        }
+        return true;
     }
 
     // The worst finding from the cached summary, if the server sent any and

@@ -98,6 +98,8 @@
          reach", which is the one thing that is certainly untrue when the server
          has answered. It happens whenever the API key is rotated: the watch
          keeps a key that no longer exists and pairing again is the whole fix. -->
+    <string id="PairErrExpired">Code expired</string>
+    <string id="HintNewCode">Get a new code</string>
     <string id="ErrUnauthorized">Watch not authorised</string>
     <string id="HintRepair">Pair this watch again</string>
     <!-- The raw Connect IQ code, always shown under the message. Negative codes
