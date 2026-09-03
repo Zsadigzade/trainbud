@@ -135,13 +135,39 @@ function round(value: number, places = 1): number {
 
 /** The newest measured value in a densified series, or null. */
 function latest(points: SeriesPoint[]): number | null {
+  return latestPoint(points)?.value ?? null;
+}
+
+/** The newest measured point, with its date, or null. */
+function latestPoint(points: SeriesPoint[]): { date: string; value: number } | null {
   for (let i = points.length - 1; i >= 0; i -= 1) {
-    const value = points[i]?.value;
-    if (value !== null && value !== undefined) {
-      return value;
+    const point = points[i];
+    if (point && point.value !== null && point.value !== undefined) {
+      return { date: point.date, value: point.value };
     }
   }
   return null;
+}
+
+/**
+ * What to call the most recent night.
+ *
+ * "Last night" is a claim about a date, and the store's newest night is only
+ * last night if it was recorded. Read at two in the morning the newest row is
+ * the night BEFORE last, and the tile said "Last night" over it -- the same
+ * fault as the sleep card calling a fortnight-old night "last night", which
+ * this project has already fixed once on the watch.
+ */
+export function nightLabel(date: string | null, today = DateTime.local()): string {
+  if (date === null) {
+    return "Last night";
+  }
+  const recorded = DateTime.fromISO(date).startOf("day");
+  const yesterday = today.startOf("day").minus({ days: 1 });
+  if (!recorded.isValid || recorded >= yesterday) {
+    return "Last night";
+  }
+  return `Night of ${recorded.toFormat("d LLL")}`;
 }
 
 /**
@@ -159,10 +185,11 @@ function buildTiles(
 ): DashboardTile[] {
   const tiles: DashboardTile[] = [];
 
-  const sleep = latest(trends.sleep.points);
+  const sleepPoint = latestPoint(trends.sleep.points);
+  const sleep = sleepPoint?.value ?? null;
   tiles.push({
     key: "sleep",
-    label: "Last night",
+    label: nightLabel(sleepPoint?.date ?? null),
     value: sleep === null ? "—" : `${round(sleep)} h`,
     note:
       trends.sleep.baseline === null || sleep === null
@@ -302,3 +329,6 @@ export function getDashboardData(publicUrl?: string): DashboardData {
     },
   };
 }
+
+/** Tests only. */
+export const __nightLabelForTests = nightLabel;

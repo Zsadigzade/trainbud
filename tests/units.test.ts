@@ -54,3 +54,30 @@ describe("pace in the user's own units", () => {
     assert.equal(formatPaceMetersPerSecond(null, "imperial"), "n/a");
   });
 });
+
+// --- night labelling -------------------------------------------------------
+//
+// Kept in this file because it is the same class of defect as the units one: a
+// label that asserts something about the data which the data does not support.
+
+import { DateTime } from "luxon";
+import { __nightLabelForTests } from "../src/dashboardData.js";
+
+describe("what to call the most recent night", () => {
+  const today = DateTime.fromISO("2026-09-04T02:00:00") as DateTime<true>;
+
+  it("calls yesterday's night last night", () => {
+    assert.equal(__nightLabelForTests("2026-09-03", today), "Last night");
+  });
+
+  it("refuses to call the night before last 'last night'", () => {
+    // Read at two in the morning, the newest recorded night is the night
+    // BEFORE last. Calling it "Last night" is the same fault as the sleep card
+    // calling a fortnight-old night last night, which was fixed once already.
+    assert.equal(__nightLabelForTests("2026-09-02", today), "Night of 2 Sep");
+  });
+
+  it("falls back to the generic label when there is no night at all", () => {
+    assert.equal(__nightLabelForTests(null, today), "Last night");
+  });
+});

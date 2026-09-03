@@ -279,6 +279,20 @@ export function toWatchSleep(payload: SleepPayload | null): WatchSleep | null {
     return null;
   }
 
+  // A night of zero seconds is a night Connect has no data for -- the watch was
+  // off the wrist, or the night is still in progress and nothing has been
+  // finalised. It is not a measurement of no sleep.
+  //
+  // Found on live data at two in the morning: the payload carried
+  // `{hours: 0, score: null, label: ""}`, the server graded zero hours against
+  // the user's own band and returned "hard", and the wrist would have drawn a
+  // red zero for a night that simply had not happened yet. The same trap the
+  // Activity card already guards -- Connect reports 0 km for workouts that do
+  // not cover ground -- one field over.
+  if (night.totalSleepSeconds <= 0) {
+    return null;
+  }
+
   const score = night.sleepScore ?? payload.averageScore;
 
   // "Fair" was the default, so a night Garmin never scored was labelled as

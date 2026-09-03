@@ -76,6 +76,40 @@ describe("watch mappers", () => {
     assert.equal(toWatchSleep(null), null);
   });
 
+  it("treats a night of zero seconds as absent, not as a night of no sleep", () => {
+    // Found on live data at two in the morning: Connect returned a night row
+    // with totalSleepSeconds 0 -- the night had not finished being recorded --
+    // and the payload carried {hours: 0, score: null, label: ""}. The server
+    // then graded zero hours against the user's own band and returned "hard",
+    // so the watch would have drawn a red zero for a night that had not
+    // happened yet. An absence must never be graded.
+    const sleep = toWatchSleep({
+      requestedNights: 1,
+      recordedNights: 1,
+      unreachableNights: 0,
+      storedNights: 0,
+      storedThrough: null,
+      storedWindowMoved: false,
+      averageScore: null,
+      nights: [
+        {
+          date: "2026-09-04",
+          totalSleepSeconds: 0,
+          deepSleepSeconds: 0,
+          lightSleepSeconds: 0,
+          remSleepSeconds: 0,
+          awakeCount: 0,
+          sleepScore: null,
+          avgSleepStress: null,
+          avgOvernightHrv: null,
+          hrvStatus: null,
+        },
+      ],
+    });
+
+    assert.equal(sleep, null);
+  });
+
   it("converts activity metres to kilometres and seconds to minutes", () => {
     const activity = toWatchActivity({
       fromStore: false,
