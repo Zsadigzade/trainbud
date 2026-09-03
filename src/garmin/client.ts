@@ -190,9 +190,27 @@ async function trackAuthRateLimit(
   }
 }
 
-export function resetGarminClient(): void {
+/**
+ * Forget the session. NOT the rate limit.
+ *
+ * These were one function, and the retry path in `withGarminClient` called it
+ * -- so the single code path reached by exactly the failure the cooldown exists
+ * for was the one that deleted the cooldown, and then attempted a fresh login
+ * into the live block. The doubling could never escalate past its 60-second
+ * floor either, because every failure reset the ladder to the bottom rung.
+ *
+ * Two different jobs had been sharing one name: `trainbud auth` wants both
+ * forgotten, since the user has just supplied new credentials and is entitled
+ * to one attempt. A failed request wants only the session forgotten.
+ */
+export function resetGarminSession(): void {
   clientInstance = null;
   clientPromise = null;
+}
+
+/** Forget the session AND the rate limit. What `trainbud auth` asks for. */
+export function resetGarminClient(): void {
+  resetGarminSession();
   clearCooldown();
 }
 
@@ -242,10 +260,11 @@ function toRateLimitError(error: unknown): GarminApiError | null {
 }
 
 export async function withGarminClient<T>(
-  operation: (client: GarminConnectInstance) => Promise<T>
+  operation: (client: GarminConnectInstance) => Promise<T>,
+  authenticator: Authenticator = defaultAuthenticator
 ): Promise<T> {
   try {
-    const client = await getGarminClient(false);
+    const client = await getGarminClient(false, authenticator);
     return await operation(client);
   } catch (error) {
     const rateLimitError = toRateLimitError(error);
@@ -258,8 +277,17 @@ export async function withGarminClient<T>(
     }
 
     logger.warn({ error }, "Garmin request failed auth, retrying once");
-    resetGarminClient();
-    const client = await getGarminClient(true);
+
+    // The session, not the cooldown. This used to call `resetGarminClient`,
+    // which deletes both -- so the retry erased a live rate-limit block and
+    // walked straight back into it, on the single path the block exists to
+    // guard. With the cooldown left in place, the `getGarminClient` call below
+    // refuses on its own: its cooldown check runs ahead of the `forceAuth`
+    // branch, so no extra guard is needed here and adding one would put the
+    // same decision in two places.
+    resetGarminSession();
+
+    const client = await getGarminClient(true, authenticator);
     return await operation(client);
   }
 }
