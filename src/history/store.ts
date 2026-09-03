@@ -421,9 +421,25 @@ export function historyStats(): HistoryStats {
     .prepare("SELECT MIN(date) AS oldest, MAX(date) AS newest FROM daily_metric")
     .get() as { oldest: string | null; newest: string | null };
 
+  // Days, not rows. `ingest_day` is keyed (date, source) across six sources, so
+  // counting rows reported "Days Garmin had no data for: 1590" on a store
+  // covering 366 dates -- four and a half years' worth, from a line whose whole
+  // job is to reassure someone that a short span is Garmin's fault rather than a
+  // broken backfill. A number that cannot be a number of days does the opposite.
+  //
+  // A day Garmin had no data for is a date where no source returned data AND at
+  // least one said so. A date whose only checkpoints are errors is a day nobody
+  // managed to ask about, which is a different fact and stays out of this count.
   const emptyDays = (
     database
-      .prepare("SELECT COUNT(*) AS count FROM ingest_day WHERE outcome = 'empty'")
+      .prepare(
+        `SELECT COUNT(*) AS count FROM (
+           SELECT date
+           FROM ingest_day
+           GROUP BY date
+           HAVING SUM(outcome = 'data') = 0 AND SUM(outcome = 'empty') > 0
+         )`
+      )
       .get() as { count: number }
   ).count;
 
