@@ -7,6 +7,7 @@ import { createHttpMcpServer, getRemoteConnectorInstructions } from "./httpServe
 import { assertGarminCredentials, appConfig, assertApiKey, deprecatedEnvNames } from "./config.js";
 import { DATA_DIR_NAME, LEGACY_DATA_DIR_NAME, migrateLegacyDataDir } from "./paths.js";
 import { configureLogger, logger } from "./utils/logger.js";
+import { protectStdout } from "./utils/stdio.js";
 import { packageVersion } from "./version.js";
 import { runSetup } from "./setup.js";
 import { withGarminClient } from "./garmin/client.js";
@@ -113,6 +114,12 @@ function bootstrap(): void {
 async function runStart(): Promise<void> {
   assertGarminCredentials();
   configureLogger(appConfig.logPath);
+
+  // Stdout is the MCP channel from here on, and a dependency's `console.log`
+  // lands on it. garmin-connect prints "login page title: ..." on every
+  // re-login, which puts two lines of English in the middle of a JSON-RPC
+  // stream and drops the client. See utils/stdio.ts.
+  protectStdout();
 
   const server = createMcpServer();
 
