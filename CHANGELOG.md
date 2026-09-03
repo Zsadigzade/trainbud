@@ -51,6 +51,59 @@ adds the check that would have found it in a sentence.
   for the life of the project purely because no key had ever existed on the
   machine it ran on; it failed the day one was added.
 
+### Fixed — found by an adversarial sweep
+
+A ten-lens audit produced 52 candidates; each went to two independent verifiers
+told to refute it, and 42 survived. The ones fixed here:
+
+- **Every daily metric was fetched for the wrong day, west of UTC.**
+  garmin-connect derives the calendar day from the Date it is given by
+  subtracting `getTimezoneOffset()` — a function that round-trips a
+  local-midnight Date and shifts a UTC-midnight one. Every Date this codebase
+  produced was UTC midnight, so at UTC-5 the library asked Garmin about the 18th
+  while the answer was stored under the 19th. Sleep, resting heart rate, stress
+  and weight were all off by one day, silently, and every baseline and finding
+  built on them described a day the user did not live. Invisible here because
+  this machine is UTC+4. The suite now passes under Los Angeles, UTC, Baku and
+  Auckland.
+
+- **Sleep debt was noise roughly half the time.** It summed one-sided shortfalls
+  against the user's own median, and half of anyone's nights fall below their
+  median by construction. Measured over 2000 synthetic steady sleepers with no
+  deficit at all it fired on 46.7% of weeks at an hour of night-to-night
+  variation. Now measured against a floor; false positives fall to 8.0% while a
+  genuine 1.5 h/night deficit is still caught 93% of the time.
+
+- **An unworn night scored as a bad night.** Recovery read
+  `sleep?.sleepTimeSeconds ?? 0`, scored zero hours as 35/100, and dragged an
+  otherwise excellent day under the "fatigued" line.
+
+- **A gap in the store read as a run of days.** The recent window was the last N
+  *points*, not N days.
+
+- **The request handler could not survive a throw.** One unguarded async
+  callback, so a malformed `Host` header — accepted by Node's parser, rejected by
+  `new URL` — exited the process, with no credential required.
+
+- **`trainbud setup` destroyed the Anthropic key**, and a Garmin password
+  containing `#` broke setup permanently, because values were written to `.env`
+  unquoted.
+
+- **Every goal and injury was saved twice**; the dashboard bound its form twice.
+
+- **`trainbud check` caused the rate limit it reported**, and a backfill answered
+  a 429 with ~1800 more requests.
+
+- **`app.db` held the Anthropic key at 0644**, and live pairing codes were
+  written to the log.
+
+- **The glance drew a tofu box** for the "h" in "6.3h"; **an expired pairing code
+  was polled forever**; **a rotated API key was hidden** behind ageing cached
+  numbers; and **the Ask card accepted presses with no AI key**.
+
+- **The only type check CI ran never looked at a test file**, which is why four
+  stale fixtures compiled.
+
 ### Added
 
 - **`trainbud doctor`, `GET /api/selftest`, and a Connection panel on the
