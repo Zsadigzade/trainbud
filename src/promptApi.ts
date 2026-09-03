@@ -1,4 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getProfile, type TrainBudProfile } from "./profile.js";
+import {
+  recordAiUsage,
+  assertWithinBudget,
+  type AiUsageKind,
+  type UsageSource,
+} from "./usage.js";
 import { randomBytes } from "node:crypto";
 import { DateTime } from "luxon";
 import {
@@ -18,13 +25,11 @@ import { logger } from "./utils/logger.js";
 
 // SECTION: Prompt API — Claude integration
 
-// The cheapest current model, which is the right default for this product: the
-// answers are two or three sentences read on a watch, and the user pays for
-// every one of them out of their own key. Unversioned id on purpose -- the
-// dated form is a pinned snapshot, and current SDK guidance is that the plain
-// id is complete as written.
-const MODEL = "claude-haiku-4-5";
-const MAX_TOKENS = 300;
+// The model and the answer length are no longer constants here. Both are
+// profile settings now (`ai.model`, `ai.length`), because the person paying for
+// the tokens is the person who should decide how many of them to buy. The
+// default is still the cheapest current model, for the same reason it always
+// was: these answers are two or three sentences read on a watch.
 const INSIGHT_PREFIX = "daily_insight:";
 
 /**
@@ -185,23 +190,102 @@ export function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatc
   return ["Current health snapshot:", ...lines].join("\n");
 }
 
-async function callClaude(prompt: string, healthContext: string): Promise<string> {
+/**
+ * How the answer should sound, and how long it is allowed to be.
+ *
+ * Length is two settings in one: the sentence instruction the model reads, and
+ * the `max_tokens` ceiling that stops a run-on answer costing more than it is
+ * worth. They have to move together -- raising the ceiling without changing
+ * the instruction just pays for the same three sentences.
+ */
+const LENGTH_SPEC: Record<
+  TrainBudProfile["ai"]["length"],
+  { sentences: string; maxTokens: number }
+> = {
+  short: { sentences: "2-3 short sentences maximum", maxTokens: 300 },
+  normal: { sentences: "4-5 sentences maximum", maxTokens: 500 },
+  detailed: { sentences: "up to two short paragraphs", maxTokens: 900 },
+};
+
+const TONE_SPEC: Record<TrainBudProfile["ai"]["tone"], string> = {
+  direct: "Be direct and actionable. No hedging, no encouragement padding.",
+  supportive: "Be warm and encouraging while still being specific and honest.",
+  technical: "Use precise physiological terms and name the metric behind each claim.",
+};
+
+/**
+ * Who the answer is for.
+ *
+ * Everything here comes from the profile rather than from Garmin, because
+ * Garmin has none of it. The same load ratio means something different to a
+ * lifter and a marathoner, and a model told neither will average the two.
+ */
+function audienceContext(profile: TrainBudProfile): string {
+  const parts: string[] = [];
+  if (profile.displayName) {
+    parts.push(`The user's name is ${profile.displayName}.`);
+  }
+  if (profile.primarySport) {
+    parts.push(`Their primary sport is ${profile.primarySport}.`);
+  }
+  if (profile.weeklyGoal.sessions !== null) {
+    parts.push(`They aim for ${profile.weeklyGoal.sessions} sessions a week.`);
+  }
+  if (profile.weeklyGoal.minutes !== null) {
+    parts.push(`They aim for ${profile.weeklyGoal.minutes} minutes of training a week.`);
+  }
+  parts.push(
+    profile.units === "imperial"
+      ? "Use imperial units (miles, pounds)."
+      : "Use metric units (kilometres, kilograms)."
+  );
+  return parts.join(" ");
+}
+
+async function callClaude(
+  prompt: string,
+  healthContext: string,
+  meta: { kind: AiUsageKind; source: UsageSource }
+): Promise<string> {
   const apiKey = resolveAnthropicKey();
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not configured. Set it in the dashboard or .env file.");
   }
 
+  // The cap is checked before the request, not after it. Recording an
+  // overspend that already happened is bookkeeping; refusing the request is
+  // the feature. No cap set means this never throws.
+  assertWithinBudget();
+
+  const profile = getProfile();
+  const model = profile.ai.model;
+  const length = LENGTH_SPEC[profile.ai.length];
+
   const client = new Anthropic({ apiKey });
 
   const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
+    model,
+    max_tokens: length.maxTokens,
     system: `You are a concise fitness coach assistant shown on a small smartwatch screen.
-Answer in 2-3 short sentences maximum. Be direct and actionable. No markdown formatting.
+Answer in ${length.sentences}. ${TONE_SPEC[profile.ai.tone]} No markdown formatting.
+${audienceContext(profile)}
 Give general training and wellness guidance only. Do not diagnose conditions or give
 medical advice; if asked something medical, say it is outside what you can advise on.
 ${healthContext}`,
     messages: [{ role: "user", content: prompt }],
+  });
+
+  // Recorded before the content check: the tokens were spent whether or not
+  // the shape of the reply was what this code expected, and a meter that only
+  // counts successes under-reports exactly the calls worth investigating.
+  recordAiUsage({
+    kind: meta.kind,
+    source: meta.source,
+    model,
+    inputTokens: message.usage.input_tokens,
+    outputTokens: message.usage.output_tokens,
+    cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
   });
 
   const block = message.content[0];
@@ -240,7 +324,7 @@ async function processPromptJob(id: string, prompt: string): Promise<void> {
       formatHealthContext(summary),
     ].join("\n");
 
-    const result = await callClaude(prompt, healthContext);
+    const result = await callClaude(prompt, healthContext, { kind: "ask", source: "watch" });
     updatePromptJob(id, { status: "done", result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -298,7 +382,8 @@ export async function generateDailyInsight(
 
     const result = await callClaude(
       "Give me one sentence of actionable advice for today. Refer to what actually stands out rather than restating the numbers.",
-      healthContext
+      healthContext,
+      { kind: "insight", source: "server" }
     );
     setSetting(cacheKey, result);
     pruneOldInsights(cacheKey);

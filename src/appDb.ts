@@ -51,6 +51,32 @@ export const APP_DB_SCHEMA = `
       created_at   INTEGER NOT NULL,
       completed_at INTEGER
     );
+
+    -- Usage. cost_usd is nullable ON PURPOSE: a model this build has no
+    -- published price for records its tokens and leaves the cost unknown,
+    -- because a call priced at zero is a monthly cap that can never trip.
+    -- The schema lives here rather than in usage.ts so that opening the
+    -- database does not have to import the module that writes to it.
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      at            INTEGER NOT NULL,
+      kind          TEXT    NOT NULL,
+      model         TEXT    NOT NULL,
+      source        TEXT    NOT NULL,
+      input_tokens  INTEGER NOT NULL,
+      output_tokens INTEGER NOT NULL,
+      cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd      REAL
+    );
+    CREATE INDEX IF NOT EXISTS ai_usage_at ON ai_usage(at);
+
+    CREATE TABLE IF NOT EXISTS feature_usage (
+      name  TEXT NOT NULL,
+      day   TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (name, day)
+    );
 `;
 
 function getDb(): Database.Database {
@@ -70,6 +96,18 @@ function getDb(): Database.Database {
   // reconcileStalePromptJobs.
   prunePromptJobs(_db);
   return _db;
+}
+
+/**
+ * The open handle, for modules that own their own tables.
+ *
+ * `usage.ts` needs to read and write two tables of its own; routing that
+ * through a per-statement wrapper here would put its SQL in a file that has
+ * nothing to do with metering. The connection stays owned in one place -- this
+ * hands out the handle, not a second one.
+ */
+export function getAppDb(): Database.Database {
+  return getDb();
 }
 
 // Settings
