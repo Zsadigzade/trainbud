@@ -15,8 +15,18 @@ export interface McpServerEntry {
   timeout?: number;
 }
 
+/**
+ * The user's config file, of which `mcpServers` is one key.
+ *
+ * The index signature is the point. This was typed and read as though the file
+ * held nothing else, so `readMcpConfig` returned `{ mcpServers }` and everything
+ * beside it -- `globalShortcut`, and whatever Claude Desktop adds next -- was
+ * dropped on the way to being written back. This is not our file; it is a file
+ * we add one key to.
+ */
 export interface McpConfigFile {
   mcpServers: Record<string, McpServerEntry>;
+  [key: string]: unknown;
 }
 
 export interface DetectedMcpClient {
@@ -75,11 +85,14 @@ export function readMcpConfig(configPath: string): McpConfigFile {
   try {
     const parsed = readJsonFile<Partial<McpConfigFile>>(configPath);
 
-    if (!parsed.mcpServers || typeof parsed.mcpServers !== "object") {
-      return { mcpServers: {} };
-    }
+    // Everything the file holds, with `mcpServers` normalised. A config with no
+    // `mcpServers` key at all is perfectly valid -- and the old
+    // `if (!parsed.mcpServers) return { mcpServers: {} }` discarded the entire
+    // file to add one server to it.
+    const servers =
+      parsed.mcpServers && typeof parsed.mcpServers === "object" ? parsed.mcpServers : {};
 
-    return { mcpServers: parsed.mcpServers };
+    return { ...parsed, mcpServers: servers };
   } catch {
     throw new Error(`Could not read MCP config at ${configPath}. Fix the file or choose another client.`);
   }
@@ -121,11 +134,33 @@ export function writeMcpConfig(configPath: string, config: McpConfigFile): void 
   writeSecretFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
+/**
+ * Where the pre-setup copy of a config is kept.
+ *
+ * `setup` is the command the docs tell a user to run when something is wrong,
+ * and it rewrites a file it does not own. `writeEnvFile` has already deleted
+ * someone's ANTHROPIC_API_KEY that way once. A copy costs nothing and is the
+ * difference between a mistake and a loss.
+ */
+export function backupPathFor(configPath: string): string {
+  const directory = path.dirname(configPath);
+  const base = path.basename(configPath, path.extname(configPath));
+  return path.join(directory, `${base}.bak.json`);
+}
+
 export function configureTrainBudForClient(
   client: DetectedMcpClient,
   credentials: { email: string; password: string; distIndexPath: string }
 ): void {
   const existing = readMcpConfig(client.configPath);
+
+  // Written through writeSecretFile: once merged, this file carries
+  // GARMIN_PASSWORD in an env block, so the copy is exactly as sensitive as the
+  // original and gets the same 0600.
+  if (fs.existsSync(client.configPath)) {
+    writeSecretFile(backupPathFor(client.configPath), fs.readFileSync(client.configPath, "utf8"));
+  }
+
   const merged = mergeTrainBudConfig(existing, credentials);
   writeMcpConfig(client.configPath, merged);
 }
