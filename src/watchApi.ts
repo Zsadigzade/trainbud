@@ -2,6 +2,14 @@ import { executeTool } from "./tools/index.js";
 import { generateDailyInsight, isAiConfigured } from "./promptApi.js";
 import { DateTime } from "luxon";
 import { buildDetectorInput, runDetectors } from "./detect/index.js";
+import { restingHrDeltaBpm } from "./detect/detectors.js";
+import {
+  getProfile,
+  stateFor,
+  visibleCards,
+  type MetricState,
+} from "./profile.js";
+import { budgetState } from "./usage.js";
 import { buildWeekReview, type WeekReview } from "./detect/week.js";
 import { nextRace, type RaceCountdown } from "./detect/countdown.js";
 import { buildPromptSuggestions } from "./promptSuggestions.js";
@@ -127,6 +135,68 @@ export interface WatchRace {
   phase: "race_week" | "taper" | "build" | "far_out";
 }
 
+/**
+ * What each metric means, already decided.
+ *
+ * The watch used to grade these itself: `recoveryColor`, `sleepColor`,
+ * `stressColor` and `heartRateColor` were four copies of four thresholds in
+ * Monkey C, so the wrist and the browser could disagree about whether the same
+ * score was good, and nothing reconciled them. Personalising the bands would
+ * have made that disagreement permanent -- the watch has no idea what the user
+ * set in the dashboard, and shipping the numbers to it would mean two
+ * implementations of the same comparison, one of which is in a language with
+ * no tests.
+ *
+ * So the server grades, and the watch colours. `unknown` is a real answer and
+ * has to survive to the screen: an unworn watch is not a recovery score of
+ * zero, and a card that renders an absence in red has invented a measurement.
+ */
+export interface WatchStates {
+  recovery: MetricState;
+  sleep: MetricState;
+  stress: MetricState;
+  resting_hr: MetricState;
+}
+
+/**
+ * How this user wants the app to look, resolved for a client that cannot ask.
+ *
+ * `cards` is the visible carousel in the user's order, by id. The watch walks
+ * this list instead of its own compiled-in constants, so hiding a card or
+ * moving one happens in the dashboard and is live on the next fetch -- no
+ * Connect IQ settings sync, no store update.
+ */
+export interface WatchDisplay {
+  name: string | null;
+  units: "metric" | "imperial";
+  cards: string[];
+}
+
+/**
+ * The worst thing standing out right now, as one number the watch can badge.
+ *
+ * Findings are already on the payload, but reading them means parsing an array
+ * on a device where that costs memory, and the glance view has room for a dot
+ * and nothing else.
+ */
+export interface WatchAlert {
+  level: "none" | "notice" | "warn";
+  count: number;
+}
+
+/**
+ * Whether an Ask would be refused before the watch spends a round trip finding
+ * out.
+ *
+ * `exceeded` is only ever true when the user set a cap themselves; there is no
+ * default ceiling. `incomplete` says the total behind that decision is a floor
+ * rather than a total, because some calls could not be priced.
+ */
+export interface WatchBudget {
+  exceeded: boolean;
+  incomplete: boolean;
+}
+
 export interface WatchSummary {
   daily_overview: WatchDailyOverview;
   recovery: WatchRecovery | null;
@@ -160,6 +230,14 @@ export interface WatchSummary {
    * "AI is not set up" and name the dashboard.
    */
   ai_configured: boolean;
+  /** Each metric already graded against this user's own bands. */
+  states: WatchStates;
+  /** Name, units and the visible carousel, in the user's order. */
+  display: WatchDisplay;
+  /** The worst finding right now, as one badge-able level. */
+  alert: WatchAlert;
+  /** Whether the user's own AI spending cap would refuse an Ask. */
+  budget: WatchBudget;
   updated_at: string;
 }
 
@@ -288,6 +366,28 @@ export interface WatchSummaryParts {
   race: RaceCountdown | null;
   updatedAt: string;
   aiConfigured: boolean;
+  /**
+   * Distance from this person's own resting-HR median, or null when there is
+   * not yet enough history to have one. Null and zero are different answers
+   * and the grading has to be able to tell them apart.
+   */
+  restingHrDeltaBpm: number | null;
+}
+
+/**
+ * The worst severity among the findings, and how many there are.
+ *
+ * `info` deliberately does not raise the level above `none`: an informational
+ * finding is worth a line on the Today card and is not worth a badge on a
+ * watch face.
+ */
+export function toWatchAlert(findings: Finding[]): WatchAlert {
+  const level = findings.some((f) => f.severity === "warn")
+    ? "warn"
+    : findings.some((f) => f.severity === "notice")
+      ? "notice"
+      : "none";
+  return { level, count: findings.length };
 }
 
 /** Percent change, or null when the earlier figure is zero and a percentage of
@@ -334,6 +434,10 @@ export function buildWatchSummaryFrom(
   const sleep = toWatchSleep(parts.sleep);
   const stress = toWatchStress(parts.stress);
   const vo2max = toWatchVo2Max(parts.vo2max);
+  // Read once. Every grade below has to come from the same profile: reading it
+  // per metric would let a save land mid-assembly and colour half the payload
+  // against the old bands.
+  const profile = getProfile();
 
   return {
     daily_overview: {
@@ -357,6 +461,25 @@ export function buildWatchSummaryFrom(
       parts.context
     ),
     ai_configured: parts.aiConfigured,
+    states: {
+      recovery: stateFor("recovery", recovery?.score ?? null),
+      sleep: stateFor("sleepHours", sleep?.hours ?? null),
+      stress: stateFor("stress", stress?.avg ?? null),
+      // Graded on the distance from this person's own median, not on the rate.
+      // 58 bpm is unremarkable for one person and a warning for another, and
+      // the absolute number cannot tell them apart.
+      resting_hr: stateFor("restingHrDelta", parts.restingHrDeltaBpm),
+    },
+    display: {
+      name: profile.displayName,
+      units: profile.units,
+      cards: visibleCards(profile),
+    },
+    alert: toWatchAlert(parts.findings),
+    budget: (() => {
+      const state = budgetState();
+      return { exceeded: state.exceeded, incomplete: state.incomplete };
+    })(),
     updated_at: parts.updatedAt,
   };
 }
@@ -481,6 +604,7 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       race,
       updatedAt: new Date().toISOString(),
       aiConfigured: isAiConfigured(),
+      restingHrDeltaBpm: restingHrDeltaBpm(detectorInput),
     }),
     ai_insight: null,
   };

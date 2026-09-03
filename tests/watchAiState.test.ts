@@ -22,6 +22,7 @@ const EMPTY_PARTS = {
   context: [],
   week: null,
   race: null,
+  restingHrDeltaBpm: null,
   updatedAt: "2026-09-02T20:00:00.000Z",
 };
 

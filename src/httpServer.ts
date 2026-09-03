@@ -3,6 +3,19 @@ import http from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { closeCache } from "./garmin/cache.js";
+import {
+  CARD_IDS,
+  DEFAULT_PROFILE,
+  getProfile,
+  updateProfile,
+} from "./profile.js";
+import {
+  budgetState,
+  dailyAiSpend,
+  featureCounts,
+  monthToDateSpend,
+  recentAiUsage,
+} from "./usage.js";
 import { closeAppDb, reconcilePromptJobsOnStartup, setSetting } from "./appDb.js";
 import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
 import { createMcpServerInstance } from "./server.js";
@@ -846,6 +859,82 @@ export function createHttpMcpServer(): HttpMcpServer {
           // serves the old response and the insight looks unchanged.
           watchApiCache = null;
           sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        // Profile — read and write everything the product knows about the user
+        // that Garmin does not. One endpoint for the dashboard and any other
+        // client; the watch receives the resolved consequences inside
+        // /api/watch rather than the settings themselves, so it never has to
+        // agree with the server about where a threshold falls.
+        if (pathname === "/api/profile") {
+          if (!isAuthorized(req, queryToken)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          if (req.method === "GET") {
+            sendJson(res, 200, {
+              profile: getProfile(),
+              cards: CARD_IDS,
+              defaults: DEFAULT_PROFILE,
+            });
+            return;
+          }
+
+          if (req.method === "PUT" || req.method === "POST") {
+            let body: unknown;
+            try {
+              body = await readJsonBody(req);
+            } catch {
+              sendJson(res, 400, { error: "Bad Request", message: "Body must be JSON." });
+              return;
+            }
+            if (typeof body !== "object" || body === null) {
+              sendJson(res, 400, { error: "Bad Request", message: "Body must be a JSON object." });
+              return;
+            }
+
+            try {
+              const updated = updateProfile(body as Parameters<typeof updateProfile>[0]);
+              // Units, thresholds and card order all change the bytes the watch
+              // is served, and that payload is cached for five minutes. Without
+              // this the user saves a setting, the dashboard confirms it, and
+              // the wrist keeps drawing the old one -- the same five-minute lie
+              // the API-key save had to fix.
+              watchApiCache = null;
+              sendJson(res, 200, { ok: true, profile: updated });
+            } catch (error) {
+              // The message names the field, so the dashboard can say which
+              // input was refused instead of colouring the whole form red.
+              sendJson(res, 400, {
+                error: "Bad Request",
+                message: error instanceof Error ? error.message : "Invalid profile.",
+              });
+            }
+            return;
+          }
+
+          sendJson(res, 405, { error: "Method Not Allowed", message: "Use GET or PUT." });
+          return;
+        }
+
+        // Usage — what the AI has cost this month, and what gets opened.
+        if (pathname === "/api/usage" && req.method === "GET") {
+          if (!isAuthorized(req, queryToken)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          sendJson(res, 200, {
+            month: monthToDateSpend(),
+            budget: budgetState(),
+            recent: recentAiUsage(20),
+            daily: dailyAiSpend(30),
+            features: featureCounts(30),
+          });
           return;
         }
 

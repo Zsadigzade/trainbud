@@ -196,6 +196,7 @@ describe("watch mappers", () => {
       week: null,
       race: null,
       aiConfigured: true,
+      restingHrDeltaBpm: null,
       updatedAt: "2026-08-19T20:00:00.000Z",
     });
 

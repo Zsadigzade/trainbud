@@ -80,6 +80,36 @@ function lastDate(points: MetricPoint[], fallback: string): string {
   return points.at(-1)?.date ?? fallback;
 }
 
+/**
+ * How far this person's recent resting heart rate sits above their own median,
+ * whether or not that is far enough to be a finding.
+ *
+ * Split out because two things need it and only one of them is a threshold. The
+ * detector fires at a fixed bar; the colour on a watch card is graded against
+ * the band the user chose, which may be tighter or looser. Deriving the colour
+ * from "did a finding fire" would mean the card could only ever be green or
+ * red, and would move whenever the detector's own constants moved.
+ *
+ * Null when there is not enough history to have a baseline at all -- which is
+ * different from a delta of zero, and has to stay different.
+ */
+export function restingHrDeltaBpm(input: DetectorInput): number | null {
+  const points = input.series("resting_hr", BASELINE_DAYS + RECENT_DAYS);
+  const { baselinePoints, recentPoints } = split(points, RECENT_DAYS, input.now);
+
+  if (recentPoints.length === 0) {
+    return null;
+  }
+
+  const baseline = buildBaseline(baselinePoints);
+  const recentMean = meanOf(recentPoints);
+  if (!baseline || recentMean === null) {
+    return null;
+  }
+
+  return round(recentMean - baseline.median);
+}
+
 export function detectRestingHrElevation(input: DetectorInput): Finding | null {
   const points = input.series("resting_hr", BASELINE_DAYS + RECENT_DAYS);
   const { baselinePoints, recentPoints } = split(points, RECENT_DAYS, input.now);

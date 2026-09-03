@@ -215,6 +215,96 @@ export function assertWithinBudget(): void {
   }
 }
 
+export interface AiUsageEntry {
+  at: number;
+  kind: string;
+  model: string;
+  source: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+}
+
+/** The most recent calls, newest first — the ledger behind the total. */
+export function recentAiUsage(limit = 20): AiUsageEntry[] {
+  try {
+    const rows = getAppDb()
+      .prepare(
+        `SELECT at, kind, model, source, input_tokens, output_tokens, cost_usd
+           FROM ai_usage
+          ORDER BY at DESC, id DESC
+          LIMIT ?`
+      )
+      .all(limit) as {
+      at: number;
+      kind: string;
+      model: string;
+      source: string;
+      input_tokens: number;
+      output_tokens: number;
+      cost_usd: number | null;
+    }[];
+
+    return rows.map((row) => ({
+      at: row.at,
+      kind: row.kind,
+      model: row.model,
+      source: row.source,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      costUsd: row.cost_usd,
+    }));
+  } catch (err) {
+    logger.warn({ err }, "could not read recent AI usage");
+    return [];
+  }
+}
+
+export interface DailySpend {
+  day: string;
+  costUsd: number;
+  calls: number;
+}
+
+/**
+ * Cost per day for the last `days` days, including the days that cost nothing.
+ *
+ * The zero days are the point. A chart built only from rows that exist draws a
+ * continuous line through a week the user never opened the app, which reads as
+ * steady daily spend rather than as the four days it actually was.
+ */
+export function dailyAiSpend(days = 30): DailySpend[] {
+  const today = DateTime.local().startOf("day");
+  const byDay = new Map<string, DailySpend>();
+
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const day = today.minus({ days: i }).toISODate();
+    if (day) {
+      byDay.set(day, { day, costUsd: 0, calls: 0 });
+    }
+  }
+
+  try {
+    const since = Math.floor(today.minus({ days: days - 1 }).toSeconds());
+    const rows = getAppDb()
+      .prepare("SELECT at, cost_usd FROM ai_usage WHERE at >= ?")
+      .all(since) as { at: number; cost_usd: number | null }[];
+
+    for (const row of rows) {
+      const day = DateTime.fromSeconds(row.at).toISODate();
+      const bucket = day ? byDay.get(day) : undefined;
+      if (bucket) {
+        bucket.costUsd += row.cost_usd ?? 0;
+        bucket.calls += 1;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "could not read daily AI spend");
+  }
+
+  return [...byDay.values()];
+}
+
 export interface FeatureCount {
   name: string;
   count: number;
