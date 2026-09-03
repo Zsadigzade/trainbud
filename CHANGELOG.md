@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — server 0.4.0 · watch 1.4.0 - 2026-09-03
+## [Unreleased] — server 0.4.1 · watch 1.4.0
+
+Nothing released yet.
+
+## [0.4.0] — server 0.4.0 · watch 1.4.0 - 2026-09-03
 
 Reported as "AI Unavailable, Error HTTP -400" on the Ask card. The AI was never
 asked: the tunnel was down, ngrok answered an HTML error page, and Connect IQ
@@ -141,7 +145,7 @@ told to refute it, and 42 survived. The ones fixed here:
   two jungles silently un-excluded the glance; and the Forerunner 55's recovery
   card collided with its own ring.
 
-## [Unreleased] — watch 1.3.1 - 2026-09-02
+## [watch 1.3.1] - 2026-09-02
 
 Nobody who installed the watch app from the store could ever pair it. Reported
 from a Forerunner 55 on firmware 11.03; it affected every user on every device.

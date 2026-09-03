@@ -1,6 +1,6 @@
 {
   "name": "trainbud",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "TrainBud \u2014 talk to your Connect fitness data through Claude and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
