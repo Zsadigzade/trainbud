@@ -2,6 +2,7 @@ import { config as loadEnv } from "dotenv";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { readJsonFile } from "./utils/jsonFile.js";
 import {
   DATA_DIR_NAME,
   dataPath,
@@ -191,6 +192,8 @@ export function writeEnvFile(credentials: { email: string; password: string; api
   return envPath;
 }
 
+let watchSetupProblem: string | null = null;
+
 export const appConfig = {
   get garminEmail(): string {
     return process.env.GARMIN_EMAIL ?? "";
@@ -232,15 +235,29 @@ export const appConfig = {
     const envUrl = (readEnv("TRAINBUD_PUBLIC_URL") ?? "").replace(/\/$/, "");
     if (envUrl) return envUrl;
     try {
-      const data = JSON.parse(fs.readFileSync(dataPath("watch-setup.json"), "utf8")) as {
-        serverUrl?: string;
-      };
+      const data = readJsonFile<{ serverUrl?: string }>(dataPath("watch-setup.json"));
+      watchSetupProblem = null;
       return (data.serverUrl ?? "").replace(/\/$/, "");
-    } catch {
+    } catch (error) {
+      // "The file is not there" and "the file is there and unreadable" are
+      // different faults with different fixes, and this getter used to report
+      // both as an empty string. Recorded rather than logged, because the
+      // logger reads this config and importing it here would be a cycle.
+      watchSetupProblem = fs.existsSync(dataPath("watch-setup.json"))
+        ? (error instanceof Error ? error.message : String(error))
+        : null;
       return "";
     }
   },
 };
+
+/**
+ * Why the watch setup file could not be read, when it exists but is unusable.
+ * `null` when it parsed, or when there is simply no file.
+ */
+export function watchSetupReadError(): string | null {
+  return watchSetupProblem;
+}
 
 export function assertApiKey(): void {
   if (!appConfig.mcpApiKey) {

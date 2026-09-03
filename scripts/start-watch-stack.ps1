@@ -84,9 +84,13 @@ $tunnelUrl = "https://$NgrokDomain"
 # Save for server to pick up
 $setupPath = Join-Path $RepoRoot ".trainbud\watch-setup.json"
 New-Item -ItemType Directory -Force -Path (Split-Path $setupPath) | Out-Null
-@{ serverUrl = $tunnelUrl; updatedAt = (Get-Date).ToUniversalTime().ToString("o") } |
-    ConvertTo-Json |
-    Set-Content -Path $setupPath -Encoding utf8
+# Set-Content -Encoding utf8 writes a BOM on Windows PowerShell 5.1, and
+# JSON.parse treats a leading U+FEFF as a syntax error. This file held the
+# correct tunnel URL for weeks while the server reported "No public URL is
+# configured" and the watch had no address to call. Write UTF-8 with no BOM.
+$setupJson = @{ serverUrl = $tunnelUrl; updatedAt = (Get-Date).ToUniversalTime().ToString("o") } |
+    ConvertTo-Json
+[System.IO.File]::WriteAllText($setupPath, $setupJson, (New-Object System.Text.UTF8Encoding $false))
 
 # Read API key from .env for dashboard link
 $apiKey = ""

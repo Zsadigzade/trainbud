@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { writeSecretFile } from "./utils/secretFile.js";
+import { readJsonFile } from "./utils/jsonFile.js";
 
 // SECTION: MCP Client Config
 
@@ -72,8 +73,7 @@ export function readMcpConfig(configPath: string): McpConfigFile {
   }
 
   try {
-    const raw = fs.readFileSync(configPath, "utf8");
-    const parsed = JSON.parse(raw) as Partial<McpConfigFile>;
+    const parsed = readJsonFile<Partial<McpConfigFile>>(configPath);
 
     if (!parsed.mcpServers || typeof parsed.mcpServers !== "object") {
       return { mcpServers: {} };

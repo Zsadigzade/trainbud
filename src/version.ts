@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import path from "node:path";
+import { readJsonFile } from "./utils/jsonFile.js";
 import { fileURLToPath } from "node:url";
 
 const packageJsonPath = path.join(
@@ -8,6 +8,6 @@ const packageJsonPath = path.join(
   "package.json"
 );
 
-const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version: string };
+const pkg = readJsonFile<{ version: string }>(packageJsonPath);
 
 export const packageVersion = pkg.version;

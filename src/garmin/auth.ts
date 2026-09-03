@@ -4,6 +4,7 @@ import type { GarminConnectInstance } from "./garminConnect.js";
 import { GarminConnect } from "./garminConnect.js";
 import { appConfig, assertGarminCredentials } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { readJsonFile } from "../utils/jsonFile.js";
 import { writeSecretFile } from "../utils/secretFile.js";
 import type { StoredSession } from "./types.js";
 
@@ -25,8 +26,7 @@ export function readStoredSession(): StoredSession | null {
   }
 
   try {
-    const raw = fs.readFileSync(sessionPath, "utf8");
-    const parsed = JSON.parse(raw) as StoredSession;
+    const parsed = readJsonFile<StoredSession>(sessionPath);
 
     if (!parsed.oauth1 || !parsed.oauth2) {
       return null;
