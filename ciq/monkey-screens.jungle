@@ -1,0 +1,34 @@
+# Debug-only overlay: build the screen tour.
+#
+# Every screen the app can draw, reachable with one keypress and no server. See
+# ciq/source-screens/ScreenTour.mc for why this exists -- the short version is
+# that 1.3.0 shipped to the Connect IQ store having never been drawn once, and
+# the first simulator run found six layout bugs the same afternoon.
+#
+# Adding source-screens to the path brings in the real ScreenTour; excluding
+# `screensStub` removes the inert one that ships. It has to be arranged this way
+# round: a jungle can add an annotation to exclude and can never take one away,
+# so the stub carries the annotation and the real implementation is simply
+# absent from the source path unless asked for.
+#
+# `glance` is excluded here rather than by chaining monkey-noglance.jungle.
+#
+# > A jungle setting is ASSIGNED, not appended. Listing monkey-noglance.jungle
+# > and this file together left only the LAST `base.excludeAnnotations` standing:
+# > `screensStub` overwrote `glance`, the glance view came back, and the
+# > simulator -- which renders the glance for any app that has one and offers no
+# > way to step from it into the widget -- sat on "TrainBud / Open to sync" while
+# > a capture run cheerfully saved twenty-three photographs of it. The build
+# > succeeded and every screenshot was of the wrong screen.
+#
+# Use $(base.excludeAnnotations) when appending to a value another jungle sets.
+# Here the whole set is short and stating it outright is clearer than depending
+# on the order the caller happens to list the files in.
+#
+# Debug only. build.ps1 -Package refuses to combine this with a store package.
+#
+# Usage:
+#   .\build.ps1 -Device fr55 -Screens
+#   monkeydo bin\TrainBud-screens.prg fr55
+base.sourcePath = $(base.sourcePath);source-screens
+base.excludeAnnotations = glance;screensStub

@@ -14,3 +14,8 @@ coverage/
 # Local-only Connect IQ dev overlay: bakes a personal tunnel URL into a
 # sideload build. The .example template is committed; the real file is not.
 ciq/resources-dev/settings/properties.xml
+
+# Screen-tour captures. Regenerated in one command by
+# scripts/capture-screens.ps1, so the tool is the artifact worth keeping and
+# the two dozen PNGs per device are not.
+ciq/screens/

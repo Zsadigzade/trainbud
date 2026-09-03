@@ -15,13 +15,25 @@ class TrainBudView extends WatchUi.View {
 
     function onShow() as Void {
         var app = Application.getApp() as TrainBudApp;
+
+        // In a -Screens build there is no server to fetch from, and fetching
+        // would immediately overwrite whatever state the tour had set.
+        if (ScreenTour.isActive()) {
+            ScreenTour.enter(app);
+            return;
+        }
+
         app.fetchSummary();
     }
 
     function onUpdate(dc as Dc) as Void {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
+        drawScreen(dc);
+        drawTourLabel(dc);
+    }
 
+    private function drawScreen(dc as Dc) as Void {
         var app = Application.getApp() as TrainBudApp;
         var status = app.getStatus();
 
@@ -51,8 +63,12 @@ class TrainBudView extends WatchUi.View {
             return;
         }
 
+        // "Could not reach TrainBud" was drawn for every summary failure,
+        // including a 401 from a server that had been reached and had answered.
+        // The classified screen names the cause and the action.
         if (status.equals("error")) {
-            drawMessage(dc, WatchUi.loadResource(Rez.Strings.FetchError) as String);
+            drawRequestFailure(dc, app, app.getSummaryFailClass(),
+                app.getSummaryErrorCode(), false);
             return;
         }
 
@@ -87,6 +103,31 @@ class TrainBudView extends WatchUi.View {
         }
 
         drawPageDots(dc, cardIndex, app.getCardCount());
+    }
+
+    //
+    // Numbers the tour state on screen, in a -Screens build only.
+    //
+    // This is the ground truth a capture run is checked against, and it earned
+    // its place on the first run: a keypress was swallowed while the app was
+    // still starting, so every screenshot after it was saved under the name of
+    // the state before it. Every file was of a real screen and every file was
+    // mislabelled, which is worse than a failed run -- a mislabelled set of
+    // screenshots is evidence that says the wrong thing.
+    //
+    // The index only, not the state name: the name is already in the filename,
+    // and a long string here covers the card headings underneath it.
+    //
+    private function drawTourLabel(dc as Dc) as Void {
+        if (!ScreenTour.isActive()) { return; }
+        var text = (ScreenTour.index() + 1).toString() + "/"
+            + ScreenTour.count().toString();
+        // Blue, not grey: the Forerunner 55's eight-colour palette has no grey
+        // at all and snaps COLOR_DK_GRAY to black on a black background, which
+        // is how four separate UI elements became invisible there.
+        dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(dc.getWidth() / 2, 2, Graphics.FONT_XTINY, text,
+            Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     // -------------------------------------------------------------------------
@@ -273,6 +314,18 @@ class TrainBudView extends WatchUi.View {
     // dropped the reason, so a missing API key and a provider outage looked
     // identical from the wrist.
     private function drawPromptError(dc as Dc, app as TrainBudApp) as Void {
+        // The reported bug, on screen. A request that never reached the server
+        // is not an AI failure, and drawing "AI unavailable / HTTP -400" over a
+        // dead tunnel sent the user looking at the one component that was
+        // working. Transport failures get the same screen every other request
+        // path gets; only a job the server actually ran and failed reaches the
+        // "AI unavailable" wording below.
+        if (app.getPromptFailClass() != Fail.NONE) {
+            drawRequestFailure(dc, app, app.getPromptFailClass(),
+                app.getPromptErrorCode(), false);
+            return;
+        }
+
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
         var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
@@ -305,21 +358,67 @@ class TrainBudView extends WatchUi.View {
     // Prompt result
     // -------------------------------------------------------------------------
 
+    //
+    // The AI answer, wrapped and paged by line.
+    //
+    // What was here cut the answer into eighty-character substrings and handed
+    // one to a single drawText. Monkey C does not wrap text: the whole page was
+    // laid out on one line, ran off both edges of a round screen, and the cut
+    // landed mid-word. Every answer this app has ever produced was unreadable.
+    // It survived because AI was never configured on the machine this was
+    // written on, so this function had never once run with real text in it --
+    // the same reason the six layout bugs of 1.3.0 shipped.
+    //
+    // Now: wrap to the chord width, fill the band between the "AI:" heading and
+    // the footer, and report the resulting page count back to the app so the
+    // delegate stops paging at the end of the answer rather than at the end of
+    // an arithmetic guess.
+    //
     private function drawPromptResult(dc as Dc, app as TrainBudApp) as Void {
         var cx   = dc.getWidth() / 2;
         var cy   = dc.getHeight() / 2;
-        var page = app.getPromptPageIndex();
-        var pages = app.getPromptPageCount();
-        var text  = app.getPromptPage(page);
+        var lineH = dc.getFontHeight(Graphics.FONT_XTINY);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, 16, Graphics.FONT_XTINY,
             WatchUi.loadResource(Rez.Strings.ResultPrefix) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
+        // The band the answer may use: below the heading, above the footer that
+        // carries the page counter and, on the last page, the disclaimer.
+        var bandTop = 16 + lineH + (lineH / 2);
+        var bandBot = dc.getHeight() - 12 - (lineH * 3);
+        var bandH   = bandBot - bandTop;
+        if (bandH < lineH) { bandH = lineH; }
+
+        var linesPerPage = (bandH / lineH).toNumber();
+        if (linesPerPage < 1) { linesPerPage = 1; }
+
+        // Measured at the widest point the text will occupy, not at the centre:
+        // on a round screen the top and bottom lines of a full band are
+        // materially narrower than the middle, and wrapping to the middle width
+        // truncates them.
+        var text  = app.getPromptResult();
+        var body  = text == null ? "" : text as String;
+        var halfBand = (linesPerPage * lineH) / 2;
+        var lines = wrapToWidth(dc, body, Graphics.FONT_XTINY, halfBand);
+
+        var pages = ((lines.size() + linesPerPage - 1) / linesPerPage).toNumber();
+        if (pages < 1) { pages = 1; }
+        app.setPromptPageCount(pages);
+
+        var page  = app.getPromptPageIndex();
+        var first = page * linesPerPage;
+        var shown = lines.size() - first;
+        if (shown > linesPerPage) { shown = linesPerPage; }
+
+        var y = cy - ((shown * lineH) / 2);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, cy, Graphics.FONT_XTINY, text,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        for (var i = 0; i < shown; i += 1) {
+            dc.drawText(cx, y, Graphics.FONT_XTINY, lines[first + i] as String,
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
 
         // On the last page, say what this text is. The disclaimer string has
         // existed since 1.2.0 and was never drawn: the app has been making
@@ -444,23 +543,40 @@ class TrainBudView extends WatchUi.View {
     // layout either overlapped them or left a gap; on the 208 px Forerunner 55
     // the https hint and the URL landed on top of each other.
     private function drawPairingError(dc as Dc, app as TrainBudApp) as Void {
+        drawRequestFailure(dc, app, app.getPairFailClass(), app.getPairErrorCode(), true);
+    }
+
+    //
+    // One failure screen for every request path.
+    //
+    // Pairing had this and the other two paths did not, so the summary fetch
+    // drew "Could not reach TrainBud" for a 401 it had reached perfectly well,
+    // and the Ask card drew "AI unavailable" for a tunnel that was down. Both
+    // now arrive here and get the cause they actually had.
+    //
+    private function drawRequestFailure(
+        dc as Dc,
+        app as TrainBudApp,
+        failClass as Number,
+        code as Number or Null,
+        showDebugBody as Boolean
+    ) as Void {
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
         var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
         var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
 
-        var failClass = app.getPairFailClass();
-        var code      = app.getPairErrorCode();
-
         var titleRes = Rez.Strings.PairErrUnreachable;
-        if (failClass == PairFail.NOT_SERVER) {
+        if (failClass == Fail.NOT_SERVER) {
             titleRes = Rez.Strings.PairErrNotServer;
-        } else if (failClass == PairFail.REFUSED) {
+        } else if (failClass == Fail.REFUSED) {
             titleRes = Rez.Strings.PairErrRefused;
+        } else if (failClass == Fail.UNAUTHORIZED) {
+            titleRes = Rez.Strings.ErrUnauthorized;
         }
 
         var hint    = failureHint(app, failClass, code);
-        var showUrl = failClass == PairFail.NOT_SERVER
+        var showUrl = failClass == Fail.NOT_SERVER
             || code == Communications.SECURE_CONNECTION_REQUIRED;
         var url     = showUrl ? displayUrl(app.getServerUrl()) : null;
 
@@ -527,7 +643,7 @@ class TrainBudView extends WatchUi.View {
         // What actually came back, debug builds only. It is the fastest way to
         // recognise an interstitial or a captive portal, and it is noise to a
         // user who has already been told to check the URL.
-        if (app.isDebugBuild()) {
+        if (showDebugBody && app.isDebugBuild()) {
             var body = app.getPairErrorBody();
             if (body != null) {
                 y += lineH;
@@ -586,8 +702,11 @@ class TrainBudView extends WatchUi.View {
                 return WatchUi.loadResource(Rez.Strings.HintTooMany) as String;
             }
         }
-        if (failClass == PairFail.NOT_SERVER) {
+        if (failClass == Fail.NOT_SERVER) {
             return WatchUi.loadResource(Rez.Strings.HintCheckUrl) as String;
+        }
+        if (failClass == Fail.UNAUTHORIZED) {
+            return WatchUi.loadResource(Rez.Strings.HintRepair) as String;
         }
         return null;
     }
@@ -1023,10 +1142,7 @@ class TrainBudView extends WatchUi.View {
             // The score arc drew straight through the word "Recovery". Size it
             // to whatever clears the title instead, so it stays clear on any
             // screen and with any system font.
-            var titleBottom = 24 + dc.getFontHeight(Graphics.FONT_SMALL);
-            var maxRadius   = (dc.getWidth() / 2) - 12;
-            var clearance   = cy - titleBottom - 6;
-            var radius      = clearance < maxRadius ? clearance : maxRadius;
+            var radius = ringRadiusFor(dc);
             dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.drawArc(cx, cy, radius, Graphics.ARC_CLOCKWISE, 90, 90 - 360);
 
@@ -1053,7 +1169,29 @@ class TrainBudView extends WatchUi.View {
         var scoreText = hasScore
             ? score.toString()
             : WatchUi.loadResource(Rez.Strings.NoData) as String;
-        var scoreFont = hasScore ? Graphics.FONT_NUMBER_HOT : Graphics.FONT_MEDIUM;
+
+        // Size the number to the space the rest of the card needs, rather than
+        // taking the biggest face and letting everything below it fall off the
+        // screen.
+        //
+        // FONT_NUMBER_HOT is about 60 px on the 208 px Forerunner 55, and the
+        // card also has to fit a label and the resting/max heart rate above the
+        // page dots. Taking the big face unconditionally pushed "Rest 48" into
+        // the dot row, where the two drew through each other -- one more variant
+        // of the fixed-offset bug that produced six of the last seven layout
+        // faults here. On a fenix there is room for the big face and it is used.
+        var scoreFont = Graphics.FONT_MEDIUM;
+        if (hasScore) {
+            var faces = [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM,
+                         Graphics.FONT_LARGE, Graphics.FONT_MEDIUM] as Array<Graphics.FontDefinition>;
+            scoreFont = faces[faces.size() - 1];
+            for (var f = 0; f < faces.size(); f += 1) {
+                if (recoveryStackFits(dc, faces[f], label as String, roundScreen)) {
+                    scoreFont = faces[f];
+                    break;
+                }
+            }
+        }
 
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, cy - 8, scoreFont, scoreText,
@@ -1066,9 +1204,9 @@ class TrainBudView extends WatchUi.View {
         // 208 px Forerunner 55 and roughly twice that on a 454 px fenix, where
         // "Ready" printed through the bottom of the "91". Measure the number,
         // then put the label under it.
-        var scoreBottom = cy - 8 + (Graphics.getFontHeight(scoreFont) / 2)
-            - Graphics.getFontDescent(scoreFont);
-        var labelY = scoreBottom + 6;
+        var labelY = recoveryLabelY(dc, scoreFont, label as String,
+            roundScreen && hasScore);
+
         if ((label as String).length() > 0) {
             dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
             dc.drawText(cx, labelY, Graphics.FONT_TINY,
@@ -1078,6 +1216,82 @@ class TrainBudView extends WatchUi.View {
 
         drawRestingHeartRate(dc, summary, cx,
             labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2);
+    }
+
+    /** The bottom of the usable area on a card: above the page dots, which sit
+        at height - 12 with a radius of 3. */
+    private function cardContentBottom(dc as Dc) as Number {
+        return dc.getHeight() - 20;
+    }
+
+    //
+    // Where the recovery label goes, given the font the score is drawn in.
+    //
+    // One function, because the fit test and the drawing have to agree. They
+    // did not: the test stacked label under score and declared it fits, the
+    // drawing then pushed the label below the ring for a horizontal collision
+    // the test knew nothing about, and the heart-rate line underneath ended up
+    // in the page dots -- with the biggest score font still selected, because
+    // the test had approved a layout that was never drawn.
+    //
+    // Two separate constraints, both real:
+    //   * clear the score, whose height varies by a factor of two across devices
+    //   * clear the ring, which is a HORIZONTAL problem -- a circle narrows as
+    //     it descends, so a label can sit well inside the ring's height and
+    //     still have the arc drawn through it. On the 208 px Forerunner 55 the
+    //     ring closes to about 21 px either side of centre at the label's row
+    //     and "Ready" is 30 px wide.
+    //
+    private function recoveryLabelY(
+        dc as Dc,
+        scoreFont as Graphics.FontDefinition,
+        label as String,
+        ringDrawn as Boolean
+    ) as Number {
+        var cy = dc.getHeight() / 2;
+        var scoreBottom = cy - 8 + (Graphics.getFontHeight(scoreFont) / 2)
+            - Graphics.getFontDescent(scoreFont);
+        var labelY = scoreBottom + 6;
+        if (label.length() == 0) { return labelY; }
+
+        if (ringDrawn) {
+            var ringRadius = ringRadiusFor(dc);
+            var labelH     = Graphics.getFontHeight(Graphics.FONT_TINY);
+            var deepest    = labelY + labelH - Graphics.getFontDescent(Graphics.FONT_TINY) - cy;
+            if (deepest < 0) { deepest = -deepest; }
+            var halfChord  = deepest >= ringRadius
+                ? 0
+                : Math.sqrt((ringRadius * ringRadius) - (deepest * deepest)).toNumber();
+            var halfText   = dc.getTextWidthInPixels(label, Graphics.FONT_TINY) / 2;
+            if (halfText + 4 > halfChord && labelY < cy + ringRadius) {
+                labelY = cy + ringRadius + 4;
+            }
+        }
+        return labelY;
+    }
+
+    /** True when a recovery score in this font leaves room for the label and the
+        heart-rate line above the page dots, as they will actually be placed. */
+    private function recoveryStackFits(
+        dc as Dc,
+        scoreFont as Graphics.FontDefinition,
+        label as String,
+        ringDrawn as Boolean
+    ) as Boolean {
+        var labelY = recoveryLabelY(dc, scoreFont, label, ringDrawn);
+        var hrY = label.length() > 0
+            ? labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2
+            : labelY;
+        return hrY + Graphics.getFontHeight(Graphics.FONT_XTINY) <= cardContentBottom(dc);
+    }
+
+    /** The recovery ring's radius. One definition, because both the arc and the
+        label under it have to agree on where the ring is. */
+    private function ringRadiusFor(dc as Dc) as Number {
+        var titleBottom = 24 + dc.getFontHeight(Graphics.FONT_SMALL);
+        var maxRadius   = (dc.getWidth() / 2) - 12;
+        var clearance   = (dc.getHeight() / 2) - titleBottom - 6;
+        return clearance < maxRadius ? clearance : maxRadius;
     }
 
     // Resting and max heart rate share the Recovery card: resting HR is how the
@@ -1104,20 +1318,30 @@ class TrainBudView extends WatchUi.View {
             text = text + "  " + maxLabel + " " + max.toString();
         }
 
-        // Shorten the label before letting the number be cut off.
+        // Drop a whole field before cutting a number in half.
         //
         // "Resting 48  Max 178" is wider than a 208 px round screen allows at
         // this height, and plain truncation rendered "Resting 48  Ma..." --
         // spending the space on the word and throwing away the maximum heart
-        // rate, which is the only part the user cannot already guess.
-        if (max != null) {
-            var available = lineWidthAt(dc,
-                y + Graphics.getFontHeight(Graphics.FONT_XTINY)
-                  - Graphics.getFontDescent(Graphics.FONT_XTINY) - (dc.getHeight() / 2));
-            if (dc.getTextWidthInPixels(text, Graphics.FONT_XTINY) > available) {
-                text = (WatchUi.loadResource(Rez.Strings.LabelRestingShort) as String)
-                    + " " + resting.toString() + "  " + maxLabel + " " + max.toString();
-            }
+        // rate, which is the only part the user cannot already guess. Shortening
+        // the label to "Rest" bought enough room on most screens.
+        //
+        // It is not enough on the Forerunner 55 once the recovery label moves
+        // below the ring: this line then sits about 83 px under centre, where a
+        // 208 px circle is 115 px wide, and even "Rest 48  Max 178" was cut to
+        // "Rest 48 ...". An ellipsis on a health metric is worse than an absent
+        // one -- it looks like a rendering fault and tells the reader nothing --
+        // so the last step drops the maximum and shows the resting rate whole.
+        var short = WatchUi.loadResource(Rez.Strings.LabelRestingShort) as String;
+        var available = lineWidthAt(dc,
+            y + Graphics.getFontHeight(Graphics.FONT_XTINY)
+              - Graphics.getFontDescent(Graphics.FONT_XTINY) - (dc.getHeight() / 2));
+
+        if (max != null && dc.getTextWidthInPixels(text, Graphics.FONT_XTINY) > available) {
+            text = short + " " + resting.toString() + "  " + maxLabel + " " + max.toString();
+        }
+        if (dc.getTextWidthInPixels(text, Graphics.FONT_XTINY) > available) {
+            text = short + " " + resting.toString();
         }
 
         dc.setColor(heartRateColor(resting as Number), Graphics.COLOR_TRANSPARENT);

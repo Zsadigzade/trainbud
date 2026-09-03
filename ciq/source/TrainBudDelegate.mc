@@ -42,6 +42,16 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
 
     private function handleSelect() as Void {
         var app    = Application.getApp() as TrainBudApp;
+
+        // In a -Screens build every key is "next screen". The normal actions
+        // would fire requests at a server that is not there and leave the tour
+        // stuck on an error state of its own making.
+        if (ScreenTour.isActive()) {
+            ScreenTour.step(app, true);
+            WatchUi.requestUpdate();
+            return;
+        }
+
         var status = app.getStatus();
         var cardIndex = app.getCardIndex();
 
@@ -116,6 +126,12 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
     private function step(forward as Boolean) as Boolean {
         var app = Application.getApp() as TrainBudApp;
 
+        if (ScreenTour.isActive()) {
+            ScreenTour.step(app, forward);
+            WatchUi.requestUpdate();
+            return true;
+        }
+
         if (app.getCardIndex() == Cards.ASK_AI) {
             var promptStatus = app.getPromptStatus();
 
@@ -184,6 +200,14 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
     function onSwipe(swipeEvent as WatchUi.SwipeEvent) as Boolean {
         var app       = Application.getApp() as TrainBudApp;
         var direction = swipeEvent.getDirection();
+
+        if (ScreenTour.isActive()) {
+            ScreenTour.step(app,
+                direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP);
+            WatchUi.requestUpdate();
+            return true;
+        }
+
         var cardIndex = app.getCardIndex();
         var promptStatus = app.getPromptStatus();
 

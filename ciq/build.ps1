@@ -22,6 +22,17 @@ param(
     # watched sitting in the glance list.
     [switch]$NoGlance,
 
+    # Build the screen tour: every screen the app can draw, stepped with one key
+    # and no server at all. See ciq/source-screens/ScreenTour.mc.
+    #
+    # This exists because 1.3.0 shipped to the store having never been drawn once
+    # and the first simulator run found six layout bugs, and because the AI
+    # screens then shipped undrawn a version later -- reaching them needed a live
+    # HTTPS server, an API key and a failure on cue, and those three were never
+    # available at the same moment. Implies -NoGlance, since the tour lives in
+    # the widget view.
+    [switch]$Screens,
+
     # Export every device in the manifest as ciq/bin/TrainBud.iq.
     [switch]$Package
 )
@@ -54,18 +65,25 @@ if ($Dev) {
     }
     $Jungles += "monkey-dev.jungle"
 }
-if ($NoGlance) { $Jungles += "monkey-noglance.jungle" }
+# -Screens excludes `glance` itself rather than chaining monkey-noglance.jungle.
+# A jungle setting is assigned, not appended: listing both files left only the
+# last base.excludeAnnotations standing, the glance view came back, and the
+# simulator sat in the glance list while a capture run photographed it 23 times.
+if ($NoGlance -and -not $Screens) { $Jungles += "monkey-noglance.jungle" }
+if ($Screens) { $Jungles += "monkey-screens.jungle" }
 $JungleArg = $Jungles -join ";"
 
 Push-Location $CiqRoot
 if ($Package) {
     if ($Dev) { Pop-Location; throw "Refusing to package with -Dev: that bakes a personal Server URL into the store build." }
+    if ($Screens) { Pop-Location; throw "Refusing to package with -Screens: that ships a debug screen tour instead of the app." }
     $OutPath = Join-Path $CiqRoot "bin\TrainBud.iq"
     & (Join-Path $SdkBin "monkeyc.bat") -e -f $JungleArg -o $OutPath -y $KeyPath -w -r
 } else {
     $Suffix = ""
     if ($Dev) { $Suffix += "-dev" }
-    if ($NoGlance) { $Suffix += "-noglance" }
+    if ($Screens) { $Suffix += "-screens" }
+    elseif ($NoGlance) { $Suffix += "-noglance" }
     $OutPath = Join-Path $CiqRoot "bin\TrainBud$Suffix.prg"
     & (Join-Path $SdkBin "monkeyc.bat") -f $JungleArg -o $OutPath -y $KeyPath -d $Device -w
 }

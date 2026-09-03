@@ -65,6 +65,13 @@
     <string id="HintBadCert">Certificate refused. Use a trusted one.</string>
     <string id="HintCheckUrl">Check the Server URL</string>
     <string id="HintTooMany">Too many tries. Wait a minute.</string>
+    <!-- A 401 or 403 is a server that was reached, understood the request and
+         declined this credential. Every one of these used to render as "cannot
+         reach", which is the one thing that is certainly untrue when the server
+         has answered. It happens whenever the API key is rotated: the watch
+         keeps a key that no longer exists and pairing again is the whole fix. -->
+    <string id="ErrUnauthorized">Watch not authorised</string>
+    <string id="HintRepair">Pair this watch again</string>
     <!-- The raw Connect IQ code, always shown under the message. Negative codes
          are Connect IQ constants rather than HTTP statuses, and having the
          number on the watch face is what finally identified -200 and -400 in
@@ -94,6 +101,10 @@
 
     <string id="AiThinking">Asking AI...</string>
     <string id="AiError">AI unavailable</string>
+    <!-- The answer did not come back in time. It was a bare English literal in
+         TrainBudApp.mc, the only user-visible string in the app that was not a
+         resource, so it could never be translated. -->
+    <string id="AiTimedOut">Answer took too long</string>
     <string id="AiNoInsight">No insight today</string>
     <!-- AI has never been set up on this server, which is a different thing
          from a call that failed and needs a different action from the user.

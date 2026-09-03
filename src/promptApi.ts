@@ -18,7 +18,12 @@ import { logger } from "./utils/logger.js";
 
 // SECTION: Prompt API — Claude integration
 
-const MODEL = "claude-haiku-4-5-20251001";
+// The cheapest current model, which is the right default for this product: the
+// answers are two or three sentences read on a watch, and the user pays for
+// every one of them out of their own key. Unversioned id on purpose -- the
+// dated form is a pinned snapshot, and current SDK guidance is that the plain
+// id is complete as written.
+const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 300;
 const INSIGHT_PREFIX = "daily_insight:";
 

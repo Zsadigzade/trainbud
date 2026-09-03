@@ -8,25 +8,10 @@ import Toybox.Time;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
-//
-// How a pairing attempt failed, in the terms the user can act on.
-//
-// Every failure used to render one screen reading "Pairing failed. Tap to
-// retry.", which is equally true of a watch with no phone, a mistyped URL, a
-// dead tunnel answering 404, a captive portal answering 200 with HTML, and a
-// healthy server that said no. Those need four different actions from the user
-// and the message named none of them. The reporter on the Forerunner 55 saw
-// that screen because the build shipped a default URL pointing at a tunnel that
-// no longer existed; NOT_SERVER would have said so.
-//
-// A module rather than constants on the app class, so the view can name them
-// without holding an instance -- the same reason Cards exists.
-//
-module PairFail {
-    const UNREACHABLE = 0;  // nothing answered: transport error or 5xx
-    const NOT_SERVER  = 1;  // something answered, but it is not us
-    const REFUSED     = 2;  // our server answered and declined
-}
+// How a request failed is classified in Fail.mc, shared by every request path.
+// It lived here as `PairFail`, on the pairing flow alone, and the summary and
+// prompt paths each went on to invent their own vocabulary -- which is how a
+// dead tunnel came to be reported to the user as "AI unavailable".
 
 class TrainBudApp extends Application.AppBase {
 
@@ -82,7 +67,14 @@ class TrainBudApp extends Application.AppBase {
     // failure rendered the same "Pairing failed" screen, so a phone that was not
     // connected looked identical to a server that was down.
     private var _pairErrorCode as Number or Null = null;
-    private var _pairFailClass as Number = PairFail.UNREACHABLE;
+    private var _pairFailClass as Number = Fail.UNREACHABLE;
+
+    // Why the summary fetch failed. Every failure drew "Could not reach
+    // TrainBud", which is a specific claim and was frequently false: a 401 from
+    // a server whose API key had been rotated was reached perfectly well and
+    // needs the watch paired again, not a network fixed.
+    private var _summaryErrorCode as Number or Null = null;
+    private var _summaryFailClass as Number = Fail.NONE;
 
     // First slice of the response body when pairing fails with a 2xx. A 200 with
     // an unexpected body means something answered that is not our server — a
@@ -122,6 +114,24 @@ class TrainBudApp extends Application.AppBase {
     // one fact that would have told the user what to do was on the wire and
     // thrown away, which is exactly what the single "Pairing failed" screen did.
     private var _promptError as String or Null = null;
+
+    // Set only when the prompt failed in transport rather than in the model.
+    //
+    // These are different failures and they were drawn identically. A dead
+    // tunnel answers an HTML error page, Connect IQ cannot parse it as JSON and
+    // returns -400, and the Ask card printed "AI unavailable / HTTP -400" --
+    // blaming the one component that was never even asked. When this is set,
+    // the screen names the request failure instead; when it is Fail.NONE, the
+    // AI really was reached and really did fail, and _promptError says why.
+    private var _promptFailClass as Number = Fail.NONE;
+    private var _promptErrorCode as Number or Null = null;
+
+    // Consecutive failed status polls. One dropped response over Bluetooth is
+    // normal and must not kill a job that is running fine; a poll that fails
+    // every time is the silent-callback trap, where the screen sat on "Asking
+    // AI..." until the timeout and then said "Timed out", naming nothing.
+    private var _promptPollFailures as Number = 0;
+    private const PROMPT_POLL_FAIL_LIMIT = 3;
 
     // Ask AI menu state
     private var _askMenuIndex     as Number = 0;
@@ -170,6 +180,14 @@ class TrainBudApp extends Application.AppBase {
 
     function getPromptStatus()    as String             { return _promptStatus; }
     function getPromptError()     as String or Null     { return _promptError; }
+
+    /** Fail.NONE when the AI itself failed and _promptError says why; a Fail
+        class when the request never got far enough to ask it anything. */
+    function getPromptFailClass() as Number             { return _promptFailClass; }
+    function getPromptErrorCode() as Number or Null     { return _promptErrorCode; }
+
+    function getSummaryFailClass() as Number            { return _summaryFailClass; }
+    function getSummaryErrorCode() as Number or Null    { return _summaryErrorCode; }
 
     /** Whether the server has an AI key at all.
      *
@@ -229,6 +247,64 @@ class TrainBudApp extends Application.AppBase {
     function prevAskMenuItem() as Void {
         var count = getPromptCount();
         _askMenuIndex = (_askMenuIndex + count - 1) % count;
+    }
+
+    // -------------------------------------------------------------------------
+    // Screen tour hooks
+    //
+    // The single most expensive fact about this app is that its screens were
+    // shipped without being looked at. 1.3.0 went to the store having never
+    // been drawn once and six layout bugs came out of the first simulator run;
+    // the AI screens then shipped in 1.3.1 undrawn for a different reason --
+    // reaching them needs a live HTTPS server, an Anthropic key and a failure
+    // to happen on cue, and one of those three was never available at the same
+    // time as the other two.
+    //
+    // These setters let ScreenTour put the app into any state directly, with no
+    // server, so every screen can be drawn and photographed on demand. The tour
+    // driver itself lives in ciq/source-screens and is absent from the store
+    // build; only these few setters ship, which is a price worth paying to make
+    // "have you actually seen it" answerable in one command.
+    //
+    // See ciq/monkey-screens.jungle and build.ps1 -Screens.
+    // -------------------------------------------------------------------------
+
+    function setCardIndex(index as Number) as Void {
+        _cardIndex = index < 0 ? 0 : (index % CARD_COUNT);
+    }
+
+    function setAskMenuIndex(index as Number) as Void {
+        var count = getPromptCount();
+        _askMenuIndex = count <= 0 ? 0 : (index % count);
+    }
+
+    function setPairFailure(failClass as Number, code as Number or Null) as Void {
+        _pairFailClass = failClass;
+        _pairErrorCode = code;
+    }
+
+    function setPairExpiresAt(v as Number or Null) as Void { _pairExpiresAt = v; }
+
+    function setSummaryFailure(failClass as Number, code as Number or Null) as Void {
+        _summaryFailClass = failClass;
+        _summaryErrorCode = code;
+    }
+
+    function setPromptState(
+        status as String,
+        result as String or Null,
+        error as String or Null,
+        failClass as Number,
+        code as Number or Null
+    ) as Void {
+        stopPromptTimers();
+        _promptStatus    = status;
+        _promptResult    = result;
+        _promptError     = error;
+        _promptFailClass = failClass;
+        _promptErrorCode = code;
+        _promptPageIndex = 0;
+        _promptPageCount = 1;
     }
 
     // -------------------------------------------------------------------------
@@ -400,8 +476,23 @@ class TrainBudApp extends Application.AppBase {
             persistSummary(summary);
             var updatedAt = summary.get("updated_at");
             setUpdatedAt(updatedAt != null ? updatedAt as String : null);
+            _summaryFailClass = Fail.NONE;
+            _summaryErrorCode = null;
             setStatus("ready");
-        } else if (!loadCachedSummary()) {
+            WatchUi.requestUpdate();
+            return;
+        }
+
+        // Record why before deciding what to draw. The cached-summary fallback
+        // below hides the failure entirely when there is something to fall back
+        // on, which is right -- stale data beats no data -- but it must not
+        // also discard the reason: a 401 here means the key was rotated and the
+        // watch will keep showing yesterday's numbers forever without ever
+        // saying so.
+        _summaryErrorCode = responseCode;
+        _summaryFailClass = Fail.classify(responseCode);
+
+        if (!loadCachedSummary()) {
             setSummary(null);
             setUpdatedAt(null);
             setStatus("error");
@@ -484,7 +575,7 @@ class TrainBudApp extends Application.AppBase {
             }
         }
         _pairErrorCode = responseCode;
-        _pairFailClass = classifyPairFailure(responseCode);
+        _pairFailClass = Fail.classify(responseCode);
 
         if (data == null) {
             _pairErrorBody = "<null body>";
@@ -495,40 +586,6 @@ class TrainBudApp extends Application.AppBase {
 
         setStatus("pairing_error");
         WatchUi.requestUpdate();
-    }
-
-    // Which of the three failure screens to draw.
-    //
-    // A negative code is a Connect IQ constant, not an HTTP status, and always
-    // means the request never completed: no phone, no HTTPS, a refused header,
-    // a body that did not parse. Read the sign first.
-    //
-    // A 404 is the interesting one, and it is what the Forerunner 55 report was:
-    // ngrok answers a request for a tunnel that is no longer running with a 404
-    // and an HTML error page. So does any web server that is not TrainBud. The
-    // user needs to hear "that address is not a TrainBud server", not "pairing
-    // failed" -- the address is the thing they can fix.
-    private function classifyPairFailure(responseCode as Number) as Number {
-        if (responseCode < 0) {
-            // These four all mean bytes came back and were not ours: HTML where
-            // JSON was asked for, a content type we cannot read, headers we
-            // cannot read, a body too big to hold. A tunnel interstitial, a
-            // captive portal and a plain error page all land here.
-            if (responseCode == Communications.INVALID_HTTP_BODY_IN_NETWORK_RESPONSE
-                || responseCode == Communications.INVALID_HTTP_HEADER_FIELDS_IN_NETWORK_RESPONSE
-                || responseCode == Communications.NETWORK_RESPONSE_TOO_LARGE
-                || responseCode == Communications.UNSUPPORTED_CONTENT_TYPE_IN_RESPONSE) {
-                return PairFail.NOT_SERVER;
-            }
-            // Everything else negative is the request never completing: no
-            // phone, no HTTPS, a header refused on the device, a timeout.
-            return PairFail.UNREACHABLE;
-        }
-        if (responseCode == 429) { return PairFail.REFUSED; }
-        if (responseCode >= 500) { return PairFail.UNREACHABLE; }
-        // Anything else in the 2xx-4xx range came from a host that answered but
-        // does not serve POST /api/pair the way TrainBud does.
-        return PairFail.NOT_SERVER;
     }
 
     function getPairErrorCode() as Number or Null { return _pairErrorCode; }
@@ -700,6 +757,9 @@ class TrainBudApp extends Application.AppBase {
         _promptJobId    = null;
         _promptResult   = null;
         _promptError    = null;
+        _promptFailClass = Fail.NONE;
+        _promptErrorCode = null;
+        _promptPollFailures = 0;
         _promptStatus   = "submitting";
         _promptPageIndex = 0;
         _promptPageCount = 0;
@@ -726,13 +786,29 @@ class TrainBudApp extends Application.AppBase {
             if (jobId != null && jobId instanceof String) {
                 _promptJobId  = jobId as String;
                 _promptStatus = "waiting";
+                _promptPollFailures = 0;
                 WatchUi.requestUpdate();
                 startPromptPolling();
                 return;
             }
         }
-        _promptStatus = "error";
-        _promptError = "HTTP " + responseCode.toString();
+
+        // The reported bug. This used to be `_promptError = "HTTP " + code`
+        // under the heading "AI unavailable", so a dead tunnel -- which answers
+        // an HTML error page that Connect IQ cannot parse as JSON, returning
+        // -400 -- told the user their AI was broken. The AI was never asked.
+        // Nothing in this callback knows anything about the AI; all it knows is
+        // whether the server took the job.
+        failPrompt(responseCode);
+    }
+
+    /** Record a prompt failure that happened in transport, not in the model. */
+    private function failPrompt(responseCode as Number) as Void {
+        stopPromptTimers();
+        _promptFailClass = Fail.classify(responseCode);
+        _promptErrorCode = responseCode;
+        _promptError     = null;
+        _promptStatus    = "error";
         WatchUi.requestUpdate();
     }
 
@@ -758,8 +834,13 @@ class TrainBudApp extends Application.AppBase {
     function onPromptTimeout() as Void {
         stopPromptTimers();
         if (!_promptStatus.equals("done")) {
+            // A timeout is not a transport failure: the polls may have been
+            // answered perfectly and the job simply be slow. Fail.NONE keeps it
+            // on the AI screen, where the wording belongs.
             _promptStatus = "error";
-            _promptError = "Timed out";
+            _promptFailClass = Fail.NONE;
+            _promptErrorCode = null;
+            _promptError = WatchUi.loadResource(Rez.Strings.AiTimedOut) as String;
             WatchUi.requestUpdate();
         }
     }
@@ -784,7 +865,27 @@ class TrainBudApp extends Application.AppBase {
     }
 
     function onPromptStatusReceived(responseCode as Number, data as Dictionary or String or Null) as Void {
-        if (responseCode != 200 || data == null || !(data instanceof Dictionary)) { return; }
+        // This used to be a bare `return`, which is the single most expensive
+        // habit in this codebase: a poll that fails on every attempt and a poll
+        // that has not finished yet were the same screen. The user watched
+        // "Asking AI..." for thirty seconds and was then told "Timed out",
+        // which names nothing and blames the wrong component.
+        //
+        // One dropped response over Bluetooth is normal, so a single failure is
+        // tolerated; a run of them is a real failure and is reported as one. An
+        // unauthorized answer is never retried -- the key will not become valid
+        // between two polls three seconds apart.
+        if (responseCode != 200 || data == null || !(data instanceof Dictionary)) {
+            var failClass = Fail.classify(responseCode);
+            _promptPollFailures += 1;
+            if (failClass == Fail.UNAUTHORIZED
+                || _promptPollFailures >= PROMPT_POLL_FAIL_LIMIT) {
+                failPrompt(responseCode);
+            }
+            return;
+        }
+        _promptPollFailures = 0;
+
         var d = data as Dictionary;
         var status = d.get("status");
         if (status == null || !(status instanceof String)) { return; }
@@ -796,7 +897,10 @@ class TrainBudApp extends Application.AppBase {
             _promptResult = result != null && result instanceof String ? result as String : "";
             _promptStatus = "done";
             _promptPageIndex = 0;
-            _promptPageCount = computePageCount(_promptResult as String);
+            // Page count is measured by the view, which is the only thing that
+            // knows the font metrics and the chord width at each line. See
+            // setPromptPageCount.
+            _promptPageCount = 1;
             WatchUi.requestUpdate();
         } else if (s.equals("error")) {
             stopPromptTimers();
@@ -807,6 +911,11 @@ class TrainBudApp extends Application.AppBase {
             _promptError = reason != null && reason instanceof String
                 ? reason as String
                 : null;
+            // The server reached the model and the model or its key failed.
+            // This is the one case where "AI unavailable" is the truth, so it
+            // is the one case that draws it.
+            _promptFailClass = Fail.NONE;
+            _promptErrorCode = null;
             _promptStatus = "error";
             WatchUi.requestUpdate();
         }
@@ -817,27 +926,32 @@ class TrainBudApp extends Application.AppBase {
         _promptJobId  = null;
         _promptResult = null;
         _promptError  = null;
+        _promptFailClass = Fail.NONE;
+        _promptErrorCode = null;
+        _promptPollFailures = 0;
         _promptStatus = "idle";
         _promptPageIndex = 0;
         _promptPageCount = 0;
     }
 
-    private function computePageCount(text as String) as Number {
-        // ~80 chars per page on small watch screen
-        var pageSize = 80;
-        if (text.length() == 0) { return 1; }
-        return ((text.length() + pageSize - 1) / pageSize).toNumber();
-    }
-
-    function getPromptPage(pageIndex as Number) as String {
-        if (_promptResult == null) { return ""; }
-        var text = _promptResult as String;
-        var pageSize = 80;
-        var start = pageIndex * pageSize;
-        var end = start + pageSize;
-        if (start >= text.length()) { return ""; }
-        if (end > text.length()) { end = text.length(); }
-        return text.substring(start, end);
+    //
+    // Pagination is the view's measurement, reported back here so the delegate
+    // can bound navigation without a Dc of its own.
+    //
+    // It used to be arithmetic on the character count -- eighty characters per
+    // page, cut with substring -- and the view then drew that eighty-character
+    // string with a single drawText. Monkey C does not wrap: the whole page was
+    // laid out on one line and ran off both edges of the screen, and the cut
+    // itself fell mid-word. No AI answer this app has ever produced could be
+    // read. It survived every build, type check and store review because no
+    // Anthropic key was ever configured on the machine it was written on, so
+    // the success path had never once been drawn.
+    //
+    function setPromptPageCount(count as Number) as Void {
+        var safe = count < 1 ? 1 : count;
+        if (_promptPageCount == safe) { return; }
+        _promptPageCount = safe;
+        if (_promptPageIndex >= safe) { _promptPageIndex = safe - 1; }
     }
 
     // -------------------------------------------------------------------------
