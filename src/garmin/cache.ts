@@ -4,6 +4,7 @@ import path from "node:path";
 import { appConfig } from "../config.js";
 import { hashParams } from "../utils/helpers.js";
 import { logger } from "../utils/logger.js";
+import { restrictExistingFile } from "../utils/secretFile.js";
 
 interface CacheRow {
   key: string;
@@ -36,6 +37,10 @@ export class GarminCache {
   constructor(databasePath = appConfig.cachePath) {
     fs.mkdirSync(path.dirname(databasePath), { recursive: true });
     this.db = new Database(databasePath);
+
+    // Holds whatever the tools last fetched: sleep, stress, resting heart rate.
+    // Shorter-lived than history.db and exactly as personal.
+    restrictExistingFile(databasePath);
     this.initialize();
   }
 

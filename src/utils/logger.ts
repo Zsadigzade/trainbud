@@ -3,6 +3,7 @@ import path from "node:path";
 import pino from "pino";
 import type { Logger } from "pino";
 import { appConfig } from "../config.js";
+import { restrictExistingFile } from "./secretFile.js";
 
 let loggerInstance: Logger | null = null;
 
@@ -64,6 +65,14 @@ function createStderrLogger(): Logger {
 function createFileLogger(logPath: string): Logger {
   const directory = path.dirname(logPath);
   fs.mkdirSync(directory, { recursive: true });
+
+  // The log records every request path and, on this machine, still contains an
+  // API key written before the query string was redacted. pino creates the file
+  // at the process umask, which is 0644 on a default install.
+  if (!fs.existsSync(logPath)) {
+    fs.writeFileSync(logPath, "", { mode: 0o600 });
+  }
+  restrictExistingFile(logPath);
 
   return pino(
     baseOptions(),

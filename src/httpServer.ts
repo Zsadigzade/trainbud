@@ -398,6 +398,34 @@ export function redactPath(pathname: string): string {
   return pathname.replace(/^\/api\/pair\/[^/]+/, "/api/pair/<code>");
 }
 
+/**
+ * Both redactions, applied to a RAW `req.url`.
+ *
+ * The request-logging line was fixed to redact and the unhandled-error handler
+ * was not, so a 500 wrote `?token=<the live API key>` into `.trainbud/mcp.log`
+ * in plaintext. Same file, same log, same key, one fix short.
+ *
+ * `req.url` is an origin-form path, not an absolute URL, so it cannot go
+ * through `new URL()` without a base -- and this runs inside the handler whose
+ * entire purpose is that nothing in it may take the process down, so it must
+ * not throw on a malformed one either. Split by hand, and fall back to naming
+ * the shape rather than printing the value.
+ */
+export function redactRequestUrl(rawUrl: string | undefined): string {
+  const raw = rawUrl ?? "";
+  const queryStart = raw.indexOf("?");
+  const pathname = queryStart === -1 ? raw : raw.slice(0, queryStart);
+  const search = queryStart === -1 ? "" : raw.slice(queryStart);
+
+  try {
+    return redactPath(pathname) + redactQuery(search);
+  } catch {
+    // URLSearchParams is forgiving, but a credential must not survive on the
+    // strength of that assumption.
+    return `${redactPath(pathname)}<unparsable query redacted>`;
+  }
+}
+
 // The public URL to hand a watch during pairing.
 //
 // This used to come solely from appConfig.publicUrl, which falls back to
@@ -476,7 +504,12 @@ export function createHttpMcpServer(): HttpMcpServer {
         // property of today's deployment, not of the code, and the fix is a
         // wrapper.
         void handleRequest(req, res).catch((error: unknown) => {
-          logger.error({ error, url: req.url }, "Unhandled error in request handler");
+          // Redacted, like the request line above it. This wrote the dashboard's
+          // ?token= -- the live API key -- into .trainbud/mcp.log on any 500.
+          logger.error(
+            { error, url: redactRequestUrl(req.url) },
+            "Unhandled error in request handler"
+          );
           if (!res.headersSent) {
             sendJson(res, 500, { error: "Internal Server Error" });
           } else if (!res.writableEnded) {

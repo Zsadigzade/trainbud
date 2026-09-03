@@ -4,6 +4,7 @@ import path from "node:path";
 import { appConfig } from "../config.js";
 import type { ActivitySummary } from "../garmin/types.js";
 import { parseActivityLocalDateTime } from "../utils/helpers.js";
+import { restrictExistingFile } from "../utils/secretFile.js";
 import {
   HISTORY_SCHEMA,
   type IngestOutcome,
@@ -61,6 +62,12 @@ export function openHistoryDb(databasePath = defaultHistoryPath()): Database.Dat
 
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   db = new Database(databasePath);
+
+  // A year of the user's sleep, heart rate and HRV, plus every raw Connect
+  // response behind it. `app.db` was hardened for holding an API key and this
+  // was left at better-sqlite3's default 0644 -- readable by every account on
+  // the machine. It is the most personal file the app writes.
+  restrictExistingFile(databasePath);
   db.exec(HISTORY_SCHEMA);
   return db;
 }
