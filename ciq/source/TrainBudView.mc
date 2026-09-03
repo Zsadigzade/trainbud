@@ -789,7 +789,7 @@ class TrainBudView extends WatchUi.View {
         var valueColor = Graphics.COLOR_WHITE;
 
         if (summary != null) {
-            var cardData = getCardData(cardIndex, summary);
+            var cardData = getCardData(dc, cardIndex, summary);
             value      = cardData[:value] as String;
             subtitle   = cardData[:subtitle] as String;
             footnote   = cardData[:footnote] as String;
@@ -1034,6 +1034,7 @@ class TrainBudView extends WatchUi.View {
 
         var lines  = [] as Array<String>;
         var colors = [] as Array<Number>;
+        var sessionsFull = null;
 
         var sessions = w.get("sessions");
         var minutes  = w.get("moving_minutes");
@@ -1041,8 +1042,12 @@ class TrainBudView extends WatchUi.View {
             var sessionText = (sessions as Number).toString() + " "
                 + (WatchUi.loadResource(
                     (sessions as Number) == 1 ? Rez.Strings.WeekSession : Rez.Strings.WeekSessions) as String);
+
+            // The full form is decided after the layout is known, below: how
+            // much room this line has depends on how many lines there are, and
+            // a round screen narrows fast as the block grows upward.
             if (minutes != null && minutes instanceof Number && (minutes as Number) > 0) {
-                sessionText = sessionText + "  " + formatDuration(minutes as Number);
+                sessionsFull = sessionText + "  " + formatDuration(minutes as Number);
             }
             lines.add(sessionText);
             colors.add(Graphics.COLOR_WHITE);
@@ -1132,6 +1137,27 @@ class TrainBudView extends WatchUi.View {
 
         var lineH = dc.getFontHeight(Graphics.FONT_TINY);
         var y = cy - ((lines.size() * lineH) / 2);
+
+        // Now the top row's position is known, so the sessions line can take its
+        // duration back if there is room for it whole.
+        //
+        // Measuring at the widest point instead was not enough: with a race on
+        // the card the block is five lines, the top row sits higher, and a round
+        // screen narrows fast as it climbs -- "4 sessions  3h 32m" fitted at
+        // four lines and rendered "4 sessions  3h 3..." at five. Drop a whole
+        // field before cutting a number in half, and decide it against the row
+        // the line is actually drawn on.
+        if (sessionsFull != null && lines.size() > 0) {
+            var topOffset = y + lineH - Graphics.getFontDescent(Graphics.FONT_TINY) - cy;
+            if (topOffset < 0) { topOffset = -topOffset; }
+            var topStart = y - cy;
+            if (topStart < 0) { topStart = -topStart; }
+            var deepest = topOffset > topStart ? topOffset : topStart;
+            if (dc.getTextWidthInPixels(sessionsFull as String, Graphics.FONT_TINY)
+                    <= lineWidthAt(dc, deepest)) {
+                lines[0] = sessionsFull as String;
+            }
+        }
 
         for (var i = 0; i < lines.size(); i += 1) {
             dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
@@ -1523,7 +1549,7 @@ class TrainBudView extends WatchUi.View {
         return WatchUi.loadResource(Rez.Strings.CardStress) as String;
     }
 
-    private function getCardData(cardIndex as Number, summary as Dictionary) as Dictionary {
+    private function getCardData(dc as Dc, cardIndex as Number, summary as Dictionary) as Dictionary {
         var result = {
             :value    => WatchUi.loadResource(Rez.Strings.NoData) as String,
             :subtitle => "",
@@ -1566,12 +1592,27 @@ class TrainBudView extends WatchUi.View {
                     var consistency = wd.get("sleep_consistency");
                     if (consistency != null && consistency instanceof String) {
                         var c = consistency as String;
+                        var word = null;
                         if (c.equals("erratic")) {
-                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepErratic) as String);
+                            word = WatchUi.loadResource(Rez.Strings.SleepErratic) as String;
                         } else if (c.equals("variable")) {
-                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepVariable) as String);
+                            word = WatchUi.loadResource(Rez.Strings.SleepVariable) as String;
                         } else if (c.equals("steady")) {
-                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepSteady) as String);
+                            word = WatchUi.loadResource(Rez.Strings.SleepSteady) as String;
+                        }
+
+                        // Only if it fits whole. "Usually 7.2h · variable" is
+                        // wider than a 208 px screen at this height and was
+                        // rendered "Usually 7.2h · v...", which reads as a
+                        // broken layout and tells the user nothing. The
+                        // habitual figure is the part they cannot guess, so it
+                        // is the part that survives.
+                        if (word != null) {
+                            var full = note + " · " + (word as String);
+                            if (dc.getTextWidthInPixels(full, Graphics.FONT_XTINY)
+                                    <= lineWidthAt(dc, (dc.getHeight() / 2) - 36)) {
+                                note = full;
+                            }
                         }
                     }
                     result[:footnote] = note;
