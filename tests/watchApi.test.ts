@@ -41,6 +41,7 @@ describe("watch mappers", () => {
     const sleep = toWatchSleep({
       requestedNights: 1,
       recordedNights: 1,
+    unreachableNights: 0,
       averageScore: 78,
       nights: [
         {
@@ -65,7 +66,8 @@ describe("watch mappers", () => {
 
   it("returns null sleep when no night was recorded", () => {
     assert.equal(
-      toWatchSleep({ requestedNights: 1, recordedNights: 0, averageScore: null, nights: [] }),
+      toWatchSleep({ requestedNights: 1, recordedNights: 0,
+    unreachableNights: 0, averageScore: null, nights: [] }),
       null
     );
     assert.equal(toWatchSleep(null), null);
@@ -124,22 +126,26 @@ describe("watch mappers", () => {
     assert.equal(toWatchActivity({ activity: null }), null);
     assert.equal(toWatchActivity(null), null);
     assert.equal(
-      toWatchStress({ requestedDays: 7, recordedDays: 0, averageStress: null, trend: "stable", days: [] }),
+      toWatchStress({ requestedDays: 7, recordedDays: 0,
+    unreachableDays: 0, averageStress: null, trend: "stable", days: [] }),
       null
     );
     assert.equal(
-      toWatchVo2Max({ requestedDays: 30, recordedDays: 0, current: null, oldest: null, trend: "stable", entries: [] }),
+      toWatchVo2Max({ requestedDays: 30, recordedDays: 0,
+    unreachableDays: 0, current: null, oldest: null, trend: "stable", entries: [] }),
       null
     );
     assert.equal(
-      toWatchHeartRate({ requestedDays: 7, recordedDays: 0, currentResting: null, averageResting: null, trend: "stable", days: [] }),
+      toWatchHeartRate({ requestedDays: 7, recordedDays: 0,
+    unreachableDays: 0, currentResting: null, averageResting: null, trend: "stable", days: [] }),
       null
     );
   });
 
   it("labels stress by the same thresholds as before", () => {
     const label = (avg: number) =>
-      toWatchStress({ requestedDays: 7, recordedDays: 1, averageStress: avg, trend: "stable", days: [] })
+      toWatchStress({ requestedDays: 7, recordedDays: 1,
+    unreachableDays: 0, averageStress: avg, trend: "stable", days: [] })
         ?.label;
 
     assert.equal(label(20), "Low");
@@ -153,6 +159,7 @@ describe("watch mappers", () => {
     const heartRate = toWatchHeartRate({
       requestedDays: 7,
       recordedDays: 2,
+    unreachableDays: 0,
       currentResting: 52,
       averageResting: 51,
       trend: "stable",
@@ -171,7 +178,8 @@ describe("watch mappers", () => {
       recovery: recoveryPayload(91, "recovered"),
       sleep: null,
       activity: null,
-      stress: { requestedDays: 7, recordedDays: 1, averageStress: 34, trend: "stable", days: [] },
+      stress: { requestedDays: 7, recordedDays: 1,
+    unreachableDays: 0, averageStress: 34, trend: "stable", days: [] },
       vo2max: null,
       heartRate: null,
       findings: [],

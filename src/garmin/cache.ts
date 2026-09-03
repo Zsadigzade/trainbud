@@ -12,6 +12,22 @@ interface CacheRow {
   ttl: number;
 }
 
+/**
+ * Bumped whenever a cached value changes shape. The cache is keyed by tool and
+ * parameters only, so without this a build that starts storing
+ * `{ values, unreachableDays }` under a key that already holds a bare array
+ * reads the old row back, casts it to the new type and dereferences a field
+ * that is not there. An upgrade must invalidate, not reinterpret.
+ */
+const CACHE_SCHEMA_VERSION = "v2";
+
+/**
+ * How long a result that is missing days because requests FAILED may be kept.
+ * A complete answer earns its full TTL; a degraded one gets long enough to stop
+ * a retry storm and no longer.
+ */
+export const PARTIAL_CACHE_TTL_SECONDS = 60;
+
 // SECTION: SQLite Cache
 
 export class GarminCache {
@@ -35,7 +51,7 @@ export class GarminCache {
   }
 
   buildKey(tool: string, params: Record<string, unknown>): string {
-    return `${tool}:${hashParams(params)}`;
+    return `${tool}:${CACHE_SCHEMA_VERSION}:${hashParams(params)}`;
   }
 
   get<T>(key: string): T | null {
@@ -133,10 +149,28 @@ export function buildToolCacheKey(tool: string, params: Record<string, unknown>)
   return getCache().buildKey(tool, params);
 }
 
+export interface CacheOptions<T> {
+  /**
+   * True when the value is incomplete because a request failed rather than
+   * because nothing was measured. Such a value is cached for
+   * `partialTtlSeconds`, not for the full TTL.
+   */
+  isPartial?: (value: T) => boolean;
+  partialTtlSeconds?: number;
+}
+
+/**
+ * A thrown fetcher caches nothing -- that has always been true and is the point
+ * of the `await` sitting outside `cache.set`. What was not true is that a
+ * fetcher which swallowed its own failures and returned an empty result got the
+ * full success TTL, so one rate-limited minute froze "no data" in for two hours.
+ * A caller that can tell the difference now says so through `isPartial`.
+ */
 export async function withCache<T>(
   key: string,
   ttlSeconds: number,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
+  options: CacheOptions<T> = {}
 ): Promise<T> {
   const cache = getCache();
   const cached = cache.get<T>(key);
@@ -146,6 +180,13 @@ export async function withCache<T>(
   }
 
   const fresh = await fetcher();
-  cache.set(key, fresh, ttlSeconds);
+  const partial = options.isPartial?.(fresh) ?? false;
+
+  cache.set(
+    key,
+    fresh,
+    partial ? (options.partialTtlSeconds ?? PARTIAL_CACHE_TTL_SECONDS) : ttlSeconds
+  );
+
   return fresh;
 }

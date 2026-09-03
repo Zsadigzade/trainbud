@@ -21,6 +21,12 @@ import type {
 export interface SleepPayload {
   requestedNights: number;
   recordedNights: number;
+  /**
+   * Nights whose request FAILED. `recordedNights === 0` with this at zero means
+   * the user has no sleep recorded; with this above zero it means Garmin would
+   * not answer, and the two must never render the same sentence.
+   */
+  unreachableNights: number;
   averageScore: number | null;
   nights: SleepNightSummary[];
 }
@@ -39,6 +45,8 @@ export interface ActivitiesRangePayload {
 export interface HeartRatePayload {
   requestedDays: number;
   recordedDays: number;
+  /** Days whose request failed, as opposed to days with nothing measured. */
+  unreachableDays: number;
   currentResting: number | null;
   averageResting: number | null;
   trend: string;
@@ -48,6 +56,8 @@ export interface HeartRatePayload {
 export interface StressPayload {
   requestedDays: number;
   recordedDays: number;
+  /** Days whose request failed, as opposed to days with nothing measured. */
+  unreachableDays: number;
   averageStress: number | null;
   trend: string;
   days: DailyStressSummary[];
@@ -56,6 +66,8 @@ export interface StressPayload {
 export interface Vo2MaxPayload {
   requestedDays: number;
   recordedDays: number;
+  /** Days whose request failed, as opposed to days with nothing measured. */
+  unreachableDays: number;
   current: number | null;
   oldest: number | null;
   trend: string;

@@ -6,28 +6,22 @@ import type { DailyStressSummary } from "../garmin/rawApi.js";
 import type { ToolResult } from "../garmin/types.js";
 import type { StressPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { mapInBatches } from "../utils/batch.js";
+import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
+import type { DayFetchResult } from "../garmin/partial.js";
 import { average, calculateTrend, getDateRange } from "../utils/helpers.js";
 
-async function fetchStressDays(days: number): Promise<DailyStressSummary[]> {
+async function fetchStressDays(days: number): Promise<DayFetchResult<DailyStressSummary>> {
   const dates = getDateRange(days);
 
   return withGarminClient(async (client) => {
-    const summaries = await mapInBatches(dates, async (date) => {
-      try {
-        return (await fetchStressDay(client, date)).mapped;
-      } catch {
-        return null;
-      }
-    });
-
-    return summaries.filter((entry): entry is DailyStressSummary => entry !== null);
+    return fetchEachDay(dates, async (date) => (await fetchStressDay(client, date)).mapped, "stress");
   });
 }
 
 export function buildStressPayload(
   days: DailyStressSummary[],
-  requestedDays: number
+  requestedDays: number,
+  unreachableDays = 0
 ): StressPayload {
   const averages = days
     .map((day) => day.averageStress)
@@ -36,6 +30,7 @@ export function buildStressPayload(
   return {
     requestedDays,
     recordedDays: days.length,
+    unreachableDays,
     averageStress: averages.length > 0 ? Math.round(average(averages)) : null,
     trend: calculateTrend(averages, true),
     days,
@@ -43,8 +38,13 @@ export function buildStressPayload(
 }
 
 export function renderStressText(payload: StressPayload): string {
+  const note = partialFetchNote(
+    { values: payload.days, unreachableDays: payload.unreachableDays, requestedDays: payload.requestedDays },
+    "days"
+  );
+
   if (payload.recordedDays === 0) {
-    return `No stress data found for the last ${payload.requestedDays} days.`;
+    return note || `No stress data found for the last ${payload.requestedDays} days.`;
   }
 
   // The trend line is conditional on more than one *measured* day, not on more
@@ -57,6 +57,7 @@ export function renderStressText(payload: StressPayload): string {
   });
 
   return [
+    note,
     `Stress levels over ${payload.recordedDays} recorded days:`,
     payload.averageStress !== null ? `Average stress: ${payload.averageStress}` : "",
     measuredDays > 1 ? `Trend: ${payload.trend}` : "",
@@ -74,11 +75,14 @@ export async function getStressLevels(
   const days = input.days ?? 7;
   const cacheKey = buildToolCacheKey("get_stress_levels", { days });
 
-  const summaries = await withCache(cacheKey, appConfig.cacheTtlStats, async () => {
-    return fetchStressDays(days);
-  });
+  const fetched = await withCache(
+    cacheKey,
+    appConfig.cacheTtlStats,
+    async () => fetchStressDays(days),
+    { isPartial }
+  );
 
-  const payload = buildStressPayload(summaries, days);
+  const payload = buildStressPayload(fetched.values, days, fetched.unreachableDays);
 
   return {
     type: "text",

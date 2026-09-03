@@ -37,6 +37,21 @@ const requestLog = new Map<string, RateLimitEntry>();
 const pairRequestLog = new Map<string, RateLimitEntry>();
 let watchApiCache: { summary: WatchSummary; expiresAt: number } | null = null;
 
+/**
+ * How many per-request MCP servers are still holding their transport open.
+ *
+ * This exists because "did that request release its handles" had no observable
+ * at all: a leak was a number that only grew inside the process, so a test could
+ * not tell a fixed build from a broken one, and neither could an operator. It
+ * settles back to zero once every in-flight request has finished or been
+ * abandoned; a value that climbs and stays there is the leak.
+ */
+let liveMcpSessions = 0;
+
+export function liveMcpSessionCount(): number {
+  return liveMcpSessions;
+}
+
 export interface HttpMcpServer {
   start: () => Promise<void>;
   close: () => Promise<void>;
@@ -289,6 +304,38 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
     sessionIdGenerator: undefined,
   });
 
+  /**
+   * A per-request MCP server and transport are only released by the `close`
+   * listener below, and that listener used to be registered in a `finally` --
+   * after the awaits. A client that aborted mid-request (a watch losing
+   * Bluetooth, a browser tab closed, a tunnel dropping) had already emitted
+   * `close` by then, and `close` does not fire twice: the listener was attached
+   * to a dead response and never ran. Every aborted request leaked a server, a
+   * transport and their listeners for the lifetime of the process.
+   *
+   * Registered before the first await now, and idempotent, because the two
+   * paths that reach it -- the event and the direct call when the socket is
+   * already gone -- can both happen.
+   */
+  let released = false;
+  liveMcpSessions += 1;
+
+  const release = (): void => {
+    if (released) {
+      return;
+    }
+    released = true;
+    liveMcpSessions -= 1;
+    void Promise.resolve(transport.close()).catch((error: unknown) => {
+      logger.debug({ err: error }, "MCP transport close failed");
+    });
+    void Promise.resolve(server.close()).catch((error: unknown) => {
+      logger.debug({ err: error }, "MCP server close failed");
+    });
+  };
+
+  res.once("close", release);
+
   try {
     await server.connect(transport);
 
@@ -308,10 +355,11 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
       });
     }
   } finally {
-    res.on("close", () => {
-      void transport.close();
-      void server.close();
-    });
+    // `close` cannot arrive for a response that is already destroyed, so the
+    // only chance to release those handles is right here.
+    if (res.destroyed || res.writableEnded) {
+      release();
+    }
   }
 }
 

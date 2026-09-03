@@ -5,24 +5,21 @@ import { fetchHeartRateDay } from "../garmin/daily.js";
 import type { HeartRateDaySummary, ToolResult } from "../garmin/types.js";
 import type { HeartRatePayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { mapInBatches } from "../utils/batch.js";
+import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
+import type { DayFetchResult } from "../garmin/partial.js";
 import { average, calculateTrend, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Heart Rate Mapping
 
-async function fetchHeartRateDays(days: number): Promise<HeartRateDaySummary[]> {
+async function fetchHeartRateDays(days: number): Promise<DayFetchResult<HeartRateDaySummary>> {
   const dates = getDateRange(days);
 
   return withGarminClient(async (client) => {
-    const summaries = await mapInBatches(dates, async (date) => {
-      try {
-        return (await fetchHeartRateDay(client, date)).mapped;
-      } catch {
-        return null;
-      }
-    });
-
-    return summaries.filter((summary): summary is HeartRateDaySummary => summary !== null);
+    return fetchEachDay(
+      dates,
+      async (date) => (await fetchHeartRateDay(client, date)).mapped,
+      "heart-rate"
+    );
   });
 }
 
@@ -30,7 +27,8 @@ async function fetchHeartRateDays(days: number): Promise<HeartRateDaySummary[]> 
 
 export function buildHeartRatePayload(
   days: HeartRateDaySummary[],
-  requestedDays: number
+  requestedDays: number,
+  unreachableDays = 0
 ): HeartRatePayload {
   const restingValues = days
     .map((day) => day.restingHeartRate)
@@ -39,6 +37,7 @@ export function buildHeartRatePayload(
   return {
     requestedDays,
     recordedDays: days.length,
+    unreachableDays,
     currentResting: restingValues[0] ?? null,
     // A day can be recorded with no resting reading at all. This was
     // Math.round(average([])) before, which printed "Average resting HR: NaN
@@ -50,15 +49,20 @@ export function buildHeartRatePayload(
 }
 
 export function renderHeartRateText(payload: HeartRatePayload): string {
+  const note = partialFetchNote(
+    { values: payload.days, unreachableDays: payload.unreachableDays, requestedDays: payload.requestedDays },
+    "days"
+  );
+
   if (payload.recordedDays === 0) {
-    return `No heart rate data found for the last ${payload.requestedDays} days.`;
+    return note || `No heart rate data found for the last ${payload.requestedDays} days.`;
   }
 
   const recentLines = payload.days.slice(0, 7).map((day) => {
     return `${day.date}: resting ${day.restingHeartRate ?? "n/a"} bpm, max ${day.maxHeartRate ?? "n/a"} bpm`;
   });
 
-  return [
+  const lines = [
     `Heart rate trends over ${payload.recordedDays} days:`,
     `Current resting HR: ${payload.currentResting ?? "n/a"} bpm`,
     `Average resting HR: ${payload.averageResting ?? "n/a"} bpm`,
@@ -66,7 +70,9 @@ export function renderHeartRateText(payload: HeartRatePayload): string {
     "",
     "Recent days:",
     ...recentLines,
-  ].join("\n");
+  ];
+
+  return (note ? [note, "", ...lines] : lines).join("\n");
 }
 
 export async function getHeartRateTrends(
@@ -75,11 +81,14 @@ export async function getHeartRateTrends(
   const days = input.days ?? 30;
   const cacheKey = buildToolCacheKey("get_heart_rate_trends", { days });
 
-  const summaries = await withCache(cacheKey, appConfig.cacheTtlStats, async () => {
-    return fetchHeartRateDays(days);
-  });
+  const fetched = await withCache(
+    cacheKey,
+    appConfig.cacheTtlStats,
+    async () => fetchHeartRateDays(days),
+    { isPartial }
+  );
 
-  const payload = buildHeartRatePayload(summaries, days);
+  const payload = buildHeartRatePayload(fetched.values, days, fetched.unreachableDays);
 
   return {
     type: "text",

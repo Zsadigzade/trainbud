@@ -5,24 +5,17 @@ import { fetchSleepDay } from "../garmin/daily.js";
 import type { SleepNightSummary, ToolResult } from "../garmin/types.js";
 import type { SleepPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { mapInBatches } from "../utils/batch.js";
+import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
+import type { DayFetchResult } from "../garmin/partial.js";
 import { formatDuration, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Sleep Mapping
 
-async function fetchSleepNights(days: number): Promise<SleepNightSummary[]> {
+async function fetchSleepNights(days: number): Promise<DayFetchResult<SleepNightSummary>> {
   const dates = getDateRange(days);
 
   return withGarminClient(async (client) => {
-    const nights = await mapInBatches(dates, async (date) => {
-      try {
-        return (await fetchSleepDay(client, date)).mapped;
-      } catch {
-        return null;
-      }
-    });
-
-    return nights.filter((night): night is SleepNightSummary => night !== null);
+    return fetchEachDay(dates, async (date) => (await fetchSleepDay(client, date)).mapped, "sleep");
   });
 }
 
@@ -40,7 +33,8 @@ function formatSleepNight(night: SleepNightSummary): string {
 
 export function buildSleepPayload(
   nights: SleepNightSummary[],
-  requestedNights: number
+  requestedNights: number,
+  unreachableNights = 0
 ): SleepPayload {
   const scored = nights
     .map((night) => night.sleepScore)
@@ -54,17 +48,28 @@ export function buildSleepPayload(
   return {
     requestedNights,
     recordedNights: nights.length,
+    unreachableNights,
     averageScore,
     nights,
   };
 }
 
 export function renderSleepText(payload: SleepPayload): string {
+  const note = partialFetchNote(
+    {
+      values: payload.nights,
+      unreachableDays: payload.unreachableNights,
+      requestedDays: payload.requestedNights,
+    },
+    "nights"
+  );
+
   if (payload.recordedNights === 0) {
-    return `No sleep data found for the last ${payload.requestedNights} nights.`;
+    return note || `No sleep data found for the last ${payload.requestedNights} nights.`;
   }
 
   return [
+    note,
     `Sleep summary for last ${payload.recordedNights} recorded nights:`,
     payload.averageScore !== null ? `Average sleep score: ${payload.averageScore}` : "",
     "",
@@ -80,11 +85,14 @@ export async function getSleepDataTool(
   const nights = input.nights ?? 7;
   const cacheKey = buildToolCacheKey("get_sleep_data", { nights });
 
-  const sleepNights = await withCache(cacheKey, appConfig.cacheTtlSleep, async () => {
-    return fetchSleepNights(nights);
-  });
+  const fetched = await withCache(
+    cacheKey,
+    appConfig.cacheTtlSleep,
+    async () => fetchSleepNights(nights),
+    { isPartial }
+  );
 
-  const payload = buildSleepPayload(sleepNights, nights);
+  const payload = buildSleepPayload(fetched.values, nights, fetched.unreachableDays);
 
   return {
     type: "text",
