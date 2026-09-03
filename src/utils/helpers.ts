@@ -3,8 +3,29 @@ import type { ActivitySummary } from "../garmin/types.js";
 
 export type TrendDirection = "improving" | "declining" | "stable" | "insufficient_data";
 
+// SECTION: Calendar days
+//
+// Every Date in this file is LOCAL midnight for the day it names, not UTC
+// midnight.
+//
+// That is not a style choice. garmin-connect turns a Date into the day it asks
+// Garmin about with `toDateString`, which subtracts getTimezoneOffset() and
+// then reads the UTC date -- a function that round-trips a LOCAL-midnight Date
+// and shifts a UTC-midnight one. Feeding it UTC midnight therefore asked for the
+// wrong calendar day everywhere west of UTC: at UTC-5, `new Date("2026-08-19")`
+// is 2026-08-18T19:00 local, and the library asked Garmin for the 18th while
+// this code stored the answer under the 19th. Every daily metric -- sleep,
+// heart rate, stress, weight -- was off by one day for those users, silently,
+// with plausible numbers under the wrong dates.
+//
+// It never showed up here because the machine this was written on is UTC+4,
+// where the shift lands inside the same day.
+//
+// A calendar day is a local question anyway: "how did I sleep on Tuesday" means
+// the user's Tuesday.
+
 export function parseIsoDate(value: string): Date {
-  const parsed = DateTime.fromISO(value, { zone: "utc" });
+  const parsed = DateTime.fromISO(value);
   if (!parsed.isValid) {
     throw new Error(`Invalid date "${value}". Use ISO 8601 format such as 2026-06-01.`);
   }
@@ -12,12 +33,12 @@ export function parseIsoDate(value: string): Date {
 }
 
 export function formatIsoDate(date: Date): string {
-  return DateTime.fromJSDate(date, { zone: "utc" }).toISODate() ?? "";
+  return DateTime.fromJSDate(date).toISODate() ?? "";
 }
 
 export function getDateRange(days: number): Date[] {
   const dates: Date[] = [];
-  const today = DateTime.utc().startOf("day");
+  const today = DateTime.local().startOf("day");
 
   for (let offset = 0; offset < days; offset += 1) {
     dates.push(today.minus({ days: offset }).toJSDate());
@@ -27,12 +48,12 @@ export function getDateRange(days: number): Date[] {
 }
 
 export function getYesterday(): Date {
-  return DateTime.utc().minus({ days: 1 }).startOf("day").toJSDate();
+  return DateTime.local().minus({ days: 1 }).startOf("day").toJSDate();
 }
 
 export function getDatesBetween(startDate: string, endDate: string): Date[] {
-  const start = DateTime.fromISO(startDate, { zone: "utc" }).startOf("day");
-  const end = DateTime.fromISO(endDate, { zone: "utc" }).startOf("day");
+  const start = DateTime.fromISO(startDate).startOf("day");
+  const end = DateTime.fromISO(endDate).startOf("day");
 
   if (!start.isValid || !end.isValid) {
     throw new Error("Invalid date range. Use ISO 8601 dates such as 2026-06-01.");
@@ -72,8 +93,8 @@ export function filterActivitiesByRange(
   startDate: string,
   endDate: string
 ): ActivitySummary[] {
-  const start = DateTime.fromISO(startDate, { zone: "utc" }).startOf("day");
-  const end = DateTime.fromISO(endDate, { zone: "utc" }).startOf("day");
+  const start = DateTime.fromISO(startDate).startOf("day");
+  const end = DateTime.fromISO(endDate).startOf("day");
 
   return activities.filter((activity) => {
     const activityDay = parseActivityLocalDateTime(activity.startTimeLocal).startOf("day");

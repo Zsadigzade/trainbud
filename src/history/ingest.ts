@@ -8,7 +8,7 @@ import {
 } from "../garmin/daily.js";
 import type { GarminConnectInstance } from "../garmin/garminConnect.js";
 import { mapActivity } from "../garmin/daily.js";
-import { parseActivityLocalDateTime } from "../utils/helpers.js";
+import { parseActivityLocalDateTime, parseIsoDate } from "../utils/helpers.js";
 import type { ActivitySummary } from "../garmin/types.js";
 import { logger } from "../utils/logger.js";
 import { writeFixture } from "./capture.js";
@@ -404,10 +404,14 @@ export async function runIngest(
         continue;
       }
 
+      // parseIsoDate, not new Date(): the bare constructor parses a date-only
+      // string as UTC midnight, and garmin-connect formats the Date it is given
+      // in local time. West of UTC that combination asks Garmin for the previous
+      // day and stores the answer under this one.
       const { raw, metrics, measuredOn } = await fetchSource(
         unit.source,
         client,
-        new Date(unit.date)
+        parseIsoDate(unit.date)
       );
 
       appendRawPayload(unit.date, unit.source, raw, stampedAt);

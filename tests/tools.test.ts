@@ -13,6 +13,7 @@ import {
   hashParams,
   parseActivityLocalDateTime,
   parseIsoDate,
+  formatIsoDate,
   sanitizeErrorMessage,
 } from "../src/utils/helpers.js";
 import type { ActivitySummary } from "../src/garmin/types.js";
@@ -43,9 +44,31 @@ describe("tool registry", () => {
 });
 
 describe("helpers", () => {
-  it("parses ISO dates", () => {
-    const date = parseIsoDate("2026-06-01");
-    assert.match(date.toISOString(), /2026-06-01/);
+  // The contract is not "what does toISOString say" -- that is an artefact of
+  // which midnight the Date happens to sit on. It is "which calendar day will
+  // garmin-connect ask Garmin about", and that is decided by its toDateString:
+  //
+  //     const offset = date.getTimezoneOffset();
+  //     new Date(date.getTime() - offset * 60000).toISOString().split("T")[0]
+  //
+  // which round-trips a LOCAL-midnight Date and shifts a UTC-midnight one. The
+  // old assertion passed on a UTC+4 machine and would have passed on a broken
+  // one too; this fails anywhere the day is wrong.
+  function dayGarminWouldFetch(date: Date): string {
+    const offset = date.getTimezoneOffset();
+    return new Date(date.getTime() - offset * 60_000).toISOString().split("T")[0] as string;
+  }
+
+  it("parses an ISO date to the day Garmin will actually be asked about", () => {
+    assert.equal(dayGarminWouldFetch(parseIsoDate("2026-06-01")), "2026-06-01");
+    assert.equal(formatIsoDate(parseIsoDate("2026-06-01")), "2026-06-01");
+  });
+
+  it("round-trips every day of a month, in whatever zone this machine is in", () => {
+    for (let day = 1; day <= 28; day += 1) {
+      const iso = `2026-06-${String(day).padStart(2, "0")}`;
+      assert.equal(dayGarminWouldFetch(parseIsoDate(iso)), iso, `slipped on ${iso}`);
+    }
   });
 
   it("detects improving resting heart rate trend", () => {
