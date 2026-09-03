@@ -9,6 +9,7 @@ import { sleepToolDefinitions } from "./sleep.js";
 import { stressToolDefinitions } from "./stress.js";
 import { trainingInsightsToolDefinitions } from "./trainingInsights.js";
 import { vo2MaxToolDefinitions } from "./vo2Max.js";
+import { weekToolDefinitions } from "./week.js";
 import type { ToolDefinition } from "./types.js";
 import type { ToolResult } from "../garmin/types.js";
 import { parseIsoDate } from "../utils/helpers.js";
@@ -25,6 +26,7 @@ export const toolRegistry: ToolDefinition[] = [
   ...vo2MaxToolDefinitions,
   ...trainingInsightsToolDefinitions,
   ...findingsToolDefinitions,
+  ...weekToolDefinitions,
   ...contextToolDefinitions,
 ];
 
@@ -94,6 +96,7 @@ export const toolSchemas = {
     days: z.number().int().positive().optional(),
   }),
   get_findings: z.object({}),
+  get_week_review: z.object({}),
   remember_context: z.object({
     kind: z.enum(["goal", "race", "injury", "note"]).describe("What sort of thing this is"),
     text: z.string().describe("What to remember, in the user's own words where possible"),

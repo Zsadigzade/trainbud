@@ -777,6 +777,7 @@ class TrainBudView extends WatchUi.View {
         roundScreen as Boolean
     ) as Void {
         if (cardIndex == Cards.TODAY)      { drawTodayCard(dc, summary); return; }
+        if (cardIndex == Cards.WEEK)       { drawWeekCard(dc, summary); return; }
         if (cardIndex == Cards.OVERVIEW)   { drawOverviewCard(dc, summary); return; }
         if (cardIndex == Cards.RECOVERY)   { drawRecoveryCard(dc, summary, roundScreen); return; }
         if (cardIndex == Cards.AI_INSIGHT) { drawAiInsightCard(dc, summary); return; }
@@ -993,6 +994,155 @@ class TrainBudView extends WatchUi.View {
     }
 
     // -------------------------------------------------------------------------
+    // Week card
+    //
+    // The one screen that answers the question training is actually planned in.
+    // Every other card here is about today, and the store has been able to
+    // compare this week against last week since the memory layer landed without
+    // anything ever asking it.
+    //
+    // Four lines, each of which says nothing unless it has something real to
+    // say. A missing metric is left out rather than drawn as a zero: an unworn
+    // watch is not a training load of nothing, and rendering an absence as a
+    // measurement is the mistake this project keeps making.
+    // -------------------------------------------------------------------------
+
+    private function drawWeekCard(dc as Dc, summary as Dictionary or Null) as Void {
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, 24, Graphics.FONT_SMALL,
+            WatchUi.loadResource(Rez.Strings.CardWeek) as String,
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        var week = summary == null ? null : summary.get("week");
+        if (week == null || !(week instanceof Dictionary)) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.NoData) as String, "");
+            return;
+        }
+
+        var w = week as Dictionary;
+        var ready = w.get("ready");
+        if (ready == null || !(ready instanceof Boolean) || !(ready as Boolean)) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.TodayGathering) as String,
+                WatchUi.loadResource(Rez.Strings.WeekNeedTwo) as String);
+            return;
+        }
+
+        var lines  = [] as Array<String>;
+        var colors = [] as Array<Number>;
+
+        var sessions = w.get("sessions");
+        var minutes  = w.get("moving_minutes");
+        if (sessions != null && sessions instanceof Number) {
+            var sessionText = (sessions as Number).toString() + " "
+                + (WatchUi.loadResource(
+                    (sessions as Number) == 1 ? Rez.Strings.WeekSession : Rez.Strings.WeekSessions) as String);
+            if (minutes != null && minutes instanceof Number && (minutes as Number) > 0) {
+                sessionText = sessionText + "  " + formatDuration(minutes as Number);
+            }
+            lines.add(sessionText);
+            colors.add(Graphics.COLOR_WHITE);
+        }
+
+        // Load, as a percentage against last week. Signed on purpose: "up 18%"
+        // and "down 18%" are opposite pieces of news and an unsigned number
+        // makes the reader work out which one they are looking at.
+        var loadDelta = w.get("load_delta_pct");
+        if (loadDelta != null && loadDelta instanceof Number) {
+            var delta = loadDelta as Number;
+            lines.add((WatchUi.loadResource(Rez.Strings.WeekLoad) as String) + " "
+                + (delta >= 0 ? "+" : "") + delta.toString() + "%");
+            colors.add(delta >= 25 ? Graphics.COLOR_YELLOW : Graphics.COLOR_LT_GRAY);
+        }
+
+        // The forecast, which is the only forward-looking number in the app.
+        var verdict = w.get("forecast_verdict");
+        var ratio   = w.get("forecast_ratio");
+        if (verdict != null && verdict instanceof String && !(verdict as String).equals("unknown")) {
+            var v = verdict as String;
+            var ratioText = "";
+            if (ratio != null) { ratioText = " " + metricText(ratio) + "x"; }
+
+            var verdictRes = Rez.Strings.WeekOnTrack;
+            var verdictColor = Graphics.COLOR_GREEN;
+            if (v.equals("spike_ahead")) {
+                verdictRes = Rez.Strings.WeekSpikeAhead;
+                verdictColor = Graphics.COLOR_RED;
+            } else if (v.equals("detraining_ahead")) {
+                verdictRes = Rez.Strings.WeekEasingOff;
+                verdictColor = Graphics.COLOR_YELLOW;
+            }
+
+            lines.add((WatchUi.loadResource(verdictRes) as String) + ratioText);
+            colors.add(verdictColor);
+        }
+
+        // Sleep debt, against this person's own usual night rather than eight
+        // hours. Only shown once it is worth an hour of anyone's attention.
+        // JSON numbers reach Monkey C as Number, Float or Double depending on
+        // whether they carried a decimal point, so a debt of exactly 3 and a
+        // debt of 3.4 arrive as different types. Calling toFloat() on the
+        // dictionary value directly does not compile, and casting the wrong way
+        // is a runtime crash rather than a wrong number.
+        var debt = w.get("sleep_debt_h");
+        if (debt != null && (debt instanceof Float || debt instanceof Double || debt instanceof Number)) {
+            var debtHours = numberOf(debt);
+            if (debtHours >= 1.0) {
+                lines.add((WatchUi.loadResource(Rez.Strings.WeekSleepDebt) as String)
+                    + " " + metricText(debt) + "h");
+                colors.add(debtHours >= 5.0 ? Graphics.COLOR_RED : Graphics.COLOR_YELLOW);
+            }
+        }
+
+        // The race, if one is on the calendar. It belongs on this card rather
+        // than on Today because it is a fact about the block, not about a day --
+        // and because it is what makes the line above it readable: a falling
+        // load ratio is a warning in January and the plan in a taper.
+        var race = summary == null ? null : summary.get("race");
+        if (race != null && race instanceof Dictionary) {
+            var r = race as Dictionary;
+            var name = r.get("text");
+            var days = r.get("days_away");
+            if (name != null && name instanceof String && days != null && days instanceof Number) {
+                var away = days as Number;
+                var raceLine = "";
+                if (away == 0) {
+                    raceLine = WatchUi.loadResource(Rez.Strings.RaceToday) as String;
+                } else if (away == 1) {
+                    raceLine = WatchUi.loadResource(Rez.Strings.RaceTomorrow) as String;
+                } else {
+                    raceLine = away.toString() + " "
+                        + (WatchUi.loadResource(Rez.Strings.RaceDays) as String)
+                        + " " + (name as String);
+                }
+                lines.add(raceLine);
+                colors.add(away <= 7 ? Graphics.COLOR_YELLOW : Graphics.COLOR_LT_GRAY);
+            }
+        }
+
+        if (lines.size() == 0) {
+            drawTodayMessage(dc, cx, cy,
+                WatchUi.loadResource(Rez.Strings.NoData) as String, "");
+            return;
+        }
+
+        var lineH = dc.getFontHeight(Graphics.FONT_TINY);
+        var y = cy - ((lines.size() * lineH) / 2);
+
+        for (var i = 0; i < lines.size(); i += 1) {
+            dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, y, Graphics.FONT_TINY,
+                fitLine(dc, lines[i] as String, Graphics.FONT_TINY, y),
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // AI Insight card (card 7)
     // -------------------------------------------------------------------------
 
@@ -1089,6 +1239,19 @@ class TrainBudView extends WatchUi.View {
     // Float.toString() renders six decimal places: sleep of 6.3 hours drew as
     // "6.300000h" on the watch, which then overflowed its cell. Every metric
     // that can be fractional goes through this.
+    /** A payload number as a Float, whichever numeric type it arrived as.
+        JSON without a decimal point parses to Number, with one to Float or
+        Double, so the same field is a different type on different days. */
+    private function numberOf(value) as Float {
+        if (value instanceof Float || value instanceof Double) {
+            return (value as Float).toFloat();
+        }
+        if (value instanceof Number) {
+            return (value as Number).toFloat();
+        }
+        return 0.0;
+    }
+
     private function metricText(value) as String {
         if (value instanceof Float || value instanceof Double) {
             return (value as Float).format("%.1f");
@@ -1381,6 +1544,37 @@ class TrainBudView extends WatchUi.View {
                     result[:color]    = sleepColor(score as Number);
                 } else if (lbl != null) {
                     result[:subtitle] = lbl as String;
+                }
+            }
+
+            // Last night against this person's own usual night.
+            //
+            // A single night's hours is the least informative sleep number
+            // there is: it cannot tell a late film from a fortnight of five-hour
+            // nights, and it says nothing at all unless you already know what
+            // this person normally sleeps. The footnote supplies exactly that,
+            // and it is their own median rather than eight hours -- telling a
+            // habitual seven-hour sleeper they are an hour down every night of
+            // their life is how a health app becomes noise.
+            var week = summary.get("week");
+            if (week != null && week instanceof Dictionary) {
+                var wd = week as Dictionary;
+                var habitual = wd.get("sleep_habitual_h");
+                if (habitual != null) {
+                    var note = (WatchUi.loadResource(Rez.Strings.SleepUsually) as String)
+                        + " " + metricText(habitual) + "h";
+                    var consistency = wd.get("sleep_consistency");
+                    if (consistency != null && consistency instanceof String) {
+                        var c = consistency as String;
+                        if (c.equals("erratic")) {
+                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepErratic) as String);
+                        } else if (c.equals("variable")) {
+                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepVariable) as String);
+                        } else if (c.equals("steady")) {
+                            note = note + " · " + (WatchUi.loadResource(Rez.Strings.SleepSteady) as String);
+                        }
+                    }
+                    result[:footnote] = note;
                 }
             }
             return result;

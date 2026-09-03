@@ -32,6 +32,9 @@ module ScreenTour {
     const FETCH_NO_PHONE   = 7;
     const TODAY            = 8;
     const TODAY_COLD       = 23;  // appended: renumbering shifts every capture filename
+    const WEEK             = 24;
+    const WEEK_COLD        = 25;
+    const WEEK_RACE        = 26;
     const ASK_MENU         = 9;
     const ASK_NO_KEY       = 10;
     const ASK_THINKING     = 11;
@@ -46,7 +49,7 @@ module ScreenTour {
     const SLEEP            = 20;
     const ACTIVITY         = 21;
     const STRESS           = 22;
-    const STATE_COUNT      = 24;
+    const STATE_COUNT      = 27;
 
     // Where the tour currently is. A module variable rather than a field on the
     // app, so the app carries none of this in a build a user can install.
@@ -76,7 +79,8 @@ module ScreenTour {
             "fetch-no-phone", "today", "ask-menu", "ask-no-key",
             "ask-thinking", "ask-answer", "ask-job-error", "ask-transport",
             "ask-timeout", "insight", "insight-no-key", "overview",
-            "recovery", "sleep", "activity", "stress", "today-cold-start"
+            "recovery", "sleep", "activity", "stress", "today-cold-start",
+            "week", "week-cold-start", "week-race-week"
         ];
         if (i < 0 || i >= names.size()) { return "?"; }
         return names[i] as String;
@@ -167,6 +171,28 @@ module ScreenTour {
         app.setStatus("ready");
 
         if (index == TODAY)    { app.setCardIndex(Cards.TODAY);    return; }
+        if (index == WEEK)     { app.setCardIndex(Cards.WEEK);     return; }
+
+        // A week that cannot be compared yet, which is what the first fortnight
+        // after install looks like.
+        if (index == WEEK_COLD) {
+            var thin = sampleSummary(true);
+            var thinWeek = thin.get("week") as Dictionary;
+            thinWeek.put("ready", false);
+            app.setSummary(thin);
+            app.setCardIndex(Cards.WEEK);
+            return;
+        }
+
+        // Race week, with a spike forecast on top of it -- the combination the
+        // card exists to make legible.
+        if (index == WEEK_RACE) {
+            var racing = sampleSummary(true);
+            racing.put("race", { "text" => "Club 5k", "days_away" => 4, "phase" => "race_week" });
+            app.setSummary(racing);
+            app.setCardIndex(Cards.WEEK);
+            return;
+        }
 
         // The first two weeks after install, when there is not yet enough
         // history to compare a day against anything. It is the state every new
@@ -260,6 +286,20 @@ module ScreenTour {
                 { "kind" => "sleep_debt", "severity" => "notice",
                   "headline" => "Sleep 1.2h below your average across the last week" }
             ],
+            "race" => null,
+            "week" => {
+                "sessions"          => 4,
+                "previous_sessions" => 3,
+                "moving_minutes"    => 212,
+                "load_delta_pct"    => 34,
+                "sleep_debt_h"      => 3.4,
+                "sleep_habitual_h"  => 7.2,
+                "sleep_consistency" => "variable",
+                "forecast_ratio"    => 1.62,
+                "forecast_verdict"  => "spike_ahead",
+                "ready"             => true,
+                "headline"          => "4 sessions this week. Load up 34, Sleep down 1.1h versus last week."
+            },
             "prompts" => [
                 "Why is my resting HR up?",
                 "Should I train today?",

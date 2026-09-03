@@ -52,7 +52,8 @@ $StateNames = @(
     "fetch-no-phone", "today", "ask-menu", "ask-no-key",
     "ask-thinking", "ask-answer", "ask-job-error", "ask-transport",
     "ask-timeout", "insight", "insight-no-key", "overview",
-    "recovery", "sleep", "activity", "stress", "today-cold-start"
+    "recovery", "sleep", "activity", "stress", "today-cold-start",
+    "week", "week-cold-start", "week-race-week"
 )
 if ($Count -le 0) { $Count = $StateNames.Count }
 

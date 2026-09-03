@@ -16,15 +16,21 @@
 // are all still here, one swipe further on, for when the number is what you
 // actually wanted.
 //
+// Added in 1.4.0: WEEK. Training is planned in weeks and every other screen
+// here answers "how am I today"; the store has been able to answer "how was the
+// week" since the memory layer landed and nothing ever asked it. Placed after
+// the AI cards and before the metric cards, so the three screens Connect cannot
+// draw come first and the raw numbers stay one swipe further on.
 module Cards {
     const TODAY      = 0;   // findings against the user's own baselines
     const ASK_AI     = 1;   // prompts generated from those findings
     const AI_INSIGHT = 2;   // daily one-line AI tip
-    const OVERVIEW   = 3;   // 2x2 grid: recovery, sleep, stress, VO2 max
-    const RECOVERY   = 4;   // recovery score + ring, with resting/max HR
-    const SLEEP      = 5;   // hours + quality score
-    const ACTIVITY   = 6;   // latest workout, with VO2 max and trend
-    const STRESS     = 7;   // daily average
+    const WEEK       = 3;   // this week vs last, load forecast, sleep debt
+    const OVERVIEW   = 4;   // 2x2 grid: recovery, sleep, stress, VO2 max
+    const RECOVERY   = 5;   // recovery score + ring, with resting/max HR
+    const SLEEP      = 6;   // hours + quality score
+    const ACTIVITY   = 7;   // latest workout, with VO2 max and trend
+    const STRESS     = 8;   // daily average
 
-    const COUNT      = 8;
+    const COUNT      = 9;
 }

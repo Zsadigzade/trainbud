@@ -1,9 +1,11 @@
 import { executeTool } from "./tools/index.js";
 import { generateDailyInsight, isAiConfigured } from "./promptApi.js";
 import { DateTime } from "luxon";
-import { runDetectors } from "./detect/index.js";
+import { buildDetectorInput, runDetectors } from "./detect/index.js";
+import { buildWeekReview, type WeekReview } from "./detect/week.js";
+import { nextRace, type RaceCountdown } from "./detect/countdown.js";
 import { buildPromptSuggestions } from "./promptSuggestions.js";
-import { activeContext, type ContextEntry } from "./history/context.js";
+import { activeContext, upcomingContext, type ContextEntry } from "./history/context.js";
 import type { Finding } from "./detect/findings.js";
 import type { RecoveryStatusResult } from "./garmin/types.js";
 import type {
@@ -84,6 +86,38 @@ export interface WatchCoverage {
   ready: boolean;
 }
 
+/**
+ * The week, compressed to what a 208 px screen can hold.
+ *
+ * Deliberately a handful of scalars rather than the whole WeekReview: the watch
+ * response is parsed on the device, a body Connect IQ cannot hold comes back as
+ * -402 NETWORK_RESPONSE_TOO_LARGE, and every field here has to be drawn by hand
+ * anyway. The full review stays on the server, where `get_week_review` and the
+ * dashboard can render it in as much detail as they like.
+ */
+export interface WatchWeek {
+  sessions: number;
+  previous_sessions: number;
+  moving_minutes: number;
+  /** TRIMP this week against last week, as a whole-number percentage. */
+  load_delta_pct: number | null;
+  sleep_debt_h: number | null;
+  /** This person's own habitual night, in hours. Not eight. */
+  sleep_habitual_h: number | null;
+  sleep_consistency: "steady" | "variable" | "erratic" | "unknown";
+  /** Where the acute:chronic ratio lands if next week repeats this one. */
+  forecast_ratio: number | null;
+  forecast_verdict: "spike_ahead" | "detraining_ahead" | "on_track" | "unknown";
+  ready: boolean;
+  headline: string;
+}
+
+export interface WatchRace {
+  text: string;
+  days_away: number;
+  phase: "race_week" | "taper" | "build" | "far_out";
+}
+
 export interface WatchSummary {
   daily_overview: WatchDailyOverview;
   recovery: WatchRecovery | null;
@@ -94,6 +128,10 @@ export interface WatchSummary {
   heart_rate: WatchHeartRate | null;
   findings: WatchFinding[];
   coverage: WatchCoverage;
+  /** This week against last week. Null on a server too old to compute it. */
+  week: WatchWeek | null;
+  /** The next race on record, or null when nothing is on the calendar. */
+  race: WatchRace | null;
   /**
    * The five Ask prompts for today. The watch reads these instead of the
    * hardcoded strings in strings.xml, so the menu asks about what actually
@@ -232,8 +270,47 @@ export interface WatchSummaryParts {
   findings: Finding[];
   coverage: WatchCoverage;
   context: ContextEntry[];
+  week: WeekReview | null;
+  race: RaceCountdown | null;
   updatedAt: string;
   aiConfigured: boolean;
+}
+
+/** Percent change, or null when the earlier figure is zero and a percentage of
+    nothing would be either infinite or a lie. */
+function percentDelta(current: number | null, previous: number | null): number | null {
+  if (current === null || previous === null || previous === 0) {
+    return null;
+  }
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+export function toWatchWeek(review: WeekReview | null): WatchWeek | null {
+  if (!review) {
+    return null;
+  }
+
+  const load = review.metrics.find((metric) => metric.key === "load");
+
+  return {
+    sessions: review.sessions,
+    previous_sessions: review.previousSessions,
+    moving_minutes: review.movingMinutes,
+    load_delta_pct: percentDelta(load?.current ?? null, load?.previous ?? null),
+    sleep_debt_h: review.sleep.debtHours,
+    sleep_habitual_h: review.sleep.habitualHours,
+    sleep_consistency: review.sleep.consistency,
+    forecast_ratio: review.forecast.projectedRatio,
+    forecast_verdict: review.forecast.verdict,
+    ready: review.ready,
+    headline: review.headline,
+  };
+}
+
+export function toWatchRace(race: RaceCountdown | null): WatchRace | null {
+  return race
+    ? { text: race.text, days_away: race.daysAway, phase: race.phase }
+    : null;
 }
 
 export function buildWatchSummaryFrom(
@@ -259,6 +336,8 @@ export function buildWatchSummaryFrom(
     heart_rate: toWatchHeartRate(parts.heartRate),
     findings: toWatchFindings(parts.findings),
     coverage: parts.coverage,
+    week: toWatchWeek(parts.week),
+    race: toWatchRace(parts.race),
     prompts: buildPromptSuggestions(
       { findings: parts.findings, coverage: parts.coverage },
       parts.context
@@ -285,6 +364,10 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
   // Detection is a local SQLite read, so it costs nothing next to six Garmin
   // round trips and does not need to be raced with them.
   const detection = runDetectors();
+  const detectorInput = buildDetectorInput();
+  const today = DateTime.local().toISODate() ?? "";
+  const weekReview = buildWeekReview(detectorInput);
+  const race = nextRace([...activeContext(today), ...upcomingContext(today)], today);
 
   const [recovery, sleep, activity, stress, vo2max, heartRate] = await Promise.all([
     payloadOf<RecoveryPayload>("get_recovery_status", {}),
@@ -305,7 +388,9 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       heartRate,
       findings: detection.findings,
       coverage: detection.coverage,
-      context: activeContext(DateTime.local().toISODate() ?? ""),
+      context: activeContext(today),
+      week: weekReview,
+      race,
       updatedAt: new Date().toISOString(),
       aiConfigured: isAiConfigured(),
     }),

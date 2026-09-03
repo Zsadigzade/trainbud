@@ -20,12 +20,28 @@ let originalCachePath: string | undefined;
 let originalEnvKey: string | undefined;
 
 describe("check reports AI as configured from a dashboard-saved key", () => {
-  before(() => {
+  before(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-check-"));
     originalCachePath = process.env["GARMIN_CACHE_PATH"];
     originalEnvKey = process.env["ANTHROPIC_API_KEY"];
     process.env["GARMIN_CACHE_PATH"] = path.join(tmpDir, "cache.db");
-    // The point of the test: no key in the environment, only in the database.
+
+    // Load config BEFORE clearing the key, not after.
+    //
+    // src/config.ts calls dotenv at module load, so importing anything that
+    // reaches it re-reads the developer's own .env and puts ANTHROPIC_API_KEY
+    // straight back. Deleting the variable in a `before` hook and then
+    // dynamically importing promptApi therefore cleared nothing: the import
+    // repopulated it.
+    //
+    // This test was green for the whole life of the project purely because no
+    // Anthropic key had ever been configured on the machine it ran on. The day
+    // a key was added to .env it failed -- not because the behaviour it checks
+    // broke, but because the test had been asserting against the developer's
+    // environment rather than against a controlled one. Force the load first,
+    // then clear; appConfig.anthropicApiKey is a getter and reads process.env
+    // at call time, so clearing afterwards is what actually takes effect.
+    await import("../src/config.js");
     delete process.env["ANTHROPIC_API_KEY"];
   });
 
@@ -46,6 +62,15 @@ describe("check reports AI as configured from a dashboard-saved key", () => {
     const { setSetting } = await import("../src/appDb.js");
     const { isAiConfigured } = await import("../src/promptApi.js");
     const { checkSetup } = await import("../src/check.ts");
+
+    // Guard the guard: if a later import ever puts the key back, the assertion
+    // below would fail for a reason that has nothing to do with what is being
+    // tested, which is exactly how this test misled us once already.
+    assert.equal(
+      process.env["ANTHROPIC_API_KEY"],
+      undefined,
+      "a module re-loaded .env and repopulated the key; the test is no longer isolated"
+    );
 
     // Before the key is stored, AI is genuinely unconfigured.
     assert.equal(isAiConfigured(), false, "expected no key before one is saved");

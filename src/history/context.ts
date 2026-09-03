@@ -95,6 +95,33 @@ export function activeContext(onDate: string): ContextEntry[] {
     .all(onDate, onDate) as ContextEntry[];
 }
 
+/**
+ * Entries dated after `onDate`, soonest first.
+ *
+ * activeContext deliberately excludes these: an entry is "true on a date" only
+ * from its effective_from onwards, and a race in six weeks is not a fact about
+ * today. But a future race is the single most useful piece of context this
+ * store holds — it changes what every other number means, because the same load
+ * ratio is a warning eleven weeks out and the plan three days out — and until
+ * now nothing could read one, because the only reader excluded it by design.
+ */
+export function upcomingContext(onDate: string): ContextEntry[] {
+  return getHistoryDb()
+    .prepare(
+      `SELECT
+         id,
+         kind,
+         text,
+         effective_from AS effectiveFrom,
+         effective_to   AS effectiveTo,
+         created_at     AS createdAt
+       FROM context_entry
+       WHERE effective_from > ?
+       ORDER BY effective_from ASC, id ASC`
+    )
+    .all(onDate) as ContextEntry[];
+}
+
 /** Every entry ever recorded, newest first — for a dashboard or a tool listing. */
 export function allContext(): ContextEntry[] {
   return getHistoryDb()

@@ -114,6 +114,41 @@ function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummar
     lines.push(`- Last activity: ${summary.activity.name}${summary.activity.duration_min ? `, ${summary.activity.duration_min}min` : ""}${summary.activity.distance_km ? `, ${summary.activity.distance_km}km` : ""}`);
   }
 
+  // The week and the calendar, which change what today's numbers mean.
+  //
+  // Without these the model answers every question as though the user exists
+  // only today: a falling load ratio reads as detraining even when it is a
+  // deliberate taper, and "should I train today" gets the same answer three
+  // days before a race as it does in January. Both facts are in the store and
+  // neither was ever passed to the model.
+  if (summary.week && summary.week.ready) {
+    const week = summary.week;
+    const parts = [`${week.sessions} session(s) this week vs ${week.previous_sessions} last week`];
+    if (week.load_delta_pct !== null) {
+      parts.push(`training load ${week.load_delta_pct >= 0 ? "up" : "down"} ${Math.abs(week.load_delta_pct)}%`);
+    }
+    if (week.forecast_verdict !== "unknown" && week.forecast_ratio !== null) {
+      parts.push(
+        `if this week repeats, the acute:chronic load ratio lands at ${week.forecast_ratio} (${week.forecast_verdict.replace(/_/g, " ")})`
+      );
+    }
+    if (week.sleep_debt_h !== null && Math.abs(week.sleep_debt_h) >= 1) {
+      parts.push(
+        `${Math.abs(week.sleep_debt_h)}h of sleep ${week.sleep_debt_h > 0 ? "debt" : "surplus"} against their own usual night`
+      );
+    }
+    if (week.sleep_consistency !== "unknown" && week.sleep_consistency !== "steady") {
+      parts.push(`sleep timing is ${week.sleep_consistency}`);
+    }
+    lines.push(`- This week: ${parts.join("; ")}.`);
+  }
+
+  if (summary.race) {
+    lines.push(
+      `- Next race: ${summary.race.text} in ${summary.race.days_away} day(s). Training phase: ${summary.race.phase.replace(/_/g, " ")}. A falling load in a taper is intended, not a lapse.`
+    );
+  }
+
   return lines.join("\n");
 }
 

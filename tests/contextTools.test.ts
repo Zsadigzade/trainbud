@@ -13,7 +13,7 @@ import { getFindings } from "../src/tools/findings.js";
 import { closeHistoryDb, openHistoryDb } from "../src/history/store.js";
 
 describe("tool registry", () => {
-  it("registers the nine Garmin tools plus findings and context", () => {
+  it("registers the nine Garmin tools plus findings, week review and context", () => {
     assert.deepEqual(
       toolRegistry.map((tool) => tool.name),
       [
@@ -27,6 +27,7 @@ describe("tool registry", () => {
         "get_vo2_max_trends",
         "get_training_insights",
         "get_findings",
+        "get_week_review",
         "remember_context",
         "get_user_context",
         "log_subjective",

@@ -8,6 +8,34 @@
     <string id="CardStress">Stress</string>
     <string id="CardVo2Max">VO2 Max</string>
     <string id="CardAiInsight">AI Insight</string>
+    <!-- Week card, added 1.4.0. Training is planned in weeks and every other
+         screen in this app answers "how am I today". -->
+    <string id="CardWeek">Week</string>
+    <string id="WeekNeedTwo">needs 2 weeks</string>
+    <string id="WeekSession">session</string>
+    <string id="WeekSessions">sessions</string>
+    <string id="WeekLoad">Load</string>
+    <!-- The load forecast: where the acute:chronic ratio lands if next week
+         repeats this one. Worded as what it is — an extrapolation of the last
+         seven days, not a plan the user entered. -->
+    <string id="WeekSpikeAhead">Spike ahead</string>
+    <string id="WeekEasingOff">Easing off</string>
+    <string id="WeekOnTrack">On track</string>
+    <string id="WeekSleepDebt">Sleep debt</string>
+    <!-- Sleep card footnote: last night against this person's own median night,
+         and how much their nights vary. Duration alone cannot tell a late film
+         from a fortnight of short nights, and regularity predicts how rested
+         someone is beyond duration. -->
+    <string id="SleepUsually">Usually</string>
+    <string id="SleepSteady">steady</string>
+    <string id="SleepVariable">variable</string>
+    <string id="SleepErratic">erratic</string>
+    <!-- Race countdown. The context store has held races since the memory layer
+         landed and nothing ever read one for its date, though it changes what
+         every other number on this watch means. -->
+    <string id="RaceDays">days to</string>
+    <string id="RaceToday">Race day</string>
+    <string id="RaceTomorrow">Race tomorrow</string>
     <string id="CardAskAi">Ask AI</string>
     <string id="CardToday">Today</string>
     <!-- Shown until there is enough history to compare a day against a
