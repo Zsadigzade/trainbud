@@ -2,45 +2,62 @@ import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
 import { fetchVo2MaxDay } from "../garmin/daily.js";
-import type { Vo2MaxEntry } from "../garmin/rawApi.js";
+import { mapMaxMetrics, type Vo2MaxEntry } from "../garmin/rawApi.js";
 import type { ToolResult } from "../garmin/types.js";
-import type { Vo2MaxPayload } from "./payloads.js";
+import type { Vo2MaxPayload, StoredProvenance } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
-import type { DayFetchResult } from "../garmin/partial.js";
+import { fetchEachDay } from "../garmin/partial.js";
+import {
+  fetchDaysOrStore,
+  isPartialOrStored,
+  storedFetchNote,
+  type FallbackResult,
+} from "../history/fallback.js";
 import { calculateTrend, getDateRange } from "../utils/helpers.js";
 
-async function fetchVo2MaxDays(days: number): Promise<DayFetchResult<Vo2MaxEntry>> {
+async function fetchVo2MaxDays(days: number): Promise<FallbackResult<Vo2MaxEntry>> {
   const dates = getDateRange(days);
 
-  return withGarminClient(async (client) => {
-    const fetched = await fetchEachDay(
-      dates,
-      async (date) => (await fetchVo2MaxDay(client, date)).mapped,
-      "vo2max"
-    );
-
-    // Every requested date comes back with whatever the latest reading is, so
-    // the same measurement arrives once per day asked about. Keyed on the date
-    // it was actually taken, the duplicates collapse into the real series.
-    const byMeasuredDate = new Map<string, Vo2MaxEntry>();
-    for (const entry of fetched.values) {
-      byMeasuredDate.set(entry.date, entry);
-    }
-
-    return {
-      ...fetched,
-      values: Array.from(byMeasuredDate.values()).sort((left, right) =>
-        right.date.localeCompare(left.date)
+  // `dateOf` returns the date the reading was TAKEN, not the date asked about:
+  // `maxmet/latest/<date>` ignores its date and answers with the current
+  // measurement, so the same reading arrives once per day requested. Keying the
+  // merge on the measured date is what collapses those duplicates -- and it
+  // does the same job for a stored entry, which is why this tool needs no
+  // dedupe pass of its own any more.
+  return fetchDaysOrStore({
+    dates,
+    source: "vo2max",
+    live: () =>
+      withGarminClient(async (client) =>
+        fetchEachDay(
+          dates,
+          async (date) => (await fetchVo2MaxDay(client, date)).mapped,
+          "vo2max"
+        )
       ),
-    };
+    fromRaw: (date, payload) => mapMaxMetrics(date, payload),
+    fromMetrics: (date, metrics) => {
+      const vo2Max = metrics.get("vo2max") ?? null;
+      const vo2MaxCycling = metrics.get("vo2max_cycling") ?? null;
+      if (vo2Max === null && vo2MaxCycling === null) {
+        return null;
+      }
+
+      return { date, vo2Max, vo2MaxCycling };
+    },
+    dateOf: (entry) => entry.date,
   });
 }
 
 export function buildVo2MaxPayload(
   entries: Vo2MaxEntry[],
   requestedDays: number,
-  unreachableDays = 0
+  unreachableDays = 0,
+  stored: StoredProvenance = {
+    storedDays: 0,
+    storedThrough: null,
+    storedWindowMoved: false,
+  }
 ): Vo2MaxPayload {
   const values = entries
     .map((entry) => entry.vo2Max)
@@ -54,12 +71,22 @@ export function buildVo2MaxPayload(
     oldest: entries.at(-1)?.vo2Max ?? null,
     trend: calculateTrend(values, false),
     entries,
+    storedDays: stored.storedDays,
+    storedThrough: stored.storedThrough,
+    storedWindowMoved: stored.storedWindowMoved,
   };
 }
 
 export function renderVo2MaxText(payload: Vo2MaxPayload): string {
-  const note = partialFetchNote(
-    { values: payload.entries, unreachableDays: payload.unreachableDays, requestedDays: payload.requestedDays },
+  const note = storedFetchNote(
+    {
+      values: payload.entries,
+      unreachableDays: payload.unreachableDays,
+      requestedDays: payload.requestedDays,
+      storedDays: payload.storedDays,
+      storedThrough: payload.storedThrough,
+      storedWindowMoved: payload.storedWindowMoved,
+    },
     "days"
   );
 
@@ -100,10 +127,10 @@ export async function getVo2MaxTrends(
     cacheKey,
     appConfig.cacheTtlStats,
     async () => fetchVo2MaxDays(days),
-    { isPartial }
+    { isPartial: isPartialOrStored }
   );
 
-  const payload = buildVo2MaxPayload(fetched.values, days, fetched.unreachableDays);
+  const payload = buildVo2MaxPayload(fetched.values, days, fetched.unreachableDays, fetched);
 
   return {
     type: "text",

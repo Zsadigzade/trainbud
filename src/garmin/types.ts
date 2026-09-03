@@ -23,10 +23,15 @@ export interface ActivitySummary {
 export interface SleepNightSummary {
   date: string;
   totalSleepSeconds: number;
-  deepSleepSeconds: number;
-  lightSleepSeconds: number;
-  remSleepSeconds: number;
-  awakeCount: number;
+  // Null when the night came from `daily_metric` rather than from an archived
+  // Connect response — the store keeps the duration and the score forever and
+  // the stage breakdown only for as long as the raw archive holds the day.
+  // Typed as plain numbers, a thin night would have had to invent zeroes, and
+  // "Deep: 0s" is a measurement claim about a night nobody measured that way.
+  deepSleepSeconds: number | null;
+  lightSleepSeconds: number | null;
+  remSleepSeconds: number | null;
+  awakeCount: number | null;
   sleepScore: number | null;
   avgSleepStress: number | null;
   avgOvernightHrv: number | null;

@@ -17,6 +17,7 @@ function recoveryPayload(
 ): RecoveryPayload {
   return {
     date: "2026-08-19",
+    storedThrough: null,
     recovery: {
       score,
       status,
@@ -41,7 +42,10 @@ describe("watch mappers", () => {
     const sleep = toWatchSleep({
       requestedNights: 1,
       recordedNights: 1,
-    unreachableNights: 0,
+      unreachableNights: 0,
+      storedNights: 0,
+      storedThrough: null,
+      storedWindowMoved: false,
       averageScore: 78,
       nights: [
         {
@@ -66,8 +70,7 @@ describe("watch mappers", () => {
 
   it("returns null sleep when no night was recorded", () => {
     assert.equal(
-      toWatchSleep({ requestedNights: 1, recordedNights: 0,
-    unreachableNights: 0, averageScore: null, nights: [] }),
+      toWatchSleep({ requestedNights: 1, recordedNights: 0, unreachableNights: 0, storedNights: 0, storedThrough: null, storedWindowMoved: false, averageScore: null, nights: [] }),
       null
     );
     assert.equal(toWatchSleep(null), null);
@@ -75,6 +78,7 @@ describe("watch mappers", () => {
 
   it("converts activity metres to kilometres and seconds to minutes", () => {
     const activity = toWatchActivity({
+      fromStore: false,
       activity: {
         activityId: 1,
         name: "Morning Run",
@@ -102,6 +106,7 @@ describe("watch mappers", () => {
   // but it also had to guess between a km line and a metres line.
   it("keeps a distanceless activity rather than dropping it", () => {
     const activity = toWatchActivity({
+      fromStore: false,
       activity: {
         activityId: 2,
         name: "Strength",
@@ -123,21 +128,21 @@ describe("watch mappers", () => {
   });
 
   it("returns null for every mapper when the payload carries no measurement", () => {
-    assert.equal(toWatchActivity({ activity: null }), null);
+    assert.equal(toWatchActivity({ activity: null, fromStore: false }), null);
     assert.equal(toWatchActivity(null), null);
     assert.equal(
       toWatchStress({ requestedDays: 7, recordedDays: 0,
-    unreachableDays: 0, averageStress: null, trend: "stable", days: [] }),
+    unreachableDays: 0, storedDays: 0, storedThrough: null, storedWindowMoved: false, averageStress: null, trend: "stable", days: [] }),
       null
     );
     assert.equal(
       toWatchVo2Max({ requestedDays: 30, recordedDays: 0,
-    unreachableDays: 0, current: null, oldest: null, trend: "stable", entries: [] }),
+    unreachableDays: 0, storedDays: 0, storedThrough: null, storedWindowMoved: false, current: null, oldest: null, trend: "stable", entries: [] }),
       null
     );
     assert.equal(
       toWatchHeartRate({ requestedDays: 7, recordedDays: 0,
-    unreachableDays: 0, currentResting: null, averageResting: null, trend: "stable", days: [] }),
+    unreachableDays: 0, storedDays: 0, storedThrough: null, storedWindowMoved: false, currentResting: null, averageResting: null, trend: "stable", days: [] }),
       null
     );
   });
@@ -145,7 +150,7 @@ describe("watch mappers", () => {
   it("labels stress by the same thresholds as before", () => {
     const label = (avg: number) =>
       toWatchStress({ requestedDays: 7, recordedDays: 1,
-    unreachableDays: 0, averageStress: avg, trend: "stable", days: [] })
+    unreachableDays: 0, storedDays: 0, storedThrough: null, storedWindowMoved: false, averageStress: avg, trend: "stable", days: [] })
         ?.label;
 
     assert.equal(label(20), "Low");
@@ -159,7 +164,10 @@ describe("watch mappers", () => {
     const heartRate = toWatchHeartRate({
       requestedDays: 7,
       recordedDays: 2,
-    unreachableDays: 0,
+      unreachableDays: 0,
+      storedDays: 0,
+      storedThrough: null,
+      storedWindowMoved: false,
       currentResting: 52,
       averageResting: 51,
       trend: "stable",
@@ -179,7 +187,7 @@ describe("watch mappers", () => {
       sleep: null,
       activity: null,
       stress: { requestedDays: 7, recordedDays: 1,
-    unreachableDays: 0, averageStress: 34, trend: "stable", days: [] },
+    unreachableDays: 0, storedDays: 0, storedThrough: null, storedWindowMoved: false, averageStress: 34, trend: "stable", days: [] },
       vo2max: null,
       heartRate: null,
       findings: [],

@@ -5,6 +5,9 @@ import { mapActivity } from "../garmin/daily.js";
 import type { ActivitySummary, ToolResult } from "../garmin/types.js";
 import type { ActivitiesRangePayload, LatestActivityPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
+import { storedActivitiesBetween } from "../history/fallback.js";
+import { logger } from "../utils/logger.js";
+import { DateTime } from "luxon";
 import {
   filterActivitiesByRange,
   formatDistanceMeters,
@@ -66,31 +69,90 @@ async function fetchActivitiesPool(): Promise<{ activities: ActivitySummary[]; t
   };
 }
 
-export async function getActivitiesPool(): Promise<{ activities: ActivitySummary[]; truncated: boolean }> {
+/**
+ * How far back the stored activity table is read when Connect will not answer.
+ * Two years covers every window any tool here asks for; the table is small
+ * enough that the bound is about intent rather than cost.
+ */
+const STORED_POOL_DAYS = 730;
+
+export interface ActivityPool {
+  activities: ActivitySummary[];
+  truncated: boolean;
+  /** True when this came out of the local store rather than off the wire. */
+  fromStore: boolean;
+}
+
+/**
+ * Activities are a paged list upstream rather than a per-date fetch, so they do
+ * not go through `fetchDaysOrStore`. The rule is the same one: a failed request
+ * is not an absence of training. `get_latest_activity` used to answer "No
+ * activities found in your Garmin Connect account" whenever the session had
+ * expired, which is a statement about the user's life made out of a login
+ * error, with 23 activities sitting in the store.
+ */
+async function fetchActivityPool(): Promise<ActivityPool> {
+  try {
+    const live = await fetchActivitiesPool();
+    return { ...live, fromStore: false };
+  } catch (error) {
+    logger.info({ err: error }, "Activity fetch failed; answering from the stored history");
+
+    const today = DateTime.local().startOf("day");
+    const activities = storedActivitiesBetween(
+      today.minus({ days: STORED_POOL_DAYS }).toISODate() ?? "",
+      today.toISODate() ?? ""
+    );
+
+    return { activities, truncated: false, fromStore: true };
+  }
+}
+
+export async function getActivitiesPool(): Promise<ActivityPool> {
   const cacheKey = buildToolCacheKey("activities_pool", {});
 
-  return withCache(cacheKey, appConfig.cacheTtlActivities, fetchActivitiesPool);
+  return withCache(cacheKey, appConfig.cacheTtlActivities, fetchActivityPool, {
+    // A stored pool is cached briefly so a restored connection is picked up,
+    // rather than being frozen in for the full activities TTL.
+    isPartial: (pool) => pool.fromStore,
+  });
 }
 
 // SECTION: Tool Handlers
 
 export function renderLatestActivityText(payload: LatestActivityPayload): string {
   if (!payload.activity) {
-    return "No activities found in your Garmin Connect account.";
+    return payload.fromStore
+      ? "Garmin could not be reached just now, and TrainBud's stored history holds no activities either."
+      : "No activities found in your Garmin Connect account.";
   }
 
-  return formatActivitySummary(payload.activity);
+  const note = payload.fromStore
+    ? [
+        "Garmin could not be reached just now, so this comes from TrainBud's own stored history.",
+        "It is a real activity previously fetched from Connect; anything recorded since is not here yet.",
+        "",
+        "",
+      ].join("\n")
+    : "";
+
+  return note + formatActivitySummary(payload.activity);
 }
 
 export async function getLatestActivity(): Promise<ToolResult<LatestActivityPayload>> {
   const cacheKey = buildToolCacheKey("get_latest_activity", {});
 
-  const activity = await withCache(cacheKey, appConfig.cacheTtlActivities, async () => {
-    const { activities } = await getActivitiesPool();
-    return activities[0] ?? null;
-  });
+  const latest = await withCache(
+    cacheKey,
+    appConfig.cacheTtlActivities,
+    async () => {
+      const { activities, fromStore } = await getActivitiesPool();
+      return { activity: activities[0] ?? null, fromStore };
+    },
+    { isPartial: (value) => value.fromStore }
+  );
 
-  const payload: LatestActivityPayload = { activity };
+  const payload: LatestActivityPayload = latest;
 
   return {
     type: "text",
@@ -103,14 +165,26 @@ export function buildActivitiesRangePayload(
   activities: ActivitySummary[],
   startDate: string,
   endDate: string,
-  truncated: boolean
+  truncated: boolean,
+  fromStore = false
 ): ActivitiesRangePayload {
-  return { startDate, endDate, truncated, activities };
+  return { startDate, endDate, truncated, activities, fromStore };
 }
 
 export function renderActivitiesRangeText(payload: ActivitiesRangePayload): string {
+  const storedNote = payload.fromStore
+    ? [
+        "Garmin could not be reached just now, so these come from TrainBud's own stored history rather than from Connect.",
+        "They are real activities previously fetched; anything recorded since is not here yet.",
+        "",
+        "",
+      ].join("\n")
+    : "";
+
   if (payload.activities.length === 0) {
-    return `No activities found between ${payload.startDate} and ${payload.endDate}.`;
+    return payload.fromStore
+      ? `Garmin could not be reached, and TrainBud's stored history holds no activities between ${payload.startDate} and ${payload.endDate}.`
+      : `No activities found between ${payload.startDate} and ${payload.endDate}.`;
   }
 
   const lines = payload.activities.map((activity, index) => {
@@ -128,7 +202,11 @@ export function renderActivitiesRangeText(payload: ActivitiesRangePayload): stri
     ? "\n\nNote: Results may be incomplete — only the most recent 500 activities were scanned."
     : "";
 
-  return [`Found ${payload.activities.length} activities:`, "", ...lines].join("\n") + warning;
+  return (
+    storedNote +
+    [`Found ${payload.activities.length} activities:`, "", ...lines].join("\n") +
+    warning
+  );
 }
 
 export async function getActivitiesRange(
@@ -136,13 +214,14 @@ export async function getActivitiesRange(
 ): Promise<ToolResult<ActivitiesRangePayload>> {
   const start_date = input.start_date as string;
   const end_date = input.end_date as string;
-  const { activities: pool, truncated } = await getActivitiesPool();
+  const { activities: pool, truncated, fromStore } = await getActivitiesPool();
 
   const payload = buildActivitiesRangePayload(
     filterActivitiesByRange(pool, start_date, end_date),
     start_date,
     end_date,
-    truncated
+    truncated,
+    fromStore
   );
 
   return {

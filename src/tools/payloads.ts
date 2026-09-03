@@ -19,6 +19,30 @@ import type {
 // response, so a change to how a tool prints itself cannot change what its
 // consumers see.
 
+/**
+ * Where an answer came from.
+ *
+ * Additive on purpose: the watch parses this JSON on the device and ignores
+ * fields it does not know, so a build already on someone's wrist keeps working
+ * unchanged. What these let every other reader do is tell a measurement fetched
+ * from Connect a moment ago from one read out of TrainBud's own store because
+ * Connect would not answer -- two facts that used to render identically, and
+ * one of which used to render as "no data" instead.
+ */
+export interface StoredProvenance {
+  /** Days in this answer that came from the local store, not from Garmin. */
+  storedDays: number;
+  /** Newest date the stored part covers. Null when nothing came from the store. */
+  storedThrough: string | null;
+  /**
+   * True when the days returned are not the days asked about, because the
+   * record stops before the requested window and the window was moved back to
+   * where the data is. Every renderer must say so; presenting a fortnight-old
+   * week as this week is worse than the empty answer it replaces.
+   */
+  storedWindowMoved: boolean;
+}
+
 export interface SleepPayload {
   requestedNights: number;
   recordedNights: number;
@@ -30,10 +54,16 @@ export interface SleepPayload {
   unreachableNights: number;
   averageScore: number | null;
   nights: SleepNightSummary[];
+  /** Nights that came from the local store rather than from Garmin. */
+  storedNights: number;
+  storedThrough: string | null;
+  storedWindowMoved: boolean;
 }
 
 export interface LatestActivityPayload {
   activity: ActivitySummary | null;
+  /** True when Garmin could not be reached and this came out of the store. */
+  fromStore: boolean;
 }
 
 export interface ActivitiesRangePayload {
@@ -41,9 +71,11 @@ export interface ActivitiesRangePayload {
   endDate: string;
   truncated: boolean;
   activities: ActivitySummary[];
+  /** True when Garmin could not be reached and these came out of the store. */
+  fromStore: boolean;
 }
 
-export interface HeartRatePayload {
+export interface HeartRatePayload extends StoredProvenance {
   requestedDays: number;
   recordedDays: number;
   /** Days whose request failed, as opposed to days with nothing measured. */
@@ -54,7 +86,7 @@ export interface HeartRatePayload {
   days: HeartRateDaySummary[];
 }
 
-export interface StressPayload {
+export interface StressPayload extends StoredProvenance {
   requestedDays: number;
   recordedDays: number;
   /** Days whose request failed, as opposed to days with nothing measured. */
@@ -64,7 +96,7 @@ export interface StressPayload {
   days: DailyStressSummary[];
 }
 
-export interface Vo2MaxPayload {
+export interface Vo2MaxPayload extends StoredProvenance {
   requestedDays: number;
   recordedDays: number;
   /** Days whose request failed, as opposed to days with nothing measured. */
@@ -78,9 +110,16 @@ export interface Vo2MaxPayload {
 export interface RecoveryPayload {
   date: string;
   recovery: RecoveryStatusResult;
+  /**
+   * The date the signals behind this score were measured, when they came from
+   * the store rather than from a live call. A recovery score is a claim about
+   * today; built from a fortnight-old night it is a claim about a fortnight ago,
+   * and the difference has to be sayable.
+   */
+  storedThrough: string | null;
 }
 
-export interface BodyCompositionPayload {
+export interface BodyCompositionPayload extends StoredProvenance {
   requestedDays: number;
   recordedDays: number;
   current: BodyCompositionEntry | null;

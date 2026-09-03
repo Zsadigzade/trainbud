@@ -1,25 +1,50 @@
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
-import { fetchHeartRateDay } from "../garmin/daily.js";
+import { fetchHeartRateDay, mapHeartRateData } from "../garmin/daily.js";
+import type { HeartRateData } from "../garmin/garminApiTypes.js";
 import type { HeartRateDaySummary, ToolResult } from "../garmin/types.js";
-import type { HeartRatePayload } from "./payloads.js";
+import type { HeartRatePayload, StoredProvenance } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
-import type { DayFetchResult } from "../garmin/partial.js";
+import { fetchEachDay } from "../garmin/partial.js";
+import {
+  fetchDaysOrStore,
+  isPartialOrStored,
+  storedFetchNote,
+  type FallbackResult,
+} from "../history/fallback.js";
 import { average, calculateTrend, getDateRange } from "../utils/helpers.js";
 
 // SECTION: Heart Rate Mapping
 
-async function fetchHeartRateDays(days: number): Promise<DayFetchResult<HeartRateDaySummary>> {
+async function fetchHeartRateDays(days: number): Promise<FallbackResult<HeartRateDaySummary>> {
   const dates = getDateRange(days);
 
-  return withGarminClient(async (client) => {
-    return fetchEachDay(
-      dates,
-      async (date) => (await fetchHeartRateDay(client, date)).mapped,
-      "heart-rate"
-    );
+  return fetchDaysOrStore({
+    dates,
+    source: "heart_rate",
+    live: () =>
+      withGarminClient(async (client) =>
+        fetchEachDay(
+          dates,
+          async (date) => (await fetchHeartRateDay(client, date)).mapped,
+          "heart-rate"
+        )
+      ),
+    fromRaw: (date, payload) => mapHeartRateData(date, payload as HeartRateData),
+    fromMetrics: (date, metrics) => {
+      const restingHeartRate = metrics.get("resting_hr") ?? null;
+      const maxHeartRate = metrics.get("max_hr") ?? null;
+      if (restingHeartRate === null && maxHeartRate === null) {
+        return null;
+      }
+
+      // minHeartRate and averageHeartRate are derived from the intraday sample
+      // array, which the metric rows never held. Null says "not kept", which is
+      // what the renderer already prints as n/a.
+      return { date, restingHeartRate, maxHeartRate, minHeartRate: null, averageHeartRate: null };
+    },
+    dateOf: (day) => day.date,
   });
 }
 
@@ -28,7 +53,12 @@ async function fetchHeartRateDays(days: number): Promise<DayFetchResult<HeartRat
 export function buildHeartRatePayload(
   days: HeartRateDaySummary[],
   requestedDays: number,
-  unreachableDays = 0
+  unreachableDays = 0,
+  stored: StoredProvenance = {
+    storedDays: 0,
+    storedThrough: null,
+    storedWindowMoved: false,
+  }
 ): HeartRatePayload {
   const restingValues = days
     .map((day) => day.restingHeartRate)
@@ -45,12 +75,22 @@ export function buildHeartRatePayload(
     averageResting: restingValues.length > 0 ? Math.round(average(restingValues)) : null,
     trend: calculateTrend(restingValues, true),
     days,
+    storedDays: stored.storedDays,
+    storedThrough: stored.storedThrough,
+    storedWindowMoved: stored.storedWindowMoved,
   };
 }
 
 export function renderHeartRateText(payload: HeartRatePayload): string {
-  const note = partialFetchNote(
-    { values: payload.days, unreachableDays: payload.unreachableDays, requestedDays: payload.requestedDays },
+  const note = storedFetchNote(
+    {
+      values: payload.days,
+      unreachableDays: payload.unreachableDays,
+      requestedDays: payload.requestedDays,
+      storedDays: payload.storedDays,
+      storedThrough: payload.storedThrough,
+      storedWindowMoved: payload.storedWindowMoved,
+    },
     "days"
   );
 
@@ -85,10 +125,10 @@ export async function getHeartRateTrends(
     cacheKey,
     appConfig.cacheTtlStats,
     async () => fetchHeartRateDays(days),
-    { isPartial }
+    { isPartial: isPartialOrStored }
   );
 
-  const payload = buildHeartRatePayload(fetched.values, days, fetched.unreachableDays);
+  const payload = buildHeartRatePayload(fetched.values, days, fetched.unreachableDays, fetched);
 
   return {
     type: "text",

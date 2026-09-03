@@ -120,6 +120,52 @@ export function putMetrics(
   writeAll(metrics);
 }
 
+/**
+ * Every measurement recorded for one day, by kind.
+ *
+ * The thin half of the store fallback: `raw_payload` is bounded to 180 days,
+ * these rows are never pruned, so this is what can still answer for a day
+ * older than the archive. It carries the numbers the detectors need and none of
+ * the detail behind them, which is the honest trade -- the alternative was
+ * having nothing to say at all.
+ */
+export function getMetricsOn(date: string): Map<MetricKind, number> {
+  const rows = getDb()
+    .prepare("SELECT kind, value FROM daily_metric WHERE date = ?")
+    .all(date) as Array<{ kind: MetricKind; value: number }>;
+
+  return new Map(rows.map((row) => [row.kind, row.value]));
+}
+
+/**
+ * The most recent dates the store holds anything for, newest first.
+ *
+ * Needed because every tool's window is anchored to today. With the record
+ * ending 2026-08-21 and Garmin unreachable on 2026-09-03, "the last 7 nights"
+ * selects seven days the store has never had a row for, and the answer comes
+ * back empty while seventy nights sit in the table. The window has to be able
+ * to move to where the data is, and then say that it did.
+ *
+ * Union of both halves of the store: `raw_payload` is per-source and bounded to
+ * 180 days, `daily_metric` is shared and never pruned. A date that turns out to
+ * hold nothing for the source asked about is dropped by the caller's mapper.
+ */
+export function newestStoredDates(source: IngestSource, limit: number): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT date FROM (
+         SELECT DISTINCT date FROM raw_payload WHERE source = ?
+         UNION
+         SELECT DISTINCT date FROM daily_metric
+       )
+       ORDER BY date DESC
+       LIMIT ?`
+    )
+    .all(source, limit) as Array<{ date: string }>;
+
+  return rows.map((row) => row.date);
+}
+
 export function getMetricSeries(
   kind: MetricKind,
   startDate: string,

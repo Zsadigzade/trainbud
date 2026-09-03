@@ -104,13 +104,13 @@ describe("sleep payload", () => {
 
 describe("activity payloads", () => {
   it("renders the no-activities case for the latest tool", () => {
-    const text = renderLatestActivityText({ activity: null });
+    const text = renderLatestActivityText({ activity: null, fromStore: false });
 
     assert.equal(text, "No activities found in your Garmin Connect account.");
   });
 
   it("renders the latest activity with every field intact", () => {
-    const text = renderLatestActivityText({ activity: activity() });
+    const text = renderLatestActivityText({ activity: activity(), fromStore: false });
 
     assert.match(text, /^Activity: Morning Run$/m);
     assert.match(text, /^Avg HR: 148 bpm$/m);
@@ -234,6 +234,7 @@ describe("recovery payload", () => {
   it("renders the score, status and every component", () => {
     const text = renderRecoveryText({
       date: "2026-08-19",
+      storedThrough: null,
       recovery: {
         score: 91,
         status: "recovered",

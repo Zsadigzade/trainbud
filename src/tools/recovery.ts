@@ -1,4 +1,7 @@
 import type { SleepData } from "../garmin/garminApiTypes.js";
+import { storedRawPayload, isPartialOrStored } from "../history/fallback.js";
+import { getMetricsOn } from "../history/store.js";
+import { logger } from "../utils/logger.js";
 import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
@@ -193,33 +196,111 @@ export function buildRecoveryStatus(
   };
 }
 
-async function fetchRecoverySignals(): Promise<{
+interface RecoverySignals {
   sleepData: SleepData;
   restingHeartRate: number | null;
   baselineRestingHeartRate: number | null;
-}> {
+  /** The date these signals were measured, when they came out of the store. */
+  storedThrough: string | null;
+}
+
+/**
+ * How far back the store is searched for the most recent night with a record.
+ * Past this the answer stops being a recovery score and becomes an anecdote,
+ * and saying nothing is better than scoring it.
+ */
+const STORED_SIGNAL_WINDOW_DAYS = 30;
+
+/**
+ * The same signals, read out of the store, when Connect will not answer.
+ *
+ * Every component already has an honest null path -- `scoreFromSleep` returns
+ * null for a night that was not measured and the weights renormalise around it
+ * -- so a partial reconstruction degrades rather than inventing. What it must
+ * not do is pretend to be current, which is what `storedThrough` is for: the
+ * renderer names the date and `buildWatchSummary` refuses the card once that
+ * date is old.
+ */
+function storedRecoverySignals(): RecoverySignals | null {
+  for (const date of getDateRange(STORED_SIGNAL_WINDOW_DAYS)) {
+    const iso = formatIsoDate(date);
+    const raw = storedRawPayload(iso, "sleep") as SleepData | null;
+    const metrics = getMetricsOn(iso);
+
+    if (raw?.dailySleepDTO) {
+      return {
+        sleepData: raw,
+        restingHeartRate: metrics.get("resting_hr") ?? null,
+        baselineRestingHeartRate: null,
+        storedThrough: iso,
+      };
+    }
+
+    // No archived response, but the derived rows survive pruning forever.
+    const sleepSeconds = metrics.get("sleep_seconds");
+    if (sleepSeconds !== undefined) {
+      return {
+        sleepData: {
+          dailySleepDTO: {
+            sleepTimeSeconds: sleepSeconds,
+            avgSleepStress: metrics.get("sleep_stress") ?? null,
+            sleepScores: { overall: { value: metrics.get("sleep_score") ?? null } },
+          },
+          avgOvernightHrv: metrics.get("hrv_overnight") ?? null,
+          hrvStatus: null,
+        } as unknown as SleepData,
+        restingHeartRate: metrics.get("resting_hr") ?? null,
+        baselineRestingHeartRate: null,
+        storedThrough: iso,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function fetchRecoverySignals(): Promise<RecoverySignals> {
   const today = new Date();
   const candidates = [getYesterday(), ...getDateRange(3).slice(1)];
 
-  return withGarminClient(async (client) => {
-    let sleepData: SleepData = { dailySleepDTO: undefined };
+  try {
+    return await withGarminClient(async (client) => {
+      let sleepData: SleepData = { dailySleepDTO: undefined };
 
-    for (const date of candidates) {
-      const candidate = await client.getSleepData(date);
-      if (candidate.dailySleepDTO) {
-        sleepData = candidate;
-        break;
+      for (const date of candidates) {
+        const candidate = await client.getSleepData(date);
+        if (candidate.dailySleepDTO) {
+          sleepData = candidate;
+          break;
+        }
       }
+
+      const heartRate = await client.getHeartRate(today);
+
+      return {
+        sleepData,
+        restingHeartRate: heartRate.restingHeartRate ?? null,
+        baselineRestingHeartRate: heartRate.lastSevenDaysAvgRestingHeartRate ?? null,
+        storedThrough: null,
+      };
+    });
+  } catch (error) {
+    // A recovery score built on an expired session used to be a thrown tool
+    // error, which an MCP client reports as having no access to the user's
+    // data. The signals are in the store; what changes is the date they
+    // describe, and that is something to say rather than a reason to say
+    // nothing at all.
+    const stored = storedRecoverySignals();
+    if (!stored) {
+      throw error;
     }
 
-    const heartRate = await client.getHeartRate(today);
-
-    return {
-      sleepData,
-      restingHeartRate: heartRate.restingHeartRate ?? null,
-      baselineRestingHeartRate: heartRate.lastSevenDaysAvgRestingHeartRate ?? null,
-    };
-  });
+    logger.info(
+      { err: error, storedThrough: stored.storedThrough },
+      "Recovery signals came from the stored history"
+    );
+    return stored;
+  }
 }
 
 // SECTION: Tool Handler
@@ -231,7 +312,16 @@ async function fetchRecoverySignals(): Promise<{
 export function renderRecoveryText(payload: RecoveryPayload): string {
   const { recovery } = payload;
 
+  const provenance = payload.storedThrough
+    ? [
+        `Garmin could not be reached, so this was computed from TrainBud's stored record for ${payload.storedThrough} rather than from today's figures.`,
+        "It describes that day. Do not present it as current, and do not report it as an absence of data.",
+        "",
+      ]
+    : [];
+
   return [
+    ...provenance,
     `Recovery score: ${recovery.score}/100 (${recovery.status})`,
     recovery.recommendation,
     "",
@@ -265,30 +355,48 @@ export async function getRecoveryStatus(input: {
     restingHr: weights.restingHr,
   });
 
-  const recovery = await withCache(cacheKey, appConfig.cacheTtlStats, async () => {
-    const signals = await fetchRecoverySignals();
-    const sleep = signals.sleepData.dailySleepDTO;
+  const computed = await withCache(
+    cacheKey,
+    appConfig.cacheTtlStats,
+    async () => {
+      const signals = await fetchRecoverySignals();
+      const sleep = signals.sleepData.dailySleepDTO;
 
-    const components = {
-      hrvScore: scoreFromHrv(
-        signals.sleepData.avgOvernightHrv ?? null,
-        signals.sleepData.hrvStatus ?? null
-      ),
-      sleepScore: scoreFromSleep(
-        sleep?.sleepScores?.overall?.value ?? null,
-        sleep?.sleepTimeSeconds ?? 0
-      ),
-      stressScore: scoreFromStress(sleep?.avgSleepStress ?? null),
-      restingHrScore: scoreFromRestingHr(
-        signals.restingHeartRate,
-        signals.baselineRestingHeartRate
-      ),
-    };
+      const components = {
+        hrvScore: scoreFromHrv(
+          signals.sleepData.avgOvernightHrv ?? null,
+          signals.sleepData.hrvStatus ?? null
+        ),
+        sleepScore: scoreFromSleep(
+          sleep?.sleepScores?.overall?.value ?? null,
+          sleep?.sleepTimeSeconds ?? 0
+        ),
+        stressScore: scoreFromStress(sleep?.avgSleepStress ?? null),
+        restingHrScore: scoreFromRestingHr(
+          signals.restingHeartRate,
+          signals.baselineRestingHeartRate
+        ),
+      };
 
-    return buildRecoveryStatus(components, weights);
-  });
+      return {
+        recovery: buildRecoveryStatus(components, weights),
+        storedThrough: signals.storedThrough,
+      };
+    },
+    {
+      isPartial: (value) =>
+        isPartialOrStored({ unreachableDays: 0, storedDays: value.storedThrough ? 1 : 0 }),
+    }
+  );
 
-  const payload: RecoveryPayload = { date: formatIsoDate(new Date()), recovery };
+  const payload: RecoveryPayload = {
+    // The day the score describes, which is the stored day when the signals
+    // came from the store. Stamping it with today is how a fortnight-old night
+    // would have been served as this morning's recovery.
+    date: computed.storedThrough ?? formatIsoDate(new Date()),
+    recovery: computed.recovery,
+    storedThrough: computed.storedThrough,
+  };
 
   return {
     type: "text",

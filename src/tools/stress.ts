@@ -2,26 +2,58 @@ import { appConfig } from "../config.js";
 import { buildToolCacheKey, withCache } from "../garmin/cache.js";
 import { withGarminClient } from "../garmin/client.js";
 import { fetchStressDay } from "../garmin/daily.js";
-import type { DailyStressSummary } from "../garmin/rawApi.js";
+import { mapDailyStress, type DailyStressSummary } from "../garmin/rawApi.js";
 import type { ToolResult } from "../garmin/types.js";
-import type { StressPayload } from "./payloads.js";
+import type { StressPayload, StoredProvenance } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
-import { fetchEachDay, isPartial, partialFetchNote } from "../garmin/partial.js";
-import type { DayFetchResult } from "../garmin/partial.js";
+import { fetchEachDay } from "../garmin/partial.js";
+import {
+  fetchDaysOrStore,
+  isPartialOrStored,
+  storedFetchNote,
+  type FallbackResult,
+} from "../history/fallback.js";
 import { average, calculateTrend, getDateRange } from "../utils/helpers.js";
 
-async function fetchStressDays(days: number): Promise<DayFetchResult<DailyStressSummary>> {
+async function fetchStressDays(days: number): Promise<FallbackResult<DailyStressSummary>> {
   const dates = getDateRange(days);
 
-  return withGarminClient(async (client) => {
-    return fetchEachDay(dates, async (date) => (await fetchStressDay(client, date)).mapped, "stress");
+  return fetchDaysOrStore({
+    dates,
+    source: "stress",
+    live: () =>
+      withGarminClient(async (client) =>
+        fetchEachDay(dates, async (date) => (await fetchStressDay(client, date)).mapped, "stress")
+      ),
+    fromRaw: (date, payload) => mapDailyStress(date, payload),
+    fromMetrics: (date, metrics) => {
+      const averageStress = metrics.get("stress_avg") ?? null;
+      const maxStress = metrics.get("stress_max") ?? null;
+      if (averageStress === null && maxStress === null) {
+        return null;
+      }
+
+      return {
+        date,
+        averageStress,
+        maxStress,
+        restStress: null,
+        stressDurationSeconds: null,
+      };
+    },
+    dateOf: (day) => day.date,
   });
 }
 
 export function buildStressPayload(
   days: DailyStressSummary[],
   requestedDays: number,
-  unreachableDays = 0
+  unreachableDays = 0,
+  stored: StoredProvenance = {
+    storedDays: 0,
+    storedThrough: null,
+    storedWindowMoved: false,
+  }
 ): StressPayload {
   const averages = days
     .map((day) => day.averageStress)
@@ -34,12 +66,22 @@ export function buildStressPayload(
     averageStress: averages.length > 0 ? Math.round(average(averages)) : null,
     trend: calculateTrend(averages, true),
     days,
+    storedDays: stored.storedDays,
+    storedThrough: stored.storedThrough,
+    storedWindowMoved: stored.storedWindowMoved,
   };
 }
 
 export function renderStressText(payload: StressPayload): string {
-  const note = partialFetchNote(
-    { values: payload.days, unreachableDays: payload.unreachableDays, requestedDays: payload.requestedDays },
+  const note = storedFetchNote(
+    {
+      values: payload.days,
+      unreachableDays: payload.unreachableDays,
+      requestedDays: payload.requestedDays,
+      storedDays: payload.storedDays,
+      storedThrough: payload.storedThrough,
+      storedWindowMoved: payload.storedWindowMoved,
+    },
     "days"
   );
 
@@ -79,10 +121,10 @@ export async function getStressLevels(
     cacheKey,
     appConfig.cacheTtlStats,
     async () => fetchStressDays(days),
-    { isPartial }
+    { isPartial: isPartialOrStored }
   );
 
-  const payload = buildStressPayload(fetched.values, days, fetched.unreachableDays);
+  const payload = buildStressPayload(fetched.values, days, fetched.unreachableDays, fetched);
 
   return {
     type: "text",

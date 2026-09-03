@@ -374,6 +374,71 @@ async function payloadOf<T>(name: string, args: Record<string, unknown>): Promis
   }
 }
 
+/**
+ * How old a stored measurement may be before the watch stops drawing it.
+ *
+ * The tools now answer from TrainBud's own store when Connect will not, which
+ * is what an AI client needs -- it can read `storedThrough` and say which day it
+ * is describing. THE WATCH CANNOT. Version 1.4.0 is live in the Connect IQ
+ * store, it parses this JSON on the device, and it ignores fields it does not
+ * know: hand it a sleep card built from 2026-08-21 and it draws "6.4h" under a
+ * heading that means last night, on a wrist, with no way for the wearer to tell.
+ * A store review takes days, so "ship 1.4.1 and it will render the date" is not
+ * an answer for anyone who has already installed it.
+ *
+ * So the cards take stored data only inside the same grace window the detectors
+ * use -- three days, because Garmin finalises a sleep score hours after waking
+ * and an unsynced yesterday is normal. Past that the card is null and the watch
+ * draws its existing "No data", which is honest.
+ *
+ * The AI is not gated. `formatFindingsContext` states the record's age in words
+ * before the model sees a single number, so the model can hold a fortnight-old
+ * figure and say what it is. That asymmetry is the whole point: the surface that
+ * can express "as of the 21st" gets the data, and the surface that cannot,
+ * does not.
+ */
+const WATCH_STORED_GRACE_DAYS = 3;
+
+function daysSince(date: string | null | undefined, today: DateTime): number | null {
+  if (!date) {
+    return null;
+  }
+  const parsed = DateTime.fromISO(date).startOf("day");
+  return parsed.isValid ? Math.max(0, Math.round(today.diff(parsed, "days").days)) : null;
+}
+
+/**
+ * Drop a card the watch would draw as current when it is not.
+ *
+ * The test is the age of the NEWEST day in the card, whatever its source --
+ * not whether the store was involved. Two reasons that is the right question:
+ *
+ *   * A partly stored answer whose recent days came off the wire is current
+ *     where it matters, because every card's headline figure (`nights[0]`,
+ *     `days[0]`) is the newest day.
+ *   * The cache could already serve a day-old reading as "current resting HR"
+ *     before any of this existed. One rule covers both.
+ *
+ * With a healthy connection the newest day is today or yesterday, so this is a
+ * no-op in the normal case.
+ */
+export function freshEnoughForWatch<T>(
+  payload: T | null,
+  newestDate: (payload: T) => string | null | undefined,
+  today: DateTime = DateTime.local().startOf("day"),
+  graceDays: number = WATCH_STORED_GRACE_DAYS
+): T | null {
+  if (!payload) {
+    return null;
+  }
+
+  const age = daysSince(newestDate(payload), today);
+
+  // An undated card is left alone: this exists to catch a date that is too old,
+  // not to reject anything it cannot date.
+  return age === null || age <= graceDays ? payload : null;
+}
+
 export async function buildWatchSummary(): Promise<WatchSummary> {
   // Detection is a local SQLite read, so it costs nothing next to six Garmin
   // round trips and does not need to be raced with them.
@@ -392,14 +457,23 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
     payloadOf<HeartRatePayload>("get_heart_rate_trends", { days: 7 }),
   ]);
 
+  // See freshEnoughForWatch: the tools may now answer out of the store, and a
+  // build already on someone's wrist would draw a fortnight-old figure as
+  // today's.
+  const startOfToday = DateTime.local().startOf("day");
+
   const summary: WatchSummary = {
     ...buildWatchSummaryFrom({
-      recovery,
-      sleep,
+      recovery: freshEnoughForWatch(recovery, (payload) => payload.date, startOfToday),
+      sleep: freshEnoughForWatch(sleep, (payload) => payload.nights[0]?.date, startOfToday),
+      // Exempt: the last activity is dated on its own card and an old one is
+      // a fact about the user's training, not a number mislabelled as today's.
       activity,
-      stress,
+      stress: freshEnoughForWatch(stress, (payload) => payload.days[0]?.date, startOfToday),
+      // Exempt: Connect only recomputes VO2 max after a qualifying activity, so
+      // the newest reading is the current one however old it is.
       vo2max,
-      heartRate,
+      heartRate: freshEnoughForWatch(heartRate, (payload) => payload.days[0]?.date, startOfToday),
       findings: detection.findings,
       coverage: detection.coverage,
       context: activeContext(today),

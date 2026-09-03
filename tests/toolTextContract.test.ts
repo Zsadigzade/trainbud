@@ -130,6 +130,7 @@ describe("MCP text contract", () => {
   it("renders the recovery block exactly", () => {
     const text = renderRecoveryText({
       date: "2026-08-19",
+      storedThrough: null,
       recovery: {
         score: 91,
         status: "recovered",
