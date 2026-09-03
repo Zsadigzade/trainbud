@@ -20,6 +20,20 @@ import type { MetricKind } from "../history/schema.js";
 
 const WEEK_DAYS = 7;
 
+/**
+ * How far back to ask for, to get exactly two seven-day weeks.
+ *
+ * `series(kind, n)` returns `today - n .. today` INCLUSIVE, so it spans n + 1
+ * calendar days. Asked for `WEEK_DAYS * 2` and split at `today - 7`, the halves
+ * came out 7 and 8: every wellness metric and the session count compared a
+ * seven-day week against an eight-day one, while the TRIMP load line beside
+ * them summed two explicit seven-day windows and was right. One card
+ * disagreeing with itself, and the wrong half is the one a reader quotes.
+ *
+ * Thirteen gives `today - 13 .. today`: fourteen days, seven each side.
+ */
+const COMPARISON_DAYS = WEEK_DAYS * 2 - 1;
+
 export type Direction = "up" | "down" | "flat" | "unknown";
 
 export interface WeekMetric {
@@ -82,7 +96,7 @@ function weekHalves(
 ): { current: number[]; previous: number[] } {
   const today = input.now.startOf("day");
   const cutoff = today.minus({ days: WEEK_DAYS }).toISODate() ?? "";
-  const points = input.series(kind, WEEK_DAYS * 2);
+  const points = input.series(kind, COMPARISON_DAYS);
 
   const current: number[] = [];
   const previous: number[] = [];
@@ -135,7 +149,7 @@ export function buildWeekReview(input: DetectorInput): WeekReview {
   const end = today.toISODate() ?? "";
   const cutoff = today.minus({ days: WEEK_DAYS }).toISODate() ?? "";
 
-  const activities = input.activities(WEEK_DAYS * 2);
+  const activities = input.activities(COMPARISON_DAYS);
   const thisWeek = activities.filter((activity) => activity.date > cutoff);
   const lastWeek = activities.filter((activity) => activity.date <= cutoff);
 
@@ -203,6 +217,12 @@ export function buildWeekReview(input: DetectorInput): WeekReview {
     });
   }
 
+  // Deliberately NOT narrowed to COMPARISON_DAYS along with the windows above.
+  // `ready` needs READY_DAYS recorded days, and over a fourteen-day span that
+  // would mean fourteen out of fourteen -- no missing day allowed, on a store
+  // where a day only gets a row when the watch was worn. Tightening that is a
+  // change to what "enough history" means, not a fix to the seven-versus-eight
+  // comparison, and it belongs in its own change with its own argument.
   const coverageDays = Math.max(
     input.series("resting_hr", WEEK_DAYS * 2).length,
     input.series("sleep_seconds", WEEK_DAYS * 2).length
