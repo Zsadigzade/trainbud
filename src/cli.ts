@@ -20,7 +20,7 @@ import {
   RAW_RETENTION_DAYS,
   RAW_REVISIONS_KEPT,
 } from "./history/store.js";
-import { runDetectors } from "./detect/index.js";
+import { describeFindingsCoverage, runDetectors } from "./detect/index.js";
 import type { IngestSource } from "./history/schema.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
 
@@ -198,10 +198,14 @@ async function runFindings(): Promise<void> {
   const result = runDetectors();
 
   if (!result.coverage.ready) {
-    console.log(
-      `Still gathering data — ${result.coverage.days} of the 14 days needed before anything can be compared to a baseline.`
-    );
-    console.log("Run `trainbud backfill` to pull what Garmin already holds.");
+    // Shared with the MCP tool and the watch prompt. Written here once, this
+    // surface printed "74 of the 14 days needed" on a 74-day store for as long
+    // as the stale case existed.
+    const coverage = describeFindingsCoverage(result.coverage);
+    console.log(coverage.detail);
+    if (coverage.fix) {
+      console.log(coverage.fix);
+    }
     closeHistoryDb();
     return;
   }

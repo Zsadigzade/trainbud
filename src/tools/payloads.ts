@@ -2,6 +2,7 @@ import type { DailyStressSummary, Vo2MaxEntry } from "../garmin/rawApi.js";
 import type { ContextEntry, SubjectivePoint } from "../history/context.js";
 import type { SubjectiveKind } from "../history/schema.js";
 import type { Finding } from "../detect/findings.js";
+import type { Coverage } from "../detect/index.js";
 import type {
   ActivitySummary,
   BodyCompositionEntry,
@@ -120,7 +121,16 @@ export interface SubjectivePayload {
   recent: SubjectivePoint[];
 }
 
+/**
+ * The whole coverage object, not a two-field subset of it.
+ *
+ * This was typed `{ days, ready }` while the value assigned to it carried
+ * `throughDate` and `staleDays` as well. The renderer therefore could not see
+ * the two fields that distinguish "not enough history yet" from "plenty, and it
+ * stops on 2026-08-21" -- so it printed the cold-start sentence at a 74-day
+ * store. A type narrower than its value does not describe data, it hides it.
+ */
 export interface FindingsPayload {
   findings: Finding[];
-  coverage: { days: number; ready: boolean };
+  coverage: Coverage;
 }

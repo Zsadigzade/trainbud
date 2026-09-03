@@ -39,15 +39,69 @@ const SEVERITY_ORDER: Record<FindingSeverity, number> = {
   info: 2,
 };
 
+export interface Coverage {
+  days: number;
+  ready: boolean;
+  /** Newest date with any measurement, or null for an empty store. */
+  throughDate: string | null;
+  /** Days between that and today. 0 when the record is current. */
+  staleDays: number;
+}
+
 export interface DetectionResult {
   findings: Finding[];
-  coverage: {
-    days: number;
-    ready: boolean;
-    /** Newest date with any measurement, or null for an empty store. */
-    throughDate: string | null;
-    /** Days between that and today. 0 when the record is current. */
-    staleDays: number;
+  coverage: Coverage;
+}
+
+/**
+ * Why `ready` is false, and the sentence to say about it.
+ *
+ * `ready` collapses two refusals that need opposite answers: COLD -- there is
+ * not enough history yet, wait -- and STALE -- there is plenty and it stops
+ * weeks ago, go and fetch. Each surface used to write that sentence itself, and
+ * only one of the four was taught the difference when `staleDays` was added.
+ * The three that were not printed the cold-start line at a 74-day store:
+ *
+ *     Still gathering data - 74 of the 14 days needed
+ *
+ * which is arithmetic nonsense, and worse, it is what a model repeats back to
+ * the user as "I don't have access to your data" -- while 598 measurements sit
+ * on disk. One description, read by every surface, is the only shape that stops
+ * the next surface from inheriting the same fault.
+ */
+export type CoverageState = "ready" | "stale" | "cold";
+
+export interface CoverageDescription {
+  state: CoverageState;
+  /** One sentence about the record itself. */
+  detail: string;
+  /** The single next action, or null when nothing needs doing. */
+  fix: string | null;
+}
+
+export function describeFindingsCoverage(coverage: Coverage): CoverageDescription {
+  if (coverage.ready) {
+    return { state: "ready", detail: `${coverage.days} days of history`, fix: null };
+  }
+
+  // Depth is present and the record has simply stopped. Note this is tested
+  // before the day count: a store can be both short and stale, and "go and
+  // fetch" is the useful answer in that case too.
+  if (coverage.throughDate !== null && coverage.staleDays > MAX_STALE_DAYS) {
+    return {
+      state: "stale",
+      detail:
+        `${coverage.days} days of history are stored, but the record stops at ` +
+        `${coverage.throughDate} — ${coverage.staleDays} days ago. Nothing is known about the days since. ` +
+        `The stored history is real and still worth reasoning about; what is missing is only the days after that date.`,
+      fix: "Run `trainbud backfill --days 20` to bring the record up to date.",
+    };
+  }
+
+  return {
+    state: "cold",
+    detail: `Still gathering data — ${coverage.days} of the ${READY_DAYS} days needed before anything can be compared against a baseline.`,
+    fix: "Run `trainbud backfill` to pull what Garmin already holds.",
   };
 }
 

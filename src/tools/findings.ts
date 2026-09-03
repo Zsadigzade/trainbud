@@ -1,4 +1,4 @@
-import { runDetectors } from "../detect/index.js";
+import { describeFindingsCoverage, runDetectors } from "../detect/index.js";
 import type { ToolResult } from "../garmin/types.js";
 import type { FindingsPayload } from "./payloads.js";
 import type { ToolDefinition } from "./types.js";
@@ -7,15 +7,20 @@ import type { ToolDefinition } from "./types.js";
 //
 // The one tool that answers a question Connect cannot: not "what is my resting
 // heart rate" but "is anything unusual about it, for me".
+//
+// It is also the only tool that reads the local store rather than Garmin, which
+// makes it the one thing an AI client can still learn about the user when the
+// connection is down -- so what it says when `ready` is false matters more here
+// than anywhere else in the app.
 
 export function renderFindingsText(payload: FindingsPayload): string {
-  // Cold start is a different answer from a clean bill of health, and reporting
-  // the second when the truth is the first is the failure that matters here.
+  // Cold start is a different answer from a clean bill of health, and a record
+  // that stops three weeks ago is a third thing again: it has plenty to say and
+  // none of it is about this week. Reporting any of the three as another is the
+  // failure that matters here.
   if (!payload.coverage.ready) {
-    return [
-      `Still gathering data — ${payload.coverage.days} of the 14 days needed before anything can be compared against a baseline.`,
-      "Run `trainbud backfill` to pull what Garmin already holds.",
-    ].join("\n");
+    const coverage = describeFindingsCoverage(payload.coverage);
+    return [coverage.detail, coverage.fix].filter(Boolean).join("\n");
   }
 
   if (payload.findings.length === 0) {

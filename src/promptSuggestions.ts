@@ -1,4 +1,4 @@
-import type { DetectionResult } from "./detect/index.js";
+import { describeFindingsCoverage, type DetectionResult } from "./detect/index.js";
 import type { Finding, FindingKind } from "./detect/findings.js";
 import type { ContextEntry } from "./history/context.js";
 
@@ -47,6 +47,21 @@ const COLD_START = [
   "Summarize my week",
 ];
 
+/**
+ * A store with months in it that stopped three weeks ago is not a cold start,
+ * and offering "What can you tell me yet?" to someone with 74 days of history
+ * misdescribes their own data back to them. The useful questions here are about
+ * the record itself and about the period it does cover -- both of which this app
+ * can answer perfectly well without a single live request.
+ */
+const STALE = [
+  "Why is my data out of date?",
+  "How was my last month?",
+  "How is my sleep trending?",
+  "Have I lost fitness?",
+  "What should I focus on?",
+];
+
 function contextPrompt(entries: ContextEntry[]): string | null {
   const race = entries.find((entry) => entry.kind === "race");
   if (race) {
@@ -90,7 +105,9 @@ export function buildPromptSuggestions(
   context: ContextEntry[] = []
 ): string[] {
   if (!result.coverage.ready) {
-    return [...COLD_START];
+    return describeFindingsCoverage(result.coverage).state === "stale"
+      ? [...STALE]
+      : [...COLD_START];
   }
 
   const fromFindings = result.findings

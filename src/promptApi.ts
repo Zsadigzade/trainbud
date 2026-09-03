@@ -12,7 +12,7 @@ import {
 } from "./appDb.js";
 import { appConfig } from "./config.js";
 import { buildWatchSummary } from "./watchApi.js";
-import { runDetectors, type DetectionResult } from "./detect/index.js";
+import { describeFindingsCoverage, runDetectors, type DetectionResult } from "./detect/index.js";
 import { activeContext, type ContextEntry } from "./history/context.js";
 import { logger } from "./utils/logger.js";
 
@@ -65,7 +65,13 @@ export function formatFindingsContext(
 ): string {
   const lines: string[] = [];
 
-  if (result.coverage.days > 0 && result.coverage.staleDays > 3) {
+  // The same three-way classification every other surface reads. It used to be
+  // re-derived here from `staleDays > 3`, which is how three sibling surfaces
+  // went on printing the cold-start sentence at a 74-day store: the knowledge
+  // lived in one `if` in one file.
+  const coverageState = describeFindingsCoverage(result.coverage).state;
+
+  if (coverageState === "stale") {
     // The record has plenty of days and stops weeks ago. Saying "nothing stands
     // out" here is a claim about days that were never recorded, and it is the
     // single most misleading thing this prompt can contain: the model repeats it
@@ -73,7 +79,7 @@ export function formatFindingsContext(
     lines.push(
       `The stored record has ${result.coverage.days} days but ENDS ON ${result.coverage.throughDate}, which is ${result.coverage.staleDays} days ago. Nothing is known about the days since. Do not reassure the user that things look fine, and do not describe today: say the record is out of date and that running \`trainbud backfill\` will bring it current.`
     );
-  } else if (!result.coverage.ready) {
+  } else if (coverageState === "cold") {
     lines.push(
       `Still gathering data: only ${result.coverage.days} days of history are stored, which is not yet enough to compare anything against a baseline. Say so rather than reassuring the user.`
     );
