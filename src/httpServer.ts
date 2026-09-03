@@ -11,6 +11,7 @@ import {
 } from "./profile.js";
 import {
   budgetState,
+  clearFeatureUsage,
   dailyAiSpend,
   featureCounts,
   monthToDateSpend,
@@ -917,6 +918,20 @@ export function createHttpMcpServer(): HttpMcpServer {
           }
 
           sendJson(res, 405, { error: "Method Not Allowed", message: "Use GET or PUT." });
+          return;
+        }
+
+        // Deleting the local feature counters. "Stop counting" and "forget
+        // what you counted" are different requests, and a control that only
+        // does the first is not the privacy control it looks like.
+        if (pathname === "/api/usage/features" && req.method === "DELETE") {
+          if (!isAuthorized(req, queryToken)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+          clearFeatureUsage();
+          sendJson(res, 200, { ok: true });
           return;
         }
 

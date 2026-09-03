@@ -359,6 +359,23 @@ export function featureCounts(days = 30): FeatureCount[] {
   }
 }
 
+/**
+ * Delete every stored feature counter.
+ *
+ * Offered because "stop counting" and "forget what you counted" are different
+ * requests, and a privacy control that only does the first is the kind that
+ * gets described as a privacy control and is not one. AI spend is deliberately
+ * NOT cleared here: that is the user's own billing record against a cap they
+ * set, and losing it would make the cap wrong for the rest of the month.
+ */
+export function clearFeatureUsage(): void {
+  try {
+    getAppDb().prepare("DELETE FROM feature_usage").run();
+  } catch (err) {
+    logger.warn({ err }, "could not clear feature usage");
+  }
+}
+
 /** Tests only. */
 export function __clearUsageForTests(): void {
   const db = getAppDb();
