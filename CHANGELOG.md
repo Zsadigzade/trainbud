@@ -2,6 +2,92 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — server 0.4.0 · watch 1.4.0 - 2026-09-03
+
+Reported as "AI Unavailable, Error HTTP -400" on the Ask card. The AI was never
+asked: the tunnel was down, ngrok answered an HTML error page, and Connect IQ
+cannot parse HTML as JSON. Three surfaces had by now invented three vocabularies
+for the same class of failure, and this release collapses them into one — then
+adds the check that would have found it in a sentence.
+
+### Fixed
+
+- **A request that never reached the server was reported as a broken AI.**
+  `onPromptSubmitted` set the error to `"HTTP " + responseCode` under the heading
+  *AI unavailable*, so `-400` — which means the response body could not be parsed
+  — blamed the one component that had not been contacted. The pairing flow
+  already classified this exact code correctly and the prompt flow never called
+  it. `PairFail` is now `Fail` (`ciq/source/Fail.mc`) and pairing, the summary
+  fetch and the prompt all route through it.
+
+- **A rotated API key was reported as an unreachable server.** Any summary
+  failure drew "Could not reach TrainBud", including a 401 from a server that had
+  answered perfectly well. A new `UNAUTHORIZED` class says *Watch not authorised
+  — pair this watch again*.
+
+- **A prompt poll that failed every time looked like one still running.**
+  `onPromptStatusReceived` returned silently on any non-200, so the screen sat on
+  "Asking AI..." for thirty seconds and then said "Timed out", naming nothing.
+  One dropped Bluetooth response is now tolerated and a run of them is reported;
+  a 401 is reported at once.
+
+- **No AI answer this app ever produced was readable.** The result was cut into
+  80-character substrings and each was handed to a single `drawText`, which does
+  not wrap in Monkey C — so a page was laid out on one line, ran off both edges,
+  and the cut fell mid-word. It survived every build, type check and store review
+  because no Anthropic key had ever been configured on the machine it was written
+  on, so the success path had never once been drawn. Answers now wrap to the
+  chord width and page by line.
+
+- **`trainbud check` caused the failure it reported.** A rate-limited Garmin
+  login was retried once per tool call, so one expired session became nine logins
+  into a Cloudflare 429 in about five seconds. There is now a single cooldown,
+  taken from the upstream's own retry-after and honoured before any login is
+  attempted; a session already in hand keeps working.
+
+- **A test asserted against the developer's environment.** `checkAiStatus`
+  cleared `ANTHROPIC_API_KEY` in a `before` hook, but `src/config.ts` calls dotenv
+  at module load, so the dynamic import that followed put it straight back. Green
+  for the life of the project purely because no key had ever existed on the
+  machine it ran on; it failed the day one was added.
+
+### Added
+
+- **`trainbud doctor`, `GET /api/selftest`, and a Connection panel on the
+  dashboard.** Fetches the configured public URL from outside this machine with
+  the watch's own headers and grades the answer with the watch's taxonomy. Status
+  alone is not the test — both of this project's expensive network bugs were a
+  200 or a 404 carrying HTML — so the body is graded and a 200 of HTML fails.
+
+- **A Week card, and `get_week_review`.** This week against last, per metric,
+  split by date rather than by position so a missing day cannot shift the
+  boundary. A metric absent on either side reads as unknown rather than as a
+  delta against zero.
+
+- **A load forecast.** Where the acute:chronic ratio lands if next week repeats
+  this one. The existing detector fires after the jump; this fires before it. The
+  projection slides the whole 28-day window forward rather than only advancing
+  the acute end.
+
+- **Sleep debt and consistency**, against the user's own median night rather than
+  eight hours, with consistency as median absolute deviation so one recovery
+  sleep cannot make a metronomic sleeper look erratic. Surfaced under last
+  night's hours as "Usually 7.2h · variable".
+
+- **A race countdown.** The context store has held races since the memory layer
+  landed and nothing ever read one for its date, though it changes what every
+  other number means — a falling load ratio is a warning in January and the plan
+  in a taper. `activeContext` excludes future dates by design, so
+  `upcomingContext` was added.
+
+- **`build.ps1 -Screens` and `scripts/capture-screens.ps1`.** Every screen the
+  app can draw, with no server, photographed on any device in one command. 1.3.0
+  shipped to the store having never been drawn once. Three faults it caught
+  immediately: the default jungle `sourcePath` was pulling the debug driver into
+  the store build; a jungle setting is assigned rather than appended, so listing
+  two jungles silently un-excluded the glance; and the Forerunner 55's recovery
+  card collided with its own ring.
+
 ## [Unreleased] — watch 1.3.1 - 2026-09-02
 
 Nobody who installed the watch app from the store could ever pair it. Reported

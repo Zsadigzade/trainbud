@@ -151,6 +151,11 @@ Restart your MCP client, then start asking questions.
 | `get_stress_levels` | Daily stress averages and trends |
 | `get_vo2_max_trends` | VO2 max fitness trends over time |
 | `get_training_insights` | Combined weekly summary (activities, sleep, recovery, stress) |
+| `get_findings` | What stands out against **your own** 28-day baselines, not a population average |
+| `get_week_review` | This week against last, the load forecast, sleep debt, and your next race |
+| `remember_context` | Record a goal, a race and its date, an injury, or a note |
+| `get_user_context` | What is on record about you, on any date |
+| `log_subjective` | How a session actually felt — RPE, soreness, mood |
 
 ## CLI
 
@@ -158,6 +163,9 @@ Restart your MCP client, then start asking questions.
 trainbud setup          # Interactive first-time setup (recommended)
 trainbud serve          # Remote HTTP MCP for web AI (claude.ai, ChatGPT)
 trainbud check          # Live diagnostics against all tools
+trainbud doctor         # What the watch would see: public URL, AI key, history depth
+trainbud backfill       # Pull Garmin history into the local store (resumable)
+trainbud findings       # What stands out against your own baselines
 trainbud start          # Start the MCP server (stdio)
 trainbud auth           # Force re-authentication
 trainbud cache clear    # Clear cached data
@@ -197,6 +205,9 @@ trainbud --version      # Print version
 | MFA enabled on account | Disable MFA or use an app-specific password |
 | Stale data | Run `trainbud cache clear` |
 | Rate limited | Wait 60 seconds; cached responses are used when available |
+| Watch shows "Not a TrainBud server" or error -400 | Your public URL is answering with something that is not TrainBud's JSON — usually a tunnel that is down. Run `trainbud doctor`; it says exactly what came back |
+| Watch shows "Watch not authorised" | The API key changed since the watch paired. Pair it again from the dashboard |
+| Watch shows "AI not set up" | AI is bring-your-own-key. Paste an Anthropic key into the dashboard |
 | No sleep/HR data | Ensure your Garmin device has synced to Garmin Connect |
 | Server won't start | Check that `GARMIN_EMAIL` and `GARMIN_PASSWORD` are set in `.env` |
 
