@@ -32,7 +32,18 @@ export interface DashboardStatus {
   context: DashboardContextRow[];
 }
 
-export function getDashboardStatus(): DashboardStatus {
+/**
+ * `publicUrl` is the address this dashboard was actually reached on, resolved
+ * from the request the way pairing already resolves it. Left out, it falls back
+ * to `appConfig.publicUrl` -- which reads `.trainbud/watch-setup.json`, a file
+ * written once when a tunnel starts and never corrected when that tunnel dies.
+ * The setup panel below prints this URL for the user to type into Connect IQ
+ * settings, so a stale value here is a watch pointed at a dead host: pairing
+ * succeeds, and the app goes blank on its next request. Pairing was fixed to
+ * derive the host from the request; the page that tells the user what to type
+ * was still reading the file.
+ */
+export function getDashboardStatus(publicUrl?: string): DashboardStatus {
   const now = Math.floor(Date.now() / 1000);
   return {
     pending: getPendingPairings().map((t) => ({
@@ -41,7 +52,7 @@ export function getDashboardStatus(): DashboardStatus {
     })),
     ai_configured: isAiConfigured(),
     insight: getCachedDailyInsight(),
-    public_url: appConfig.publicUrl,
+    public_url: publicUrl ?? appConfig.publicUrl,
     context: activeContext(DateTime.local().toISODate() ?? "").map((entry) => ({
       id: entry.id,
       kind: entry.kind,
@@ -52,8 +63,8 @@ export function getDashboardStatus(): DashboardStatus {
   };
 }
 
-export function renderDashboard(): string {
-  const status = getDashboardStatus();
+export function renderDashboard(publicUrl?: string): string {
+  const status = getDashboardStatus(publicUrl);
   const serverUrl = status.public_url || `http://localhost:${appConfig.mcpPort}`;
   const tunnelConfigured = status.public_url.length > 0;
 

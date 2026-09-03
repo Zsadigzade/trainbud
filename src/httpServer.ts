@@ -630,7 +630,7 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(renderDashboard());
+          res.end(renderDashboard(resolvePublicUrl(req)));
           return;
         }
 
@@ -774,7 +774,7 @@ export function createHttpMcpServer(): HttpMcpServer {
             sendJson(res, 401, { error: "Unauthorized" });
             return;
           }
-          sendJson(res, 200, getDashboardStatus());
+          sendJson(res, 200, getDashboardStatus(resolvePublicUrl(req)));
           return;
         }
 
