@@ -32,13 +32,33 @@ function prettyStderrStream(): pino.DestinationStream {
   });
 }
 
-function createStderrLogger(): Logger {
-  return pino(
-    {
-      level: process.env.LOG_LEVEL ?? "info",
+/**
+ * Shared options, and the reason this file has any.
+ *
+ * pino applies its built-in Error serializer to the key `err` and to nothing
+ * else. This codebase logs `{ error }` in twenty places and `{ err }` in three,
+ * and an Error has no enumerable own properties -- so twenty of those wrote
+ * literally `"error":{}` to the log file. The server's error log recorded that
+ * something failed and never once recorded why.
+ *
+ * Found by reading the log after "History catch-up failed" and discovering the
+ * cause had been thrown away by the line that was supposed to preserve it. That
+ * is the same fault as the rest of this release: a diagnostic that names
+ * nothing. Both keys are now serialized, so neither spelling loses the message
+ * or the stack.
+ */
+function baseOptions(): pino.LoggerOptions {
+  return {
+    level: process.env.LOG_LEVEL ?? "info",
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
     },
-    prettyStderrStream()
-  );
+  };
+}
+
+function createStderrLogger(): Logger {
+  return pino(baseOptions(), prettyStderrStream());
 }
 
 function createFileLogger(logPath: string): Logger {
@@ -46,9 +66,7 @@ function createFileLogger(logPath: string): Logger {
   fs.mkdirSync(directory, { recursive: true });
 
   return pino(
-    {
-      level: process.env.LOG_LEVEL ?? "info",
-    },
+    baseOptions(),
     pino.multistream([
       {
         stream: pino.destination({
