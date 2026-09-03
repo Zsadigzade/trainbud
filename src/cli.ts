@@ -11,6 +11,7 @@ import { packageVersion } from "./version.js";
 import { runSetup } from "./setup.js";
 import { withGarminClient } from "./garmin/client.js";
 import { DEFAULT_SOURCES, runIngest } from "./history/ingest.js";
+import { GarminApiError } from "./garmin/types.js";
 import { startHistoryScheduler } from "./history/scheduler.js";
 import { closeHistoryDb, historyStats } from "./history/store.js";
 import { runDetectors } from "./detect/index.js";
@@ -42,6 +43,32 @@ function positiveIntOption(name: string, min = 1) {
     }
     return parsed;
   };
+}
+
+/**
+ * Print a failure the way its cause deserves.
+ *
+ * A Garmin rate limit is an expected, actionable wait, and it was being reported
+ * with `logger.error` plus a full stack trace — so the screen filled with a
+ * kilobyte of Cloudflare JSON and a stack, and the one line that mattered ("wait
+ * N seconds") was buried in the middle of it. That reads as a crash, and the
+ * natural response to a crash is to run the command again, which is exactly the
+ * behaviour that extends the block.
+ */
+function reportCliFailure(error: unknown, fallback: string): void {
+  const rateLimited =
+    error instanceof GarminApiError && error.statusCode === 429 ? error : null;
+
+  if (rateLimited) {
+    logger.warn({ retryAfterSeconds: rateLimited.retryAfterSeconds }, fallback);
+    console.error("");
+    console.error(rateLimited.message);
+    console.error("Nothing was lost — every day already fetched is checkpointed.");
+    return;
+  }
+
+  logger.error({ error }, fallback);
+  console.error(error instanceof Error ? error.message : fallback);
 }
 
 function bootstrap(): void {
@@ -381,8 +408,7 @@ export function createCliProgram(): Command {
       try {
         await runBackfill(options);
       } catch (error) {
-        logger.error({ error }, "Backfill failed");
-        console.error(error instanceof Error ? error.message : "Backfill failed");
+        reportCliFailure(error, "Backfill failed");
         process.exitCode = 1;
       }
     });
@@ -420,8 +446,7 @@ export function createCliProgram(): Command {
       try {
         await runCheck();
       } catch (error) {
-        logger.error({ error }, "Live check failed");
-        console.error(error instanceof Error ? error.message : "Live check failed");
+        reportCliFailure(error, "Live check failed");
         process.exitCode = 1;
       }
     });

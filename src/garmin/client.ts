@@ -2,6 +2,7 @@ import type { GarminConnectInstance } from "./garminConnect.js";
 import { authenticateGarmin } from "./auth.js";
 import { logger } from "../utils/logger.js";
 import { GarminApiError } from "./types.js";
+import { deleteSetting, getSetting, setSetting } from "../appDb.js";
 
 // SECTION: Garmin Client Singleton
 
@@ -26,13 +27,64 @@ let clientPromise: Promise<GarminConnectInstance> | null = null;
  * with the reason is both faster and kinder to the upstream than nine identical
  * failures.
  */
-let authBlockedUntil: number | null = null;
+const COOLDOWN_UNTIL_KEY = "garmin_auth_blocked_until";
+const COOLDOWN_STEP_KEY = "garmin_auth_backoff_seconds";
+
+/** Cloudflare's own floor for this limit, from the 1015 body. */
+const MIN_COOLDOWN_SECONDS = 60;
+/** Past this, waiting longer is not the problem and something else is wrong. */
+const MAX_COOLDOWN_SECONDS = 30 * 60;
+
+/**
+ * The cooldown has to outlive the process.
+ *
+ * It was a module variable, which protects a single `trainbud serve` and does
+ * nothing at all for the CLI: every `trainbud backfill` is a new process, so it
+ * started with no memory of the limit, attempted a fresh login, and was refused
+ * again. Running the command a few times in a row is the single most natural
+ * thing for a user to do when it fails, and it was the exact behaviour that kept
+ * Garmin's login limit alive. Observed doing precisely that.
+ *
+ * Stored in the settings table, which every entry point already opens.
+ *
+ * The window doubles each time the limit is hit again, because that is what the
+ * upstream asks for in the 1015 body: "wait at least 30 seconds, then retry with
+ * exponential backoff". A fixed 60 seconds ignores an escalating block and walks
+ * straight back into it.
+ */
+function readCooldownUntil(): number | null {
+  const stored = getSetting(COOLDOWN_UNTIL_KEY);
+  if (!stored) {
+    return null;
+  }
+  const value = Number.parseInt(stored, 10);
+  return Number.isFinite(value) ? value : null;
+}
 
 function remainingCooldownSeconds(): number {
-  if (authBlockedUntil === null) {
+  const until = readCooldownUntil();
+  if (until === null) {
     return 0;
   }
-  return Math.max(0, Math.ceil((authBlockedUntil - Date.now()) / 1000));
+  return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+}
+
+function startCooldown(upstreamRetryAfter: number | null): number {
+  const previous = Number.parseInt(getSetting(COOLDOWN_STEP_KEY) ?? "", 10);
+  const base = Number.isFinite(previous) && previous > 0 ? previous * 2 : MIN_COOLDOWN_SECONDS;
+  const seconds = Math.min(
+    MAX_COOLDOWN_SECONDS,
+    Math.max(base, upstreamRetryAfter ?? 0, MIN_COOLDOWN_SECONDS)
+  );
+
+  setSetting(COOLDOWN_UNTIL_KEY, String(Date.now() + seconds * 1000));
+  setSetting(COOLDOWN_STEP_KEY, String(seconds));
+  return seconds;
+}
+
+function clearCooldown(): void {
+  deleteSetting(COOLDOWN_UNTIL_KEY);
+  deleteSetting(COOLDOWN_STEP_KEY);
 }
 
 /** Injectable for tests; production always authenticates for real. */
@@ -53,7 +105,7 @@ export async function getGarminClient(
   const cooldown = remainingCooldownSeconds();
   if (cooldown > 0) {
     throw new GarminApiError(
-      `Garmin sign-in is rate limited. Retry in about ${cooldown} seconds.`,
+      `Garmin is rate limiting sign-in. ${cooldown}s left to wait — every attempt before then extends it.`,
       429,
       cooldown
     );
@@ -92,18 +144,47 @@ export async function getGarminClient(
  * server that asks for longer gets longer. Cleared on success, so a login that
  * works immediately after the window costs nothing.
  */
+/**
+ * Runs a login without letting the upstream library print to the console.
+ *
+ * garmin-connect's handleHttpError does `console.error(msg)` and then
+ * `throw new Error(msg)` with the same string, so the kilobyte of Cloudflare
+ * 1015 JSON a user sees is a duplicate of an error we already catch and render
+ * as one actionable line. Printed first and unconditionally, it buried that line
+ * and made a "wait 60 seconds" look like a crash -- and the natural response to
+ * a crash is to run the command again, which extends the block.
+ *
+ * Kept at debug level rather than dropped: it is still the upstream's own
+ * account of what happened, and LOG_LEVEL=debug brings it back.
+ */
+async function withQuietUpstreamErrors<T>(fn: () => Promise<T>): Promise<T> {
+  const original = console.error;
+  console.error = (...args: unknown[]): void => {
+    logger.debug({ upstream: args.map(String).join(" ") }, "garmin-connect console output");
+  };
+  try {
+    return await fn();
+  } finally {
+    console.error = original;
+  }
+}
+
 async function trackAuthRateLimit(
   login: () => Promise<GarminConnectInstance>
 ): Promise<GarminConnectInstance> {
   try {
-    const client = await login();
-    authBlockedUntil = null;
+    const client = await withQuietUpstreamErrors(login);
+    clearCooldown();
     return client;
   } catch (error) {
     const rateLimited = toRateLimitError(error);
     if (rateLimited) {
-      authBlockedUntil = Date.now() + (rateLimited.retryAfterSeconds ?? 60) * 1000;
-      throw rateLimited;
+      const seconds = startCooldown(rateLimited.retryAfterSeconds ?? null);
+      throw new GarminApiError(
+        `Garmin is rate limiting sign-in. Waiting ${seconds}s before the next attempt; retrying sooner makes it last longer.`,
+        429,
+        seconds
+      );
     }
     throw error;
   }
@@ -112,7 +193,7 @@ async function trackAuthRateLimit(
 export function resetGarminClient(): void {
   clientInstance = null;
   clientPromise = null;
-  authBlockedUntil = null;
+  clearCooldown();
 }
 
 function isAuthError(error: unknown): boolean {
@@ -135,12 +216,29 @@ function toRateLimitError(error: unknown): GarminApiError | null {
     return null;
   }
 
+  // Already ours: it carries the real remaining cooldown, which is the number
+  // the user needs. Re-wrapping it replaced that with a hardcoded 60 seconds and
+  // told someone eight minutes into an escalated block to try again in one.
+  if (error instanceof GarminApiError && error.statusCode === 429) {
+    return error;
+  }
+
   const message = error.message.toLowerCase();
   if (!message.includes("429") && !message.includes("rate limit")) {
     return null;
   }
 
-  return new GarminApiError("Garmin rate limit reached. Retry in about 60 seconds.", 429, 60);
+  // Cloudflare puts the wait in the body it just sent us. Reading it beats
+  // guessing, and it is the difference between honouring an escalating block and
+  // walking back into it.
+  const retryAfter = /"retry_after"\s*:\s*(\d+)/.exec(error.message)?.[1];
+  const seconds = retryAfter ? Number.parseInt(retryAfter, 10) : 60;
+
+  return new GarminApiError(
+    `Garmin rate limit reached. Retry in about ${seconds} seconds.`,
+    429,
+    Number.isFinite(seconds) ? seconds : 60
+  );
 }
 
 export async function withGarminClient<T>(

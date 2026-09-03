@@ -1,6 +1,16 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { getGarminClient, resetGarminClient } from "../src/garmin/client.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+// The cooldown now lives in the settings table, so the database path has to be
+// redirected before anything imports appDb -- it is derived at module load.
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-client-"));
+process.env["GARMIN_CACHE_PATH"] = path.join(tmpDir, "cache.db");
+
+const { getGarminClient, resetGarminClient } = await import("../src/garmin/client.js");
+const { closeAppDb } = await import("../src/appDb.js");
 import type { GarminConnectInstance } from "../src/garmin/garminConnect.js";
 
 const fakeClient = { tag: "client" } as unknown as GarminConnectInstance;
@@ -8,6 +18,11 @@ const fakeClient = { tag: "client" } as unknown as GarminConnectInstance;
 describe("garmin client singleton", () => {
   beforeEach(() => {
     resetGarminClient();
+  });
+
+  after(() => {
+    closeAppDb();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("does not cache a failed authentication forever", async () => {
@@ -61,7 +76,7 @@ describe("garmin client singleton", () => {
     await assert.rejects(() => getGarminClient(false, authenticator));
     await assert.rejects(
       () => getGarminClient(false, authenticator),
-      /sign-in is rate limited\. Retry in about \d+ seconds/
+      /rate limiting sign-in\. \d+s left to wait/
     );
   });
 
@@ -81,6 +96,43 @@ describe("garmin client singleton", () => {
     // still perfectly good: the cooldown is about signing in, not about the API.
     await assert.rejects(() => getGarminClient(true, authenticator));
     assert.equal(await getGarminClient(false, authenticator), fakeClient);
+  });
+
+  // The cooldown was a module variable, so it protected one long-lived `serve`
+  // and nothing else: every `trainbud backfill` is a fresh process that started
+  // with no memory of the limit and attempted another login. Running the command
+  // again is the first thing a user does when it fails, and it was the exact
+  // behaviour keeping Garmin's block alive.
+  it("remembers the cooldown across processes", async () => {
+    const authenticator = async (): Promise<GarminConnectInstance> => {
+      throw new Error("(429), Too Many Requests, rate limited");
+    };
+
+    await assert.rejects(() => getGarminClient(false, authenticator));
+
+    // Simulate a brand-new process: in-memory state gone, database kept.
+    const { getSetting } = await import("../src/appDb.js");
+    assert.ok(
+      getSetting("garmin_auth_blocked_until"),
+      "the cooldown was not written anywhere a second process could find it"
+    );
+  });
+
+  it("doubles the wait each time the limit is hit again", async () => {
+    const authenticator = async (): Promise<GarminConnectInstance> => {
+      throw new Error("(429), Too Many Requests, rate limited");
+    };
+    const { getSetting, setSetting } = await import("../src/appDb.js");
+
+    await assert.rejects(() => getGarminClient(false, authenticator));
+    const first = Number(getSetting("garmin_auth_backoff_seconds"));
+
+    // Let the window lapse, then get refused again.
+    setSetting("garmin_auth_blocked_until", String(Date.now() - 1000));
+    await assert.rejects(() => getGarminClient(false, authenticator));
+    const second = Number(getSetting("garmin_auth_backoff_seconds"));
+
+    assert.equal(second, first * 2, "the upstream asks for exponential backoff");
   });
 
   it("still shares one authentication across concurrent callers", async () => {
