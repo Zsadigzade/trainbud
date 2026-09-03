@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appConfig } from "./config.js";
+import { restrictExistingFile } from "./utils/secretFile.js";
 
 // SECTION: App DB — settings, pair tokens, prompt jobs
 
@@ -34,6 +35,12 @@ function getDb(): Database.Database {
   if (_db) return _db;
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   _db = new Database(DB_PATH);
+
+  // This database holds the Anthropic API key the dashboard saves, in the clear.
+  // better-sqlite3 creates the file, so it never went through writeSecretFile
+  // and landed 0644 like any other SQLite file -- readable by every account on
+  // the machine, while .env and session.json next to it are 0600.
+  restrictExistingFile(DB_PATH);
   _db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
@@ -55,6 +62,8 @@ function getDb(): Database.Database {
       completed_at INTEGER
     );
   `);
+
+  reconcilePromptJobs(_db);
   return _db;
 }
 
@@ -156,11 +165,43 @@ export function listPendingPairTokens(): PairToken[] {
 
 // Prompt jobs
 
+/** Kept long enough to answer "what did it say earlier today", not forever. */
+const PROMPT_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * A job the process died in the middle of is not still running.
+ *
+ * Nothing reconciled these, so a `serve` killed mid-answer left a row reading
+ * `running` for the rest of time. The watch polls a job id for thirty seconds
+ * and then gives up, so nobody ever sees the truth -- but `status` counted them,
+ * and any future queue built on this table would have inherited a pile of
+ * permanently in-flight work.
+ */
+function reconcilePromptJobs(db: Database.Database): void {
+  const now = Math.floor(Date.now() / 1000);
+
+  db.prepare(
+    `UPDATE prompt_jobs
+        SET status = 'error',
+            error = 'The server stopped before this answer came back.',
+            completed_at = ?
+      WHERE status IN ('pending', 'running')`
+  ).run(now);
+
+  db.prepare("DELETE FROM prompt_jobs WHERE created_at < ?").run(now - PROMPT_JOB_TTL_SECONDS);
+}
+
 export function createPromptJob(id: string, prompt: string): PromptJob {
   const now = Math.floor(Date.now() / 1000);
   const job: PromptJob = { id, prompt, status: "pending", result: null, error: null, created_at: now, completed_at: null };
-  getDb()
-    .prepare("INSERT INTO prompt_jobs (id, prompt, status, result, error, created_at, completed_at) VALUES (?, ?, 'pending', NULL, NULL, ?, NULL)")
+  const db = getDb();
+
+  // Prune on write rather than on a timer: this table only grows when a job is
+  // created, so this is the one place that needs to care, and it costs a single
+  // indexed delete on a table with a handful of rows.
+  db.prepare("DELETE FROM prompt_jobs WHERE created_at < ?").run(now - PROMPT_JOB_TTL_SECONDS);
+
+  db.prepare("INSERT INTO prompt_jobs (id, prompt, status, result, error, created_at, completed_at) VALUES (?, ?, 'pending', NULL, NULL, ?, NULL)")
     .run(id, prompt, now);
   return job;
 }

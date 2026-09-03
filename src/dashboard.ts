@@ -374,65 +374,6 @@ export function renderDashboard(): string {
       }).catch(function (e) { toast(e.message, true); });
     });
 
-    function renderContext(entries) {
-      var host = document.getElementById('context');
-      if (!entries || entries.length === 0) {
-        host.innerHTML = '<p class="muted">Nothing on record yet.</p>';
-        return;
-      }
-      // textContent for every value: this is the user's own text coming back
-      // out of the store, and innerHTML here would run whatever it contains.
-      host.innerHTML = '';
-      entries.forEach(function (entry) {
-        var row = document.createElement('div');
-        row.className = 'alert';
-        var label = document.createElement('span');
-        label.textContent = entry.kind + ': ' + entry.text +
-          (entry.effective_to ? ' (until ' + entry.effective_to + ')' : '');
-        var close = document.createElement('button');
-        close.className = 'btn-ghost';
-        close.style.marginLeft = '10px';
-        close.textContent = 'Done';
-        close.addEventListener('click', function () { closeContext(entry.id); });
-        row.appendChild(label);
-        row.appendChild(close);
-        host.appendChild(row);
-      });
-    }
-
-    function closeContext(id) {
-      fetch('/dashboard/context/close', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
-        body: JSON.stringify({ id: id })
-      }).then(function (r) {
-        if (!r.ok) { throw new Error('Could not close that entry'); }
-        toast('Closed');
-        refresh();
-      }).catch(function (e) { toast(e.message, true); });
-    }
-
-    document.getElementById('context-form').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var form = e.target;
-      fetch('/dashboard/context', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
-        body: JSON.stringify({
-          kind: form.kind.value,
-          text: form.text.value,
-          effective_to: form.effective_to.value || undefined
-        })
-      }).then(function (r) {
-        return r.json().then(function (body) {
-          if (!r.ok) { throw new Error(body.error || 'Could not save that'); }
-          toast('Saved');
-          form.text.value = '';
-          form.effective_to.value = '';
-          refresh();
-        });
-      }).catch(function (e) { toast(e.message, true); });
-    });
 
     document.getElementById('copy-url').addEventListener('click', function () {
       var text = document.getElementById('setup-url').textContent;

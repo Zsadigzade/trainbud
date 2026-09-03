@@ -25,3 +25,26 @@ export function writeSecretFile(filePath: string, contents: string): void {
     fs.chmodSync(filePath, OWNER_ONLY);
   }
 }
+
+/**
+ * Tighten a file this process did not write itself.
+ *
+ * `.trainbud/app.db` is created by better-sqlite3, not by writeSecretFile, so it
+ * missed the hardening the other three credential files got -- and it holds the
+ * Anthropic API key the dashboard saves, in the clear, in a table. It landed
+ * 0644 like every other SQLite file, readable by every account on the machine.
+ *
+ * Silent on failure on purpose: a database that cannot be chmod'ed is still a
+ * working database, and refusing to start over a permission bit would be a
+ * worse outcome than the bit.
+ */
+export function restrictExistingFile(filePath: string): void {
+  if (process.platform === "win32") {
+    return;
+  }
+  try {
+    fs.chmodSync(filePath, OWNER_ONLY);
+  } catch {
+    // Nothing useful to do: the data still works, the bits do not.
+  }
+}

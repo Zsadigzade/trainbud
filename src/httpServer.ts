@@ -334,6 +334,22 @@ export function redactQuery(search: string | null | undefined): string {
   return "?" + params.toString().replace(/%3Credacted%3E/gi, "<redacted>");
 }
 
+/**
+ * Redact a live pairing code out of a request path.
+ *
+ * The query string was redacted and the path was not, so every status poll wrote
+ * `/api/pair/418902/status` into the log -- a code that is, for the next five
+ * minutes, a bearer credential: `/api/pair/<code>/status` hands out the API key
+ * the moment it is approved. The log file sits next to the database and, until
+ * the fix above, was as readable as it was.
+ *
+ * The code is the thing worth hiding; the shape of the path is worth keeping,
+ * because "did the watch poll at all" is the question this log exists to answer.
+ */
+export function redactPath(pathname: string): string {
+  return pathname.replace(/^\/api\/pair\/[^/]+/, "/api/pair/<code>");
+}
+
 // The public URL to hand a watch during pairing.
 //
 // This used to come solely from appConfig.publicUrl, which falls back to
@@ -386,8 +402,47 @@ export function createHttpMcpServer(): HttpMcpServer {
         process.env["ANTHROPIC_API_KEY"] = savedClaudeKey;
       }
 
-      httpServer = http.createServer(async (req, res) => {
-        const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      httpServer = http.createServer((req, res) => {
+        // Nothing in the handler may take the process down.
+        //
+        // The whole body was one unguarded `async` callback, so any throw
+        // anywhere in three hundred lines became an unhandled rejection, and
+        // Node has exited the process on those by default since v15. Two ways in
+        // were reachable with no credential at all:
+        //
+        //   * `new URL(..., "http://" + req.headers.host)` was the FIRST
+        //     statement, before rate limiting and before any auth check. Node's
+        //     parser accepts a Host header that is not a valid URL authority
+        //     ("a b", "[", "%"); new URL then throws ERR_INVALID_URL.
+        //   * `await readRawBody(req)` throws on an oversized or truncated body,
+        //     outside any try/catch.
+        //
+        // Reachability is limited in the documented deployment -- the server
+        // binds loopback and a tunnel routes by Host, so a malformed Host
+        // largely cannot traverse it -- but "the crash is hard to reach" is a
+        // property of today's deployment, not of the code, and the fix is a
+        // wrapper.
+        void handleRequest(req, res).catch((error: unknown) => {
+          logger.error({ error, url: req.url }, "Unhandled error in request handler");
+          if (!res.headersSent) {
+            sendJson(res, 500, { error: "Internal Server Error" });
+          } else if (!res.writableEnded) {
+            res.end();
+          }
+        });
+      });
+
+      const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+        // A Host that is not a valid authority is not worth a 500: fall back to
+        // a name that always parses. The host only matters for reading the path
+        // and, in resolvePublicUrl, for telling a paired watch where to call
+        // back -- and that path validates its own input.
+        let url: URL;
+        try {
+          url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+        } catch {
+          url = new URL(req.url ?? "/", "http://localhost");
+        }
         const pathname = normalizePathname(url.pathname);
 
         // Every request, with the client's identity. Without this there is no way
@@ -401,7 +456,7 @@ export function createHttpMcpServer(): HttpMcpServer {
             // watch app was deliberately sending for exactly this purpose.
             // Redacted, because the dashboard passes the API key as ?token= and
             // this line was writing it to the log file in plaintext.
-            path: pathname + redactQuery(url.search),
+            path: redactPath(pathname) + redactQuery(url.search),
             ua: req.headers["user-agent"] ?? "(none)",
             accept: req.headers["accept"] ?? "(none)",
             encoding: req.headers["accept-encoding"] ?? "(none)",
@@ -591,6 +646,12 @@ export function createHttpMcpServer(): HttpMcpServer {
           if (key && key.length > 0) {
             setSetting("anthropic_api_key", key);
             process.env["ANTHROPIC_API_KEY"] = key;
+            // The watch summary carries ai_configured, and it is cached for five
+            // minutes. Without dropping it here the user pastes a key, the
+            // dashboard says "enabled", and the watch keeps drawing "AI not set
+            // up" for another five minutes -- which is exactly the confusion
+            // this whole release exists to end.
+            watchApiCache = null;
           }
 
           if (wantsJson(req)) {
@@ -748,7 +809,7 @@ export function createHttpMcpServer(): HttpMcpServer {
         }
 
         sendJson(res, 404, { error: "Not Found" });
-      });
+      };
 
       await new Promise<void>((resolve, reject) => {
         httpServer!.listen(appConfig.mcpPort, appConfig.mcpHost, (error?: Error) => {

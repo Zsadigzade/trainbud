@@ -77,21 +77,95 @@ export function generateApiKey(): string {
   return randomBytes(32).toString("hex");
 }
 
+/**
+ * Quote a value so dotenv reads back exactly what was written.
+ *
+ * Values were written bare, and dotenv treats an unquoted `#` as the start of a
+ * comment: a Garmin password containing one was silently truncated at that
+ * character, so setup "succeeded" and every login afterwards failed with bad
+ * credentials the user could see were correct. Measured, not assumed --
+ * `P=pa#ss` parses back as `pa`.
+ *
+ * Single quotes are preferred: dotenv does no unescaping inside them, so `#`,
+ * `"`, `$`, spaces and backslashes all survive verbatim. Double quotes are the
+ * fallback for a value containing a single quote. A value containing both
+ * cannot be represented -- dotenv has no escape that works inside either kind --
+ * so that is an error rather than a silent corruption.
+ */
+export function quoteEnvValue(value: string): string {
+  if (!value.includes("'")) {
+    return `'${value}'`;
+  }
+  if (!value.includes('"')) {
+    return `"${value}"`;
+  }
+  throw new Error(
+    "A value containing both ' and \" cannot be stored in .env. Change the password, or set it in the environment instead."
+  );
+}
+
+/** Keys this file writes itself. Anything else in an existing .env is the
+    user's and is carried across untouched. */
+const MANAGED_ENV_KEYS = new Set([
+  "GARMIN_EMAIL",
+  "GARMIN_PASSWORD",
+  "TRAINBUD_API_KEY",
+  "TRAINBUD_HOST",
+  "TRAINBUD_PORT",
+  "TRAINBUD_SESSION_PATH",
+  "TRAINBUD_LOG_PATH",
+  "TRAINBUD_CACHE_PATH",
+  "CACHE_TTL_ACTIVITIES",
+  "CACHE_TTL_SLEEP",
+  "CACHE_TTL_STATS",
+  // The pre-0.3.0 names for the same settings, so re-running setup does not
+  // resurrect a duplicate under the old name.
+  "GARMIN_MCP_API_KEY",
+  "GARMIN_MCP_HOST",
+  "GARMIN_MCP_PORT",
+  "GARMIN_SESSION_PATH",
+  "GARMIN_LOG_PATH",
+  "GARMIN_CACHE_PATH",
+]);
+
+/**
+ * Every assignment in an existing .env that this file does not manage.
+ *
+ * writeEnvFile rebuilt the file from a fixed template, so re-running
+ * `trainbud setup` deleted ANTHROPIC_API_KEY and TRAINBUD_PUBLIC_URL outright --
+ * a user who had followed the AI setup guide lost their key by running the
+ * command the guide tells them to run when something is wrong.
+ */
+export function carriedEnvLines(existing: string): string[] {
+  const carried: string[] = [];
+
+  for (const line of existing.split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+    if (match && !MANAGED_ENV_KEYS.has(match[1] as string)) {
+      carried.push(line.trim());
+    }
+  }
+
+  return carried;
+}
+
 export function writeEnvFile(credentials: { email: string; password: string; apiKey?: string }): string {
   const envPath = getEnvFilePath();
   const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
   const existingApiKey =
     existing.match(/^TRAINBUD_API_KEY=(.+)$/m)?.[1]?.trim() ??
     existing.match(/^GARMIN_MCP_API_KEY=(.+)$/m)?.[1]?.trim();
-  const apiKey = credentials.apiKey ?? existingApiKey ?? generateApiKey();
+  const apiKey = (credentials.apiKey ?? existingApiKey ?? generateApiKey())
+    .replace(/^['"]|['"]$/g, "");
+  const carried = carriedEnvLines(existing);
 
   const lines = [
     "# Connect account these credentials belong to",
-    `GARMIN_EMAIL=${credentials.email}`,
-    `GARMIN_PASSWORD=${credentials.password}`,
+    `GARMIN_EMAIL=${quoteEnvValue(credentials.email)}`,
+    `GARMIN_PASSWORD=${quoteEnvValue(credentials.password)}`,
     "",
     "# TrainBud server",
-    `TRAINBUD_API_KEY=${apiKey}`,
+    `TRAINBUD_API_KEY=${quoteEnvValue(apiKey)}`,
     "TRAINBUD_HOST=127.0.0.1",
     "TRAINBUD_PORT=3847",
     `TRAINBUD_SESSION_PATH=${DATA_DIR_NAME}/session.json`,
@@ -102,8 +176,13 @@ export function writeEnvFile(credentials: { email: string; password: string; api
     "CACHE_TTL_STATS=3600",
     "",
     "# Optional — AI features (bring your own key)",
-    "# ANTHROPIC_API_KEY=sk-ant-...",
-    "# TRAINBUD_PUBLIC_URL=https://your-tunnel.example.com",
+    ...(carried.some((line) => line.startsWith("ANTHROPIC_API_KEY="))
+      ? []
+      : ["# ANTHROPIC_API_KEY=sk-ant-..."]),
+    ...(carried.some((line) => line.startsWith("TRAINBUD_PUBLIC_URL="))
+      ? []
+      : ["# TRAINBUD_PUBLIC_URL=https://your-tunnel.example.com"]),
+    ...(carried.length > 0 ? ["", "# Kept from your previous .env", ...carried] : []),
     "",
   ];
 
