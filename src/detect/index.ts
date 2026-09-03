@@ -14,6 +14,22 @@ import type { DetectorInput, Finding, FindingSeverity } from "./findings.js";
 /** Below this, the store describes a fortnight's mood rather than a person. */
 const READY_DAYS = 14;
 
+/**
+ * How old the newest measurement may be before "nothing stands out" stops being
+ * an answer.
+ *
+ * Coverage counted total days and ignored recency, so a store holding 74 days
+ * that stopped three weeks ago reported `ready: true` and every detector then
+ * correctly found nothing -- because there was nothing recent to find. The app
+ * told the user, confidently, that nothing stood out. That is the exact failure
+ * the cold-start guard exists to prevent: an absence rendered as a clean bill of
+ * health. It just was not looking at the right absence.
+ *
+ * Three days of grace: Garmin finalises a sleep score hours after waking, and a
+ * watch that has not been synced since yesterday is normal.
+ */
+const MAX_STALE_DAYS = 3;
+
 /** Every metric a detector reads, for the coverage figure. */
 const COVERAGE_KINDS: MetricKind[] = ["resting_hr", "sleep_seconds", "hrv_overnight"];
 
@@ -28,6 +44,10 @@ export interface DetectionResult {
   coverage: {
     days: number;
     ready: boolean;
+    /** Newest date with any measurement, or null for an empty store. */
+    throughDate: string | null;
+    /** Days between that and today. 0 when the record is current. */
+    staleDays: number;
   };
 }
 
@@ -58,10 +78,25 @@ export function buildDetectorInput(now: DateTime = DateTime.local()): DetectorIn
  * surfaces read the flag, never the length of the array.
  */
 export function runDetectors(input: DetectorInput = buildDetectorInput()): DetectionResult {
-  const days = Math.max(
-    0,
-    ...COVERAGE_KINDS.map((kind) => input.series(kind, 365).length)
-  );
+  const series = COVERAGE_KINDS.map((kind) => input.series(kind, 365));
+  const days = Math.max(0, ...series.map((points) => points.length));
+
+  // The newest measurement of any kind, and how old it is. A detector compares
+  // a recent day against a baseline; with no recent day there is nothing to
+  // compare, and saying "nothing stands out" would be a claim about a day that
+  // was never recorded.
+  const throughDate =
+    series
+      .map((points) => points.at(-1)?.date ?? null)
+      .filter((date): date is string => date !== null)
+      .sort()
+      .at(-1) ?? null;
+
+  const today = input.now.startOf("day");
+  const staleDays =
+    throughDate === null
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(0, Math.round(today.diff(DateTime.fromISO(throughDate).startOf("day"), "days").days));
 
   const findings = [
     detectRestingHrElevation(input),
@@ -82,7 +117,9 @@ export function runDetectors(input: DetectorInput = buildDetectorInput()): Detec
     findings,
     coverage: {
       days,
-      ready: days >= READY_DAYS,
+      ready: days >= READY_DAYS && staleDays <= MAX_STALE_DAYS,
+      throughDate,
+      staleDays: throughDate === null ? 0 : staleDays,
     },
   };
 }

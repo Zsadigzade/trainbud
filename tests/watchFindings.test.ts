@@ -79,7 +79,7 @@ describe("findings on the watch payload", () => {
     const summary = buildWatchSummaryFrom({
       ...EMPTY_PARTS,
       findings: [finding()],
-      coverage: { days: 73, ready: true },
+      coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 },
     });
 
     assert.equal(summary.findings.length, 1);
@@ -94,7 +94,7 @@ describe("findings on the watch payload", () => {
     const summary = buildWatchSummaryFrom({
       ...EMPTY_PARTS,
       findings: [],
-      coverage: { days: 0, ready: false },
+      coverage: { days: 0, ready: false, throughDate: null, staleDays: 0 },
     });
 
     assert.deepEqual(summary.findings, []);
@@ -105,7 +105,7 @@ describe("findings on the watch payload", () => {
 describe("the context the model is given", () => {
   it("names every finding and every active context entry", () => {
     const text = formatFindingsContext(
-      { findings: [finding()], coverage: { days: 73, ready: true } },
+      { findings: [finding()], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
       [entry(), entry({ id: 2, kind: "injury", text: "Left achilles", effectiveTo: null })]
     );
 
@@ -116,7 +116,7 @@ describe("the context the model is given", () => {
 
   it("says nothing stands out when the store is ready and quiet", () => {
     const text = formatFindingsContext(
-      { findings: [], coverage: { days: 73, ready: true } },
+      { findings: [], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
       []
     );
 
@@ -127,7 +127,7 @@ describe("the context the model is given", () => {
   // Otherwise the model writes a confident daily sentence out of no data.
   it("says it is still gathering when coverage is not ready", () => {
     const text = formatFindingsContext(
-      { findings: [], coverage: { days: 4, ready: false } },
+      { findings: [], coverage: { days: 4, ready: false, throughDate: null, staleDays: 0 } },
       []
     );
 
@@ -137,7 +137,7 @@ describe("the context the model is given", () => {
 
   it("mentions when there is no context on record at all", () => {
     const text = formatFindingsContext(
-      { findings: [finding()], coverage: { days: 73, ready: true } },
+      { findings: [finding()], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
       []
     );
 
@@ -150,7 +150,7 @@ describe("prompts on the watch payload", () => {
     const summary = buildWatchSummaryFrom({
       ...EMPTY_PARTS,
       findings: [finding()],
-      coverage: { days: 73, ready: true },
+      coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 },
     });
 
     assert.equal(summary.prompts.length, 5);
@@ -161,7 +161,7 @@ describe("prompts on the watch payload", () => {
     const summary = buildWatchSummaryFrom({
       ...EMPTY_PARTS,
       findings: [],
-      coverage: { days: 2, ready: false },
+      coverage: { days: 2, ready: false, throughDate: null, staleDays: 0 },
     });
 
     assert.equal(summary.prompts.length, 5);

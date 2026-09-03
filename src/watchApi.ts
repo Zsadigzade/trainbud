@@ -84,6 +84,15 @@ export interface WatchFinding {
 export interface WatchCoverage {
   days: number;
   ready: boolean;
+  /** Newest date the store holds any measurement for, or null when empty. */
+  throughDate: string | null;
+  /**
+   * How many days old that is. `ready` is false once this passes the grace
+   * period: a store that stopped three weeks ago has plenty of days and nothing
+   * recent to compare, and "nothing stands out" would be a claim about a day
+   * that was never recorded.
+   */
+  staleDays: number;
 }
 
 /**

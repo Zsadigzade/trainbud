@@ -65,7 +65,15 @@ export function formatFindingsContext(
 ): string {
   const lines: string[] = [];
 
-  if (!result.coverage.ready) {
+  if (result.coverage.days > 0 && result.coverage.staleDays > 3) {
+    // The record has plenty of days and stops weeks ago. Saying "nothing stands
+    // out" here is a claim about days that were never recorded, and it is the
+    // single most misleading thing this prompt can contain: the model repeats it
+    // as reassurance.
+    lines.push(
+      `The stored record has ${result.coverage.days} days but ENDS ON ${result.coverage.throughDate}, which is ${result.coverage.staleDays} days ago. Nothing is known about the days since. Do not reassure the user that things look fine, and do not describe today: say the record is out of date and that running \`trainbud backfill\` will bring it current.`
+    );
+  } else if (!result.coverage.ready) {
     lines.push(
       `Still gathering data: only ${result.coverage.days} days of history are stored, which is not yet enough to compare anything against a baseline. Say so rather than reassuring the user.`
     );
@@ -92,8 +100,8 @@ export function formatFindingsContext(
   return lines.join("\n");
 }
 
-function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummary>>): string {
-  const lines: string[] = ["Current health snapshot:"];
+export function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummary>>): string {
+  const lines: string[] = [];
 
   if (summary.recovery) {
     lines.push(`- Recovery: ${summary.recovery.score}/100 (${summary.recovery.label})`);
@@ -149,7 +157,26 @@ function formatHealthContext(summary: Awaited<ReturnType<typeof buildWatchSummar
     );
   }
 
-  return lines.join("\n");
+  // An empty section headed "Current health snapshot:" is worse than no section.
+  //
+  // Every field above comes from a live Garmin call, and when that call fails --
+  // an expired session, a rate limit, no network -- all of them are null. The
+  // header was printed unconditionally, so the model received a heading with
+  // nothing under it and correctly concluded it had been given no data about the
+  // user. What the user then reads is "the AI cannot see my data", which is true,
+  // and infers "the app is broken", which is a different thing from "Garmin did
+  // not answer just now".
+  //
+  // Say which it is, and point the model at the stored history above, which is
+  // real and still worth reasoning about.
+  if (lines.length === 0) {
+    return [
+      "No live metrics are available right now: the request to Garmin did not return today's figures. This is a connection problem, not an absence of data about this user.",
+      "Say that today's numbers could not be fetched, then answer from the stored history above if it supports an answer. Never invent current values, and do not tell the user you have no access to their data.",
+    ].join("\n");
+  }
+
+  return ["Current health snapshot:", ...lines].join("\n");
 }
 
 async function callClaude(prompt: string, healthContext: string): Promise<string> {

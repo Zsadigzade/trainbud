@@ -20,7 +20,7 @@ function finding(kind: FindingKind): Finding {
 }
 
 function ready(findings: Finding[]): DetectionResult {
-  return { findings, coverage: { days: 73, ready: true } };
+  return { findings, coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } };
 }
 
 function entry(kind: ContextEntry["kind"], text: string): ContextEntry {
@@ -53,7 +53,7 @@ describe("prompt suggestions", () => {
       5
     );
     assert.equal(
-      buildPromptSuggestions({ findings: [], coverage: { days: 3, ready: false } }).length,
+      buildPromptSuggestions({ findings: [], coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 } }).length,
       5
     );
   });
@@ -104,7 +104,7 @@ describe("prompt suggestions", () => {
   it("offers cold-start questions before there is enough history", () => {
     const prompts = buildPromptSuggestions({
       findings: [],
-      coverage: { days: 3, ready: false },
+      coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 },
     });
 
     assert.match(prompts[0] ?? "", /how much data/i);
@@ -132,7 +132,7 @@ describe("prompt suggestions", () => {
     const cases: DetectionResult[] = [
       ready([]),
       ready([finding("rhr_elevated"), finding("load_ratio_high")]),
-      { findings: [], coverage: { days: 3, ready: false } },
+      { findings: [], coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 } },
     ];
 
     for (const result of cases) {

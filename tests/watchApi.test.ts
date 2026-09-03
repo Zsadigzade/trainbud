@@ -175,7 +175,7 @@ describe("watch mappers", () => {
       vo2max: null,
       heartRate: null,
       findings: [],
-      coverage: { days: 0, ready: false },
+      coverage: { days: 0, ready: false, throughDate: null, staleDays: 0 },
       context: [],
       week: null,
       race: null,
