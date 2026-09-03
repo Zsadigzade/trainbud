@@ -89,6 +89,36 @@ To use skills in **every** project without the plugin, copy them to `~/.claude/s
 
 After setup, restart your MCP client and try `/trainbud` with *"What did I do today?"*
 
+## Dashboard
+
+`trainbud serve` hosts a dashboard at `/dashboard`. It is phone-first, because the
+pairing flow is: you are standing next to the watch holding a phone when you approve a
+code.
+
+It shows what stands out today against your own baselines, this week against last week,
+and resting heart rate and sleep plotted against your own 30-day median — all read from
+the local history store, so it paints instantly and works even when your Connect session
+has expired. **A break in a line is a day with no measurement, not a zero.**
+
+It is also where you tell TrainBud who it is talking to:
+
+| Setting | What it changes |
+|---|---|
+| Name, units, primary sport, weekly goal | Every renderer, and what the AI is told about you |
+| Thresholds | Where green becomes amber and amber becomes red — on the watch too |
+| Watch cards | Which cards appear on the wrist and in what order, live on the next sync |
+| AI model, tone, answer length | How the Ask card and the daily insight sound |
+| Monthly spending cap | Optional. Refuses an Ask past the cap instead of spending past it |
+| Privacy | Local feature counters, on by default, with a delete button |
+
+**Usage.** TrainBud runs on your own AI provider key, so every question and every daily
+insight is charged to you. The dashboard shows the tokens and cost per call, the month to
+date, and a 30-day chart. A model this build has no published price for is recorded with
+its cost left *unknown* rather than as zero — a call priced at zero would make a cap that
+can never trip.
+
+Nothing on this page leaves your machine. There is no endpoint to send it to.
+
 ## Garmin watch widget (Connect IQ)
 
 View recovery, sleep, activity, stress, and VO2 max on your Garmin watch via a Connect IQ widget in [`ciq/`](./ciq/).

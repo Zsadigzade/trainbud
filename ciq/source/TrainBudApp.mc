@@ -540,6 +540,19 @@ class TrainBudApp extends Application.AppBase {
             url = url + watchPath;
         }
 
+        // Which card the user was on when they synced.
+        //
+        // The server counts these locally so the app can answer "which of nine
+        // cards does anyone actually open" -- a question it could not answer
+        // about itself. Carried on a request the watch was already making
+        // rather than reported per swipe: a request every time a wrist turns is
+        // a battery cost, and the answer is not worth one.
+        //
+        // Nothing identifying, nothing sent anywhere. The counters live in
+        // app.db on the user's own machine and there is no endpoint to send
+        // them to.
+        url = url + "?card=" + currentCardId() + "&build=" + BUILD_ID;
+
         setStatus("loading");
         WatchUi.requestUpdate();
         startFetchTimer();

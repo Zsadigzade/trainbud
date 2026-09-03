@@ -16,6 +16,7 @@ import {
   featureCounts,
   monthToDateSpend,
   recentAiUsage,
+  recordFeature,
 } from "./usage.js";
 import { closeAppDb, reconcilePromptJobsOnStartup, setSetting } from "./appDb.js";
 import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
@@ -629,6 +630,11 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
 
+          // After the auth check, never before it: a counter incremented on
+          // the unauthenticated path is a counter anyone on the tunnel can
+          // drive, and this one is the user's own record of what they asked.
+          recordFeature("ai.ask");
+
           let body: unknown;
           try {
             body = await readJsonBody(req);
@@ -967,6 +973,16 @@ export function createHttpMcpServer(): HttpMcpServer {
             });
             return;
           }
+
+          // Which card the watch was showing. It rides along on a request the
+          // watch was already making; counting it per swipe would cost a
+          // request every time a wrist turns. Unknown ids are ignored rather
+          // than stored, so a query string cannot mint arbitrary counter rows.
+          const card = url.searchParams.get("card");
+          if (card && (CARD_IDS as readonly string[]).includes(card)) {
+            recordFeature(`card.${card}`);
+          }
+          recordFeature("watch.sync");
 
           try {
             const summary = await getCachedWatchSummary();

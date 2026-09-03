@@ -1,14 +1,20 @@
 # TrainBud Privacy Policy
 
-**Last updated:** August 17, 2026
+**Last updated:** September 4, 2026
 
 TrainBud is an open-source Connect IQ app and companion server project maintained by Zsadigzade.
 
 ## Summary
 
 TrainBud has no backend of its own. There is no TrainBud account, no TrainBud server, and
-no telemetry. The watch talks only to a server **you** run and a URL **you** enter. Your
-data goes where you send it, and nowhere else.
+no telemetry — nothing is reported to the maintainers or to any third party. The watch
+talks only to a server **you** run and a URL **you** enter. Your data goes where you send
+it, and nowhere else.
+
+TrainBud does keep two kinds of counter, and both stay on your own machine: how much your
+AI provider key has been spent, and which app screens get opened. They exist so the
+software can answer those questions to *you* — there is no endpoint to send them to and
+none is planned. Both are described under "What is stored on your computer" below.
 
 ## What the watch app does
 
@@ -17,6 +23,11 @@ data goes where you send it, and nowhere else.
   then stores the resulting access token in Connect IQ local storage
 - Sends authenticated requests to that server over HTTPS to fetch a health summary, and —
   only if you use the Ask AI card — to submit a preset question
+- Includes, on that same summary request, the id of the card you were last looking at
+  (for example `card=today`) and the app version. Your server counts these locally so the
+  dashboard can show you which screens you actually use. It is sent to **your** server on
+  a request the watch was already making, it is never sent anywhere else, and you can turn
+  the counting off in the dashboard
 - Displays the response and caches the last successful summary on the watch for offline
   viewing
 
@@ -33,6 +44,27 @@ When you run `trainbud serve` on your own computer:
 - Session, cache and pairing files stay on your machine under `.trainbud/`
 
 You control where the server runs, which tunnel URL you expose, and who holds the API key.
+
+## What is stored on your computer
+
+Everything in this section lives in `.trainbud/` on the machine running the server. None
+of it is transmitted anywhere. There is no endpoint to send it to.
+
+- **Your fitness history** — `history.db`, the measurements the server has fetched from
+  Connect, so it can compare today against your own baseline rather than against a
+  population average
+- **Your profile** — name, units, primary sport, weekly goal, the thresholds at which a
+  number turns amber or red, your watch card order, and your AI preferences. All of it is
+  optional and all of it is set by you, in the dashboard
+- **AI spending** — for each AI request: the time, the model, the token counts and the
+  cost. This is what lets the dashboard show what your provider key has been spent this
+  month and lets you set a cap. Deleting it would make a cap you had set wrong for the
+  rest of the month, so it is kept for the billing month
+- **Feature counters** — a per-day count of which watch cards you open and how often the
+  Ask and sync paths run. On by default, because it never leaves the machine; you can
+  switch it off in the dashboard under Privacy, and there is a button there to delete
+  everything already counted. Turning it off stops the counting and does not, by itself,
+  erase what is already stored
 
 ## AI features — read this before enabling them
 

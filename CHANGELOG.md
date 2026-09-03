@@ -2,7 +2,97 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — server 0.4.1 · watch 1.4.0
+## [Unreleased] — server 0.5.0 · watch 2.0.0
+
+TrainBud knew a great deal about your body and nothing about you. This release
+adds the half that was missing, and takes four decisions off the watch that it
+was never in a position to make.
+
+### Added — a profile, and a product that knows who it is talking to
+
+- **`src/profile.ts`** — name, units, primary sport, weekly goal, the bands at
+  which a number turns amber or red, the watch card order, and the AI's voice.
+  One row of `app.db`, read by every surface. Reads salvage field by field
+  (a settings row that is not JSON is wreckage, not configuration, and
+  `getProfile` sits on the path of every watch fetch); writes are strict and
+  name the field they refused.
+- **Personal thresholds decide colour everywhere.** Resting heart rate is graded
+  on the distance from *your own* median rather than on the rate — 58 bpm is
+  unremarkable for one person and a warning for another.
+- **Card order and visibility** are set in the dashboard and live on the watch's
+  next fetch. No Connect IQ settings sync, no store update.
+
+### Added — what the AI costs, which nothing had ever counted
+
+- Every AI call records its tokens and its price. Month-to-date spend is a
+  **calendar month**, not a rolling thirty days: a cap on a sliding window never
+  resets, and the number is compared against a bill that runs in months.
+- An optional monthly cap **refuses the request before the money is spent**, and
+  says so on the watch instead of after a round trip. No cap is set by default,
+  so nothing is ever blocked out of the box.
+- **An unknown price is null, never zero.** A model this build has no rate for
+  records its tokens and leaves the cost unknown, because a call priced at zero
+  is a cap that can never trip. Every total carries the count of calls it could
+  not price and says when it is a floor rather than a total.
+
+### Added — a training dashboard
+
+- Phone first, because the pairing flow already was. Findings, the week against
+  last week, resting heart rate and sleep against your own median, spend, and
+  every setting above.
+- Drawn from local SQLite and nothing else — no Garmin round trip, so it paints
+  instantly and works with an expired session. Charts are inline SVG built by
+  pure functions; there is no CDN, because a script tag would tell a third party
+  every time you opened your own health dashboard.
+- **A missing day is a gap, not a zero.** Lines break at an absence, days are
+  placed by date rather than by array position, and a chart with nothing to draw
+  says so instead of rendering an empty axis that reads as "zero, every day".
+
+### Added — local feature counters
+
+Which of the nine cards anyone opens, and how often the Ask path runs. Counted
+on a request the watch was already making rather than per swipe. On by default
+because there is no endpoint to send them to; switchable off, with a delete
+button, in the dashboard under Privacy.
+
+### Changed — the watch draws state, it no longer decides it
+
+`recoveryColor`, `sleepColor`, `stressColor` and `heartRateColor` are gone from
+the Monkey C. The server grades; the watch colours. That removed three defects
+rather than moving code: the Overview grid graded two of its four cells and
+recovered the number by re-parsing its own formatted string (`parseNumber("6.3h")`
+returns 6); `heartRateColor` painted one line holding both the resting and the
+maximum heart rate while grading only the resting one; and a missing value fell
+through to white, which is also what "graded and unremarkable" looks like.
+
+### Fixed — on the wrist
+
+- A finding that does not fit is **counted, not dropped**. The same payload
+  showed two findings on a Fenix and one, silently, on a Forerunner 55.
+- The recovery ring no longer strikes through the heart-rate line beneath it.
+  A circle narrows as it descends; the label had been tested against that since
+  1.3.2 and the line under it never was.
+- Severity is a marker, not the text colour. A warning arrived as five lines of
+  red on black — the least legible combination there is on a transflective
+  screen in daylight.
+- A big **fall** in training load is marked. Only a rise was, so a 40% collapse
+  — the shape of an illness week — passed without a mark.
+- Colours are chosen against the worst screen in the manifest. The Forerunner 55
+  has an eight-colour palette and rounds everything to the nearest entry, which
+  is why "good" is `#4CD964`: the mint the dashboard shipped with rounds to CYAN
+  there.
+
+### Fixed — verification
+
+The Forerunner 55 could not finish the screen tour. It died partway through,
+twice, reported as "keypress did not register" — which reads exactly like the
+simulator being flaky, and was not: the tour allocated a second full payload
+while the first was still live, and on that device it is the difference between
+fitting and not. All 28 states now capture on fr55 and fenix847mm.
+
+---
+
+## [0.4.1] — server 0.4.1 · watch 1.4.0
 
 "The AI says it has no access to my data" was reported once and fixed once, in
 `bb1fae8`. This release is what an audit found behind it: **four more distinct

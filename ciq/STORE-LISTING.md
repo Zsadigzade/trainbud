@@ -23,7 +23,7 @@ Health & Fitness
 
 ## Version
 
-1.3.1
+2.0.0
 
 ## Short description
 
@@ -123,6 +123,27 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > # pair the simulated watch via the dashboard, then File > Save Screenshot per card
 > ```
 > Capture at least: glance, Overview, Recovery, and Ask AI with a real answer.
+
+## What changed in 2.0.0
+
+- **Your thresholds, not ours.** The bands where a number turns amber or red are set in
+  the companion dashboard, and the watch follows them. Resting heart rate is graded on
+  the distance from your own median rather than on the rate itself — 58 bpm means
+  something different for different people.
+- **Your carousel.** Hide cards you never open and put the rest in the order you want,
+  from the dashboard. It applies on the watch's next sync; there is nothing to change in
+  Connect IQ settings.
+- **A spending cap for the AI, if you want one.** The app runs on your own AI provider
+  key, so every question costs you money and nothing had been counting. The dashboard now
+  shows what has been spent this month, and an optional cap refuses further questions on
+  the watch instead of quietly spending past it. No cap is set by default.
+- **Findings are readable.** A warning used to be drawn as several lines of red text; the
+  severity is now a coloured marker and the sentence stays white. A finding that does not
+  fit on a smaller screen is counted rather than silently dropped.
+- **Fixed: the recovery ring was drawn through the resting-heart-rate line** on smaller
+  round screens.
+- **Fixed: the overview grid coloured only two of its four values**, and derived that
+  colour by re-reading its own formatted text, so 6.3 hours of sleep was graded as 6.
 
 ## What changed in 1.3.0
 
