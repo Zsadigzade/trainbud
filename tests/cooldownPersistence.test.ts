@@ -1,13 +1,45 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
-import {
-  getGarminClient,
-  resetGarminClient,
-  resetGarminSession,
-  withGarminClient,
-} from "../src/garmin/client.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { GarminApiError } from "../src/garmin/types.js";
 import type { GarminConnectInstance } from "../src/garmin/garminConnect.js";
+
+// The cooldown lives in the settings table of `app.db`, whose path is resolved
+// from `appConfig.cachePath` when the module is first imported. A static import
+// here would therefore write a live five-minute Garmin block into the DEVELOPER'S
+// OWN database every time the suite ran -- which is exactly what the first
+// version of this file did, and it took the next `trainbud backfill` with it.
+//
+// The vault note for this project says the previous generation of tests reached
+// real services and a real database and that both cost a debugging session.
+// Redirect the path first, then import.
+let client_: typeof import("../src/garmin/client.js");
+let appDb_: typeof import("../src/appDb.js");
+let directory: string;
+
+before(async () => {
+  directory = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-cooldown-"));
+  process.env.TRAINBUD_CACHE_PATH = path.join(directory, "cache.db");
+  client_ = await import("../src/garmin/client.js");
+  appDb_ = await import("../src/appDb.js");
+});
+
+after(() => {
+  // Windows will not unlink a file with an open handle, so the database has to
+  // be closed before the directory can go.
+  appDb_.closeAppDb();
+  delete process.env.TRAINBUD_CACHE_PATH;
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+const getGarminClient = (...args: Parameters<typeof client_.getGarminClient>) =>
+  client_.getGarminClient(...args);
+const resetGarminClient = (): void => client_.resetGarminClient();
+const resetGarminSession = (): void => client_.resetGarminSession();
+const withGarminClient = <T>(...args: Parameters<typeof client_.withGarminClient<T>>) =>
+  client_.withGarminClient(...args);
 
 // The cooldown exists because `trainbud check` walked nine tools in sequence,
 // turned one expired session into nine logins in five seconds, and deepened
