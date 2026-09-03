@@ -46,11 +46,22 @@ Write-Host ""
 Stop-PortListener -Port $ServerPort
 Start-Sleep -Seconds 1
 
+$DistEntry = Join-Path $RepoRoot "dist\index.js"
+if (-not (Test-Path $DistEntry)) {
+    Write-Host "ERROR: dist/index.js is missing. Run 'npm install && npm run build' first." -ForegroundColor Red
+    exit 1
+}
+
 # Start HTTP server
 Write-Host "Starting trainbud serve..."
+# NOT `npx trainbud serve`. TrainBud is not on the npm registry, so npx has
+# nothing to resolve unless `npm link` happens to have run on this machine --
+# and if that name is ever registered by someone else, npx runs their code
+# instead. `node dist/index.js` is the same entry point the bin field points at,
+# with no resolution step to get wrong.
 $serveJob = Start-Job -ScriptBlock {
     Set-Location $using:RepoRoot
-    npx trainbud serve 2>&1
+    node dist/index.js serve 2>&1
 }
 
 Start-Sleep -Seconds 3

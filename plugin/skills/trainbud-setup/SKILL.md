@@ -35,8 +35,11 @@ Set these in your shell profile or Claude Code environment **before** enabling t
 Alternatively, run the setup wizard (creates `.env` in the current project):
 
 ```bash
-npx trainbud setup
+trainbud setup
 ```
+
+(needs the CLI installed — see below. TrainBud is not on npm, so `npx trainbud`
+resolves nothing.)
 
 ## Setup workflow
 
@@ -44,8 +47,9 @@ npx trainbud setup
 
 2. **Install CLI** (pick one):
    ```bash
-   npm install -g trainbud          # after npm publish
-   # or from source:
+   # TrainBud is NOT on the npm registry yet: `npm view trainbud` returns 404,
+   # so `npm install -g trainbud` and `npx trainbud` cannot work, and would run
+   # someone else's package if that name is ever claimed. Install from source:
    git clone https://github.com/Zsadigzade/trainbud.git && cd trainbud
    npm install && npm run build && npm link
    ```
@@ -65,7 +69,7 @@ npx trainbud setup
 |---------|-----|
 | Auth error | MFA off; run `trainbud auth` |
 | MCP tools missing | Check env vars; restart Claude Code |
-| `npx trainbud` fails | Run `npm link` from cloned repo, or `npm install -g trainbud` |
+| `trainbud: command not found` | Run `npm link` from the clone, or use `node dist/index.js <command>` |
 | Stale data | `trainbud cache clear` |
 
 Do not commit `.env` or `.trainbud/` credentials.

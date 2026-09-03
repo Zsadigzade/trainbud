@@ -23,20 +23,26 @@ Guide the user through one-time setup. TrainBud is an unofficial MCP server for 
 
 ## Setup workflow
 
-1. **Install** (from repo root if cloned, or global after `npm install -g trainbud`):
+1. **Install** from a clone. TrainBud is **not published to npm**, so
+   `npx trainbud` and `npm install -g trainbud` do not work — `npm view trainbud`
+   returns 404, and if that name is ever registered by someone else those
+   commands would run their package:
    ```bash
    npm install && npm run build
+   npm link          # puts `trainbud` on your PATH
    ```
+   Without `npm link`, every command below is `node dist/index.js <command>`
+   from the repo root.
 
 2. **Run the wizard** (interactive — user must enter email/password in terminal):
    ```bash
-   npx trainbud setup
+   trainbud setup
    ```
    The wizard saves `.env`, authenticates, and offers to patch Cursor / Claude Desktop MCP config.
 
 3. **Verify** all 9 tools against live Garmin data:
    ```bash
-   npx trainbud check
+   trainbud check
    ```
 
 4. **Restart MCP client completely** (Cursor or Claude Desktop), then test with `/trainbud`.
