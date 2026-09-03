@@ -23,7 +23,11 @@ class TrainBudApp extends Application.AppBase {
     const STORAGE_SERVER_URL     = "server_url";
 
     // Carousel layout lives in Cards.mc — see that module for the card order.
-    const CARD_COUNT = Cards.COUNT;
+    // The carousel is whatever the server says it is, defaulting to the
+    // shipping order. See Cards.mc: a card is an id, not a position, because
+    // the user can now hide and reorder them and a position renumbers itself
+    // the moment one disappears.
+    private var _cardOrder as Array<String> = Cards.defaultOrder();
 
     const FETCH_TIMEOUT_MS  = 10000;
     const PAIR_POLL_MS      = 5000;
@@ -172,7 +176,17 @@ class TrainBudApp extends Application.AppBase {
     function getCardIndex() as Number           { return _cardIndex; }
     function getUpdatedAt() as String or Null   { return _updatedAt; }
     function getCachedAt()  as Number or Null   { return _cachedAt; }
-    function getCardCount() as Number           { return CARD_COUNT; }
+    function getCardCount() as Number           { return _cardOrder.size(); }
+    function getCardOrder() as Array<String>    { return _cardOrder; }
+
+    /** The id of the card at a position, or the Today card if out of range. */
+    function getCardId(index as Number) as String {
+        if (index < 0 || index >= _cardOrder.size()) { return Cards.TODAY; }
+        return _cardOrder[index] as String;
+    }
+
+    /** The id currently on screen. */
+    function currentCardId() as String { return getCardId(_cardIndex); }
 
     function setPairCode(code as String or Null) as Void { _pairCode = code; }
     function getPairCode() as String or Null             { return _pairCode; }
@@ -210,22 +224,85 @@ class TrainBudApp extends Application.AppBase {
     function setStatus(status as String) as Void  { _status = status; }
     function setSummary(data as Dictionary or Null) as Void {
         _summary = data;
+        adoptCardOrder(data);
 
         // A new summary can carry fewer prompts than the last one, which would
         // leave the menu cursor pointing past the end of the array.
         if (_askMenuIndex >= getPromptCount()) {
             _askMenuIndex = 0;
         }
+
+        // The order can shrink -- the user hid a card while this watch was
+        // showing it. Left alone the cursor points past the end and the next
+        // draw is a blank screen.
+        if (_cardIndex >= _cardOrder.size()) {
+            _cardIndex = 0;
+        }
+    }
+
+    //
+    // Take the carousel from the payload, if it brought one.
+    //
+    // Three ways this can be absent or wrong, and all three end at the default
+    // order rather than at an empty carousel:
+    //   * an older server sends no `display` at all;
+    //   * a newer server names a card this build cannot draw, which would
+    //     otherwise reserve a slot that renders blank -- indistinguishable from
+    //     a crash on a wrist;
+    //   * every id is unknown, leaving nothing to show.
+    //
+    private function adoptCardOrder(data as Dictionary or Null) as Void {
+        if (data == null) { return; }
+
+        var display = data.get("display");
+        if (display == null || !(display instanceof Dictionary)) { return; }
+
+        var cards = Cards.sanitize((display as Dictionary).get("cards"));
+        if (cards.size() > 0) {
+            _cardOrder = cards;
+        }
+    }
+
+    /**
+     * The state the server graded a metric as: "good", "caution", "hard" or
+     * "unknown". Null on a server too old to send them, which the view draws
+     * ungraded rather than guessing at a threshold of its own.
+     */
+    function getState(key as String) as String or Null {
+        if (_summary == null) { return null; }
+        var states = (_summary as Dictionary).get("states");
+        if (states == null || !(states instanceof Dictionary)) { return null; }
+        var value = (states as Dictionary).get(key);
+        return (value != null && value instanceof String) ? value as String : null;
+    }
+
+    /** "none", "notice" or "warn" -- the worst finding right now. */
+    function getAlertLevel() as String {
+        if (_summary == null) { return "none"; }
+        var alert = (_summary as Dictionary).get("alert");
+        if (alert == null || !(alert instanceof Dictionary)) { return "none"; }
+        var level = (alert as Dictionary).get("level");
+        return (level != null && level instanceof String) ? level as String : "none";
+    }
+
+    /** True when the user's own monthly AI cap would refuse an Ask. */
+    function isBudgetExceeded() as Boolean {
+        if (_summary == null) { return false; }
+        var budget = (_summary as Dictionary).get("budget");
+        if (budget == null || !(budget instanceof Dictionary)) { return false; }
+        var flag = (budget as Dictionary).get("exceeded");
+        return (flag != null && flag instanceof Boolean) ? flag as Boolean : false;
     }
     function setUpdatedAt(v as String or Null) as Void { _updatedAt = v; }
     function setCachedAt(v as Number or Null) as Void  { _cachedAt = v; }
 
     function nextCard() as Void {
-        _cardIndex = (_cardIndex + 1) % CARD_COUNT;
+        _cardIndex = (_cardIndex + 1) % getCardCount();
     }
 
     function prevCard() as Void {
-        _cardIndex = (_cardIndex + CARD_COUNT - 1) % CARD_COUNT;
+        var count = getCardCount();
+        _cardIndex = (_cardIndex + count - 1) % count;
     }
 
     function nextPromptPage() as Void {
@@ -269,8 +346,25 @@ class TrainBudApp extends Application.AppBase {
     // See ciq/monkey-screens.jungle and build.ps1 -Screens.
     // -------------------------------------------------------------------------
 
+    /**
+     * Put the carousel on a named card.
+     *
+     * The screen tour names the card it wants to photograph, and a number
+     * would silently photograph the wrong one the moment the order changed --
+     * which is exactly the failure the tour exists to catch. A card absent
+     * from the current order leaves the position alone.
+     */
+    function setCardById(id as String) as Void {
+        for (var i = 0; i < _cardOrder.size(); i += 1) {
+            if ((_cardOrder[i] as String).equals(id)) {
+                _cardIndex = i;
+                return;
+            }
+        }
+    }
+
     function setCardIndex(index as Number) as Void {
-        _cardIndex = index < 0 ? 0 : (index % CARD_COUNT);
+        _cardIndex = index < 0 ? 0 : (index % getCardCount());
     }
 
     function setAskMenuIndex(index as Number) as Void {

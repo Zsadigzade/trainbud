@@ -108,7 +108,7 @@ module ScreenTour {
         app.setPromptState("idle", null, null, Fail.NONE, null);
         app.setSummaryFailure(Fail.NONE, null);
         app.setPairFailure(Fail.UNREACHABLE, null);
-        app.setCardIndex(Cards.TODAY);
+        app.setCardById(Cards.TODAY);
         app.setAskMenuIndex(0);
 
         if (index == SETUP) {
@@ -167,55 +167,60 @@ module ScreenTour {
         }
 
         // Everything below draws a card, so it needs a summary.
-        app.setSummary(sampleSummary(index != ASK_NO_KEY && index != INSIGHT_NO_KEY));
-        app.setStatus("ready");
-
-        if (index == TODAY)    { app.setCardIndex(Cards.TODAY);    return; }
-        if (index == WEEK)     { app.setCardIndex(Cards.WEEK);     return; }
+        //
+        // ONE summary, built once and adjusted in place.
+        //
+        // The variant states used to call sampleSummary() a second time while
+        // the first was still held by the app, so two full payloads were live
+        // at once -- and on the Forerunner 55 that is the difference between
+        // fitting and not. The tour stopped dead at the first of those states:
+        // the app ran out of memory, the simulator stopped accepting keys, and
+        // the capture script photographed the previous screen three more times
+        // and reported "keypress did not register". It looked like the
+        // simulator being unreliable, which it is often enough to be a
+        // convincing explanation for a real bug.
+        var summary = sampleSummary(index != ASK_NO_KEY && index != INSIGHT_NO_KEY);
 
         // A week that cannot be compared yet, which is what the first fortnight
         // after install looks like.
         if (index == WEEK_COLD) {
-            var thin = sampleSummary(true);
-            var thinWeek = thin.get("week") as Dictionary;
-            thinWeek.put("ready", false);
-            app.setSummary(thin);
-            app.setCardIndex(Cards.WEEK);
-            return;
+            (summary.get("week") as Dictionary).put("ready", false);
         }
 
         // Race week, with a spike forecast on top of it -- the combination the
         // card exists to make legible.
         if (index == WEEK_RACE) {
-            var racing = sampleSummary(true);
-            racing.put("race", { "text" => "Club 5k", "days_away" => 4, "phase" => "race_week" });
-            app.setSummary(racing);
-            app.setCardIndex(Cards.WEEK);
-            return;
+            summary.put("race", { "text" => "Club 5k", "days_away" => 4, "phase" => "race_week" });
         }
 
         // The first two weeks after install, when there is not yet enough
         // history to compare a day against anything. It is the state every new
         // user sees first and it had never been drawn.
         if (index == TODAY_COLD) {
-            var cold = sampleSummary(true);
-            cold.put("coverage", { "days" => 6, "ready" => false });
-            app.setSummary(cold);
-            app.setCardIndex(Cards.TODAY);
+            summary.put("coverage", { "days" => 6, "ready" => false });
+        }
+
+        app.setSummary(summary);
+        app.setStatus("ready");
+
+        if (index == TODAY)      { app.setCardById(Cards.TODAY); return; }
+        if (index == TODAY_COLD) { app.setCardById(Cards.TODAY); return; }
+        if (index == WEEK || index == WEEK_COLD || index == WEEK_RACE) {
+            app.setCardById(Cards.WEEK);
             return;
         }
-        if (index == OVERVIEW) { app.setCardIndex(Cards.OVERVIEW); return; }
-        if (index == RECOVERY) { app.setCardIndex(Cards.RECOVERY); return; }
-        if (index == SLEEP)    { app.setCardIndex(Cards.SLEEP);    return; }
-        if (index == ACTIVITY) { app.setCardIndex(Cards.ACTIVITY); return; }
-        if (index == STRESS)   { app.setCardIndex(Cards.STRESS);   return; }
+        if (index == OVERVIEW) { app.setCardById(Cards.OVERVIEW); return; }
+        if (index == RECOVERY) { app.setCardById(Cards.RECOVERY); return; }
+        if (index == SLEEP)    { app.setCardById(Cards.SLEEP);    return; }
+        if (index == ACTIVITY) { app.setCardById(Cards.ACTIVITY); return; }
+        if (index == STRESS)   { app.setCardById(Cards.STRESS);   return; }
 
         if (index == INSIGHT || index == INSIGHT_NO_KEY) {
-            app.setCardIndex(Cards.AI_INSIGHT);
+            app.setCardById(Cards.AI_INSIGHT);
             return;
         }
 
-        app.setCardIndex(Cards.ASK_AI);
+        app.setCardById(Cards.ASK_AI);
 
         if (index == ASK_MENU || index == ASK_NO_KEY) { return; }
 
@@ -306,7 +311,30 @@ module ScreenTour {
                 "How is my recovery?",
                 "Am I overtraining?",
                 "Summarize my week"
-            ]
+            ],
+
+            // The four fields the server now grades for the watch. Without
+            // them the tour would draw every card ungraded and photograph
+            // twenty-seven screens that prove nothing about the colours -- the
+            // exact failure the tour exists to prevent, one layer up.
+            //
+            // Chosen so the set exercises all four states: recovery caution,
+            // sleep hard, stress caution, and resting heart rate deliberately
+            // "unknown" so at least one screen shows an ungraded value.
+            "states" => {
+                "recovery"   => "caution",
+                "sleep"      => "hard",
+                "stress"     => "caution",
+                "resting_hr" => "unknown"
+            },
+            "display" => {
+                "name"  => null,
+                "units" => "metric",
+                "cards" => ["today", "ask", "insight", "week", "overview",
+                            "recovery", "sleep", "activity", "stress"]
+            },
+            "alert"  => { "level" => "warn", "count" => 2 },
+            "budget" => { "exceeded" => false, "incomplete" => false }
         };
     }
 }

@@ -73,9 +73,10 @@ class TrainBudView extends WatchUi.View {
         }
 
         var cardIndex = app.getCardIndex();
+        var cardId = app.currentCardId();
 
         // Ask AI menu
-        if (cardIndex == Cards.ASK_AI) {
+        if (cardId.equals(Cards.ASK_AI)) {
             // Nothing on this card can work without a key on the server, so
             // say that instead of offering five questions that will all fail.
             if (!app.isAiConfigured()) {
@@ -96,7 +97,7 @@ class TrainBudView extends WatchUi.View {
             return;
         }
 
-        drawCard(dc, cardIndex, app.getSummary(), isRoundScreen(dc));
+        drawCard(dc, cardId, app.getSummary(), isRoundScreen(dc));
 
         if (status.equals("stale")) {
             drawStaleIndicator(dc, app.getCachedAt());
@@ -747,8 +748,12 @@ class TrainBudView extends WatchUi.View {
 
         for (var i = 0; i < cardCount; i += 1) {
             var x = startX + (i * spacing);
+            // Filled-versus-outline carries the position, not colour. The
+            // brand accent would be the same amber as CAUTION, and a user who
+            // has learned amber means "look at this" must not meet it as a
+            // page dot.
             if (i == cardIndex) {
-                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+                dc.setColor(Palette.PRIMARY, Graphics.COLOR_TRANSPARENT);
                 dc.fillCircle(x, y, radius + 1);
             } else {
                 dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
@@ -767,7 +772,8 @@ class TrainBudView extends WatchUi.View {
             minutesAgo.toString() + "m " +
             WatchUi.loadResource(Rez.Strings.StaleSuffix) as String;
 
-        dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+        // Amber: stale data is a caution about the data itself.
+        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
         dc.drawText(dc.getWidth() / 2, 12, Graphics.FONT_XTINY, staleText, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
@@ -777,24 +783,24 @@ class TrainBudView extends WatchUi.View {
 
     private function drawCard(
         dc as Dc,
-        cardIndex as Number,
+        cardId as String,
         summary as Dictionary or Null,
         roundScreen as Boolean
     ) as Void {
-        if (cardIndex == Cards.TODAY)      { drawTodayCard(dc, summary); return; }
-        if (cardIndex == Cards.WEEK)       { drawWeekCard(dc, summary); return; }
-        if (cardIndex == Cards.OVERVIEW)   { drawOverviewCard(dc, summary); return; }
-        if (cardIndex == Cards.RECOVERY)   { drawRecoveryCard(dc, summary, roundScreen); return; }
-        if (cardIndex == Cards.AI_INSIGHT) { drawAiInsightCard(dc, summary); return; }
+        if (cardId.equals(Cards.TODAY))      { drawTodayCard(dc, summary); return; }
+        if (cardId.equals(Cards.WEEK))       { drawWeekCard(dc, summary); return; }
+        if (cardId.equals(Cards.OVERVIEW))   { drawOverviewCard(dc, summary); return; }
+        if (cardId.equals(Cards.RECOVERY))   { drawRecoveryCard(dc, summary, roundScreen); return; }
+        if (cardId.equals(Cards.AI_INSIGHT)) { drawAiInsightCard(dc, summary); return; }
 
-        var title      = getCardTitle(cardIndex);
+        var title      = getCardTitle(cardId);
         var value      = WatchUi.loadResource(Rez.Strings.NoData) as String;
         var subtitle   = "";
         var footnote   = "";
-        var valueColor = Graphics.COLOR_WHITE;
+        var valueColor = Palette.PRIMARY;
 
         if (summary != null) {
-            var cardData = getCardData(dc, cardIndex, summary);
+            var cardData = getCardData(dc, cardId, summary);
             value      = cardData[:value] as String;
             subtitle   = cardData[:subtitle] as String;
             footnote   = cardData[:footnote] as String;
@@ -918,8 +924,63 @@ class TrainBudView extends WatchUi.View {
         }
     }
 
-    // At most two. A third would not fit at a legible size, and the server
-    // already sorts them worst-first, so the two shown are the two that matter.
+    //
+    // One line of a card: the text, and a dot to its left if it has a state.
+    //
+    // Shared by Today and Week because they were drifting apart -- Today drew
+    // severity as a marker and Week still painted whole lines in red and
+    // amber, so the same severity looked like two different things one swipe
+    // apart. It is also the rule this app's colour system rests on: the state
+    // channel is a mark, never the text, because coloured body text on a
+    // transflective screen in daylight is the least legible thing here and
+    // because a red sentence cannot also tell you it is only mildly red.
+    //
+    // `marker` is a colour, or -1 for a line with no state to report.
+    //
+    private function drawMarkedLine(
+        dc as Dc,
+        cx as Number,
+        y as Number,
+        text as String,
+        font as Graphics.FontDefinition,
+        textColor as Number,
+        marker as Number
+    ) as Void {
+        if (text.length() == 0) { return; }
+
+        var fitted = fitLine(dc, text, font, y);
+        dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, font, fitted, Graphics.TEXT_JUSTIFY_CENTER);
+
+        if (marker < 0) { return; }
+
+        var dotRadius = 3;
+        var half = dc.getTextWidthInPixels(fitted, font) / 2;
+        dc.setColor(marker, Graphics.COLOR_TRANSPARENT);
+        dc.fillCircle(cx - half - 6 - dotRadius,
+            y + (dc.getFontHeight(font) / 2) - Graphics.getFontDescent(font) / 2,
+            dotRadius);
+    }
+
+    //
+    // What stands out, as text you can read plus a dot that says how much.
+    //
+    // Two changes from the version that shipped, and the second one is a
+    // correctness bug rather than a matter of taste.
+    //
+    // THE SEVERITY IS A DOT, NOT THE TEXT COLOUR. Colouring the whole headline
+    // meant a warning arrived as five lines of red on black, which is both the
+    // least legible combination on a transflective screen in daylight and a
+    // misuse of the one channel this app reserves for state. White text with a
+    // coloured marker says the same thing and can actually be read.
+    //
+    // A FINDING THAT DOES NOT FIT IS COUNTED, NOT DROPPED. The band on a
+    // Forerunner 55 holds about five lines, and the second finding was silently
+    // discarded -- the watch showed one item with no hint that another existed,
+    // while the same payload on a Fenix showed two. An app that quietly decides
+    // which of your health findings you are allowed to see is worse than one
+    // that shows fewer and says so.
+    //
     private function drawFindings(dc as Dc, cx as Number, cy as Number, list as Array) as Void {
         // Findings live in the band between the card title and the page dots,
         // and they are centred in that band rather than on the screen.
@@ -945,12 +1006,24 @@ class TrainBudView extends WatchUi.View {
         if (botOff < 0) { botOff = -botOff; }
         var narrowest = topOff > botOff ? topOff : botOff;
 
-        var maxLines = bandH / lineH;
-        var shown = list.size() < 2 ? list.size() : 2;
-        var lines = [] as Array<String>;
-        var colors = [] as Array<Number>;
+        // The marker sits to the left of the first line of each finding, so the
+        // wrap has to leave room for it or the dot pushes the text off-screen.
+        var dotRadius = 3;
+        var dotGap    = 6;
+        var textWidth = narrowest - ((dotRadius * 2) + dotGap) * 2;
+        if (textWidth < 40) { textWidth = narrowest; }
 
-        for (var i = 0; i < shown; i += 1) {
+        // One line is reserved for the "+N more" footer whenever there is any
+        // chance of needing it, so the footer can never be the thing that does
+        // not fit.
+        var maxLines = bandH / lineH;
+        if (list.size() > 1 && maxLines > 2) { maxLines -= 1; }
+
+        var lines    = [] as Array<String>;
+        var markers  = [] as Array<Number>;   // severity colour, or -1 for none
+        var rendered = 0;
+
+        for (var i = 0; i < list.size(); i += 1) {
             var item = list[i];
             if (!(item instanceof Dictionary)) { continue; }
 
@@ -958,23 +1031,35 @@ class TrainBudView extends WatchUi.View {
             var headline = entry.get("headline");
             if (headline == null || !(headline instanceof String)) { continue; }
 
-            var color = severityColor(entry.get("severity"));
-            var wrapped = wrapToWidth(dc, headline as String, Graphics.FONT_XTINY, narrowest);
+            var wrapped = wrapToWidth(dc, headline as String, Graphics.FONT_XTINY, textWidth);
 
-            for (var j = 0; j < wrapped.size(); j += 1) {
-                if (lines.size() >= maxLines) { break; }
-                lines.add(wrapped[j] as String);
-                colors.add(color);
-            }
+            // All of it, or none of it. Half a finding is a sentence cut in the
+            // middle, which reads as a fault rather than as a summary.
+            var needed = wrapped.size() + (lines.size() > 0 ? 1 : 0);
+            if (lines.size() + needed > maxLines) { break; }
 
-            // Blank spacer between findings, so two of them do not read as one.
-            if (i < shown - 1 && lines.size() < maxLines) {
+            if (lines.size() > 0) {
                 lines.add("");
-                colors.add(Graphics.COLOR_BLACK);
+                markers.add(-1);
             }
+
+            var color = severityColor(entry.get("severity"));
+            for (var j = 0; j < wrapped.size(); j += 1) {
+                lines.add(wrapped[j] as String);
+                markers.add(j == 0 ? color : -1);
+            }
+            rendered += 1;
         }
 
         if (lines.size() == 0) { return; }
+
+        // `hidden` is a reserved access modifier in Monkey C.
+        var notShown = list.size() - rendered;
+        if (notShown > 0) {
+            lines.add(notShown.toString() + " "
+                + (WatchUi.loadResource(Rez.Strings.FindingsMore) as String));
+            markers.add(-1);
+        }
 
         var blockH = lines.size() * lineH;
         var startY = bandTop + ((bandH - blockH) / 2);
@@ -983,19 +1068,31 @@ class TrainBudView extends WatchUi.View {
             var text = lines[i] as String;
             if (text.length() == 0) { continue; }
 
-            dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, startY + i * lineH, Graphics.FONT_XTINY, text,
-                Graphics.TEXT_JUSTIFY_CENTER);
+            var y = startY + i * lineH;
+            var isFooter = notShown > 0 && i == lines.size() - 1;
+
+            dc.setColor(isFooter ? Palette.SECONDARY : Palette.PRIMARY,
+                Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, y, Graphics.FONT_XTINY, text, Graphics.TEXT_JUSTIFY_CENTER);
+
+            var marker = markers[i] as Number;
+            if (marker >= 0) {
+                var half = dc.getTextWidthInPixels(text, Graphics.FONT_XTINY) / 2;
+                dc.setColor(marker, Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(cx - half - dotGap - dotRadius,
+                    y + (lineH / 2) - Graphics.getFontDescent(Graphics.FONT_XTINY) / 2,
+                    dotRadius);
+            }
         }
     }
 
     private function severityColor(severity as Object or Null) as Number {
         if (severity != null && severity instanceof String) {
             var name = severity as String;
-            if (name.equals("warn"))   { return Graphics.COLOR_RED; }
-            if (name.equals("notice")) { return Graphics.COLOR_YELLOW; }
+            if (name.equals("warn"))   { return Palette.HARD; }
+            if (name.equals("notice")) { return Palette.CAUTION; }
         }
-        return Graphics.COLOR_LT_GRAY;
+        return Palette.SECONDARY;
     }
 
     // -------------------------------------------------------------------------
@@ -1055,7 +1152,7 @@ class TrainBudView extends WatchUi.View {
                 sessionsFull = sessionText + "  " + formatDuration(minutes as Number);
             }
             lines.add(sessionText);
-            colors.add(Graphics.COLOR_WHITE);
+            colors.add(-1);   // the headline reports no state of its own
         }
 
         // Load, as a percentage against last week. Signed on purpose: "up 18%"
@@ -1066,7 +1163,11 @@ class TrainBudView extends WatchUi.View {
             var delta = loadDelta as Number;
             lines.add((WatchUi.loadResource(Rez.Strings.WeekLoad) as String) + " "
                 + (delta >= 0 ? "+" : "") + delta.toString() + "%");
-            colors.add(delta >= 25 ? Graphics.COLOR_YELLOW : Graphics.COLOR_LT_GRAY);
+            // A big move in either direction is worth a mark. It was only
+            // flagged when load went UP, so a 40% collapse -- the shape of an
+            // illness or an injury week -- passed without one.
+            var absDelta = delta < 0 ? -delta : delta;
+            colors.add(absDelta >= 25 ? Palette.CAUTION : -1);
         }
 
         // The forecast, which is the only forward-looking number in the app.
@@ -1078,13 +1179,13 @@ class TrainBudView extends WatchUi.View {
             if (ratio != null) { ratioText = " " + metricText(ratio) + "x"; }
 
             var verdictRes = Rez.Strings.WeekOnTrack;
-            var verdictColor = Graphics.COLOR_GREEN;
+            var verdictColor = Palette.GOOD;
             if (v.equals("spike_ahead")) {
                 verdictRes = Rez.Strings.WeekSpikeAhead;
-                verdictColor = Graphics.COLOR_RED;
+                verdictColor = Palette.HARD;
             } else if (v.equals("detraining_ahead")) {
                 verdictRes = Rez.Strings.WeekEasingOff;
-                verdictColor = Graphics.COLOR_YELLOW;
+                verdictColor = Palette.CAUTION;
             }
 
             lines.add((WatchUi.loadResource(verdictRes) as String) + ratioText);
@@ -1104,7 +1205,7 @@ class TrainBudView extends WatchUi.View {
             if (debtHours >= 1.0) {
                 lines.add((WatchUi.loadResource(Rez.Strings.WeekSleepDebt) as String)
                     + " " + metricText(debt) + "h");
-                colors.add(debtHours >= 5.0 ? Graphics.COLOR_RED : Graphics.COLOR_YELLOW);
+                colors.add(debtHours >= 5.0 ? Palette.HARD : Palette.CAUTION);
             }
         }
 
@@ -1130,7 +1231,7 @@ class TrainBudView extends WatchUi.View {
                         + " " + (name as String);
                 }
                 lines.add(raceLine);
-                colors.add(away <= 7 ? Graphics.COLOR_YELLOW : Graphics.COLOR_LT_GRAY);
+                colors.add(away <= 7 ? Palette.CAUTION : -1);
             }
         }
 
@@ -1142,6 +1243,7 @@ class TrainBudView extends WatchUi.View {
 
         var lineH = dc.getFontHeight(Graphics.FONT_TINY);
         var y = cy - ((lines.size() * lineH) / 2);
+
 
         // Now the top row's position is known, so the sessions line can take its
         // duration back if there is room for it whole.
@@ -1165,10 +1267,12 @@ class TrainBudView extends WatchUi.View {
         }
 
         for (var i = 0; i < lines.size(); i += 1) {
-            dc.setColor(colors[i] as Number, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, y, Graphics.FONT_TINY,
-                fitLine(dc, lines[i] as String, Graphics.FONT_TINY, y),
-                Graphics.TEXT_JUSTIFY_CENTER);
+            // The first line is the week's headline and stays in primary ink
+            // even though it reports no state; everything below it is either
+            // marked, or supporting detail in secondary.
+            var marker = colors[i] as Number;
+            var ink = (i == 0 || marker >= 0) ? Palette.PRIMARY : Palette.SECONDARY;
+            drawMarkedLine(dc, cx, y, lines[i] as String, Graphics.FONT_TINY, ink, marker);
             y += lineH;
         }
     }
@@ -1260,10 +1364,20 @@ class TrainBudView extends WatchUi.View {
         var topY        = dc.getHeight() / 2 - rowHeight - rowGap / 2;
         var bottomY     = topY + rowHeight + rowGap;
 
-        drawOverviewCell(dc, leftX,  topY,    WatchUi.loadResource(Rez.Strings.LabelRecovery) as String, recValue,    recoveryColor(parseNumber(recValue)));
-        drawOverviewCell(dc, rightX, topY,    WatchUi.loadResource(Rez.Strings.LabelSleep) as String,    sleepValue,  Graphics.COLOR_WHITE);
-        drawOverviewCell(dc, leftX,  bottomY, WatchUi.loadResource(Rez.Strings.LabelStress) as String,   stressValue, stressColor(parseNumber(stressValue)));
-        drawOverviewCell(dc, rightX, bottomY, WatchUi.loadResource(Rez.Strings.LabelVo2) as String,      vo2Value,    Graphics.COLOR_WHITE);
+        // All four cells are now graded the same way, which two of them were
+        // not: sleep and VO2 max were hard-coded white while recovery and
+        // stress were coloured, so half the grid claimed a verdict and half
+        // stayed silent with nothing to tell them apart. The colour also came
+        // from parseNumber() reading the number back out of the string that had
+        // just been formatted for display -- it stops at the first non-digit,
+        // so "6.3h" was graded as 6.
+        //
+        // VO2 max stays ungraded on purpose: it has no band in this product,
+        // and a colour would be a verdict nobody computed.
+        drawOverviewCell(dc, leftX,  topY,    WatchUi.loadResource(Rez.Strings.LabelRecovery) as String, recValue,    stateColor("recovery"));
+        drawOverviewCell(dc, rightX, topY,    WatchUi.loadResource(Rez.Strings.LabelSleep) as String,    sleepValue,  stateColor("sleep"));
+        drawOverviewCell(dc, leftX,  bottomY, WatchUi.loadResource(Rez.Strings.LabelStress) as String,   stressValue, stateColor("stress"));
+        drawOverviewCell(dc, rightX, bottomY, WatchUi.loadResource(Rez.Strings.LabelVo2) as String,      vo2Value,    Palette.PRIMARY);
     }
 
     // JSON numbers arrive as Float whenever the server sent a decimal, and
@@ -1326,7 +1440,7 @@ class TrainBudView extends WatchUi.View {
             WatchUi.loadResource(Rez.Strings.CardRecovery) as String,
             Graphics.TEXT_JUSTIFY_CENTER);
 
-        var color = recoveryColor(hasScore ? score : null);
+        var color = hasScore ? stateColor("recovery") : Palette.PRIMARY;
         var cx = dc.getWidth() / 2;
         var cy = dc.getHeight() / 2;
 
@@ -1409,7 +1523,8 @@ class TrainBudView extends WatchUi.View {
         }
 
         drawRestingHeartRate(dc, summary, cx,
-            labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2);
+            labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2,
+            roundScreen && hasScore);
     }
 
     /** The bottom of the usable area on a card: above the page dots, which sit
@@ -1448,20 +1563,47 @@ class TrainBudView extends WatchUi.View {
         var labelY = scoreBottom + 6;
         if (label.length() == 0) { return labelY; }
 
-        if (ringDrawn) {
-            var ringRadius = ringRadiusFor(dc);
-            var labelH     = Graphics.getFontHeight(Graphics.FONT_TINY);
-            var deepest    = labelY + labelH - Graphics.getFontDescent(Graphics.FONT_TINY) - cy;
-            if (deepest < 0) { deepest = -deepest; }
-            var halfChord  = deepest >= ringRadius
-                ? 0
-                : Math.sqrt((ringRadius * ringRadius) - (deepest * deepest)).toNumber();
-            var halfText   = dc.getTextWidthInPixels(label, Graphics.FONT_TINY) / 2;
-            if (halfText + 4 > halfChord && labelY < cy + ringRadius) {
-                labelY = cy + ringRadius + 4;
-            }
-        }
-        return labelY;
+        return clearOfRing(dc, labelY, label, Graphics.FONT_TINY, ringDrawn);
+    }
+
+    //
+    // Move a line of text below the ring if the arc would be drawn through it.
+    //
+    // A circle NARROWS as it descends, so a row can sit comfortably inside the
+    // ring's height and still be too wide for the ring at that row. The label
+    // has been tested this way since 1.3.2; the heart-rate line underneath it
+    // never was, and on the Forerunner 55 "Resting 48  Max 178" was drawn with
+    // the arc straight through it -- a struck-through health metric, which
+    // reads as a rendering fault.
+    //
+    // One function now, used by both, for the same reason the label test and
+    // the drawing were merged: two places that must agree about where the ring
+    // is will eventually disagree.
+    //
+    private function clearOfRing(
+        dc as Dc,
+        y as Number,
+        text as String,
+        font as Graphics.FontDefinition,
+        ringDrawn as Boolean
+    ) as Number {
+        if (!ringDrawn || text.length() == 0) { return y; }
+
+        var cy         = dc.getHeight() / 2;
+        var ringRadius = ringRadiusFor(dc);
+        if (y >= cy + ringRadius) { return y; }
+
+        // The deepest point the text reaches, as a distance from the centre --
+        // which is where the ring is narrowest for this row.
+        var deepest = y + Graphics.getFontHeight(font) - Graphics.getFontDescent(font) - cy;
+        if (deepest < 0) { deepest = -deepest; }
+
+        var halfChord = deepest >= ringRadius
+            ? 0
+            : Math.sqrt((ringRadius * ringRadius) - (deepest * deepest)).toNumber();
+        var halfText = dc.getTextWidthInPixels(text, font) / 2;
+
+        return (halfText + 4 > halfChord) ? cy + ringRadius + 4 : y;
     }
 
     /** True when a recovery score in this font leaves room for the label and the
@@ -1476,6 +1618,13 @@ class TrainBudView extends WatchUi.View {
         var hrY = label.length() > 0
             ? labelY + Graphics.getFontHeight(Graphics.FONT_TINY) + 2
             : labelY;
+
+        // Tested against the same ring the drawing will clear, using the widest
+        // shape this line takes. The fit test and the drawing disagreeing about
+        // the ring is precisely the fault that put "Rest 48" into the page dots
+        // with the biggest score font still selected.
+        hrY = clearOfRing(dc, hrY, "Resting 000  Max 000", Graphics.FONT_XTINY, ringDrawn);
+
         return hrY + Graphics.getFontHeight(Graphics.FONT_XTINY) <= cardContentBottom(dc);
     }
 
@@ -1494,7 +1643,8 @@ class TrainBudView extends WatchUi.View {
         dc as Dc,
         summary as Dictionary or Null,
         cx as Number,
-        y as Number
+        y as Number,
+        ringDrawn as Boolean
     ) as Void {
         if (summary == null) { return; }
 
@@ -1526,6 +1676,15 @@ class TrainBudView extends WatchUi.View {
         // "Rest 48 ...". An ellipsis on a health metric is worse than an absent
         // one -- it looks like a rendering fault and tells the reader nothing --
         // so the last step drops the maximum and shows the resting rate whole.
+        // THE ROW IS SETTLED BEFORE THE TEXT IS FITTED TO IT, and the order
+        // matters. Fitting first and moving afterwards measured the width
+        // available at a row this line no longer occupies: pushing it clear of
+        // the ring drops it into a narrower part of the circle, and "Resting 48
+        // Max 178" came out as "Resting 48  Max 1...". The ring test uses the
+        // longest form the line can take, so clearance is decided on the worst
+        // case rather than on whatever happened to survive trimming.
+        y = clearOfRing(dc, y, text, Graphics.FONT_XTINY, ringDrawn);
+
         var short = WatchUi.loadResource(Rez.Strings.LabelRestingShort) as String;
         var available = lineWidthAt(dc,
             y + Graphics.getFontHeight(Graphics.FONT_XTINY)
@@ -1538,7 +1697,16 @@ class TrainBudView extends WatchUi.View {
             text = short + " " + resting.toString();
         }
 
-        dc.setColor(heartRateColor(resting as Number), Graphics.COLOR_TRANSPARENT);
+        // Secondary, not graded.
+        //
+        // This one drawText holds BOTH the resting and the maximum heart rate,
+        // and the old colour graded the resting one and then painted the whole
+        // string with it -- so a green line asserted something about a maximum
+        // nobody had assessed. It is supporting detail under the recovery
+        // score, which carries this card's verdict; resting heart rate is
+        // graded where it can be said properly, on Today and in the dashboard,
+        // against this person's own median rather than an absolute rate.
+        dc.setColor(Palette.SECONDARY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, y, Graphics.FONT_XTINY,
             fitLine(dc, text, Graphics.FONT_XTINY, y),
             Graphics.TEXT_JUSTIFY_CENTER);
@@ -1548,31 +1716,43 @@ class TrainBudView extends WatchUi.View {
     // Card titles & data
     // -------------------------------------------------------------------------
 
-    private function getCardTitle(cardIndex as Number) as String {
-        if (cardIndex == Cards.SLEEP)    { return WatchUi.loadResource(Rez.Strings.CardSleep) as String; }
-        if (cardIndex == Cards.ACTIVITY) { return WatchUi.loadResource(Rez.Strings.CardActivity) as String; }
+    private function getCardTitle(cardId as String) as String {
+        if (cardId.equals(Cards.SLEEP))    { return WatchUi.loadResource(Rez.Strings.CardSleep) as String; }
+        if (cardId.equals(Cards.ACTIVITY)) { return WatchUi.loadResource(Rez.Strings.CardActivity) as String; }
         return WatchUi.loadResource(Rez.Strings.CardStress) as String;
     }
 
-    private function getCardData(dc as Dc, cardIndex as Number, summary as Dictionary) as Dictionary {
+    /** The colour for a metric the server has already graded. */
+    private function stateColor(key as String) as Number {
+        var app = Application.getApp() as TrainBudApp;
+        return Palette.forState(app.getState(key));
+    }
+
+    private function getCardData(dc as Dc, cardId as String, summary as Dictionary) as Dictionary {
         var result = {
             :value    => WatchUi.loadResource(Rez.Strings.NoData) as String,
             :subtitle => "",
             :footnote => "",
-            :color    => Graphics.COLOR_WHITE
+            :color    => Palette.PRIMARY
         };
 
-        if (cardIndex == Cards.SLEEP) {
+        if (cardId.equals(Cards.SLEEP)) {
             var sleep = summary.get("sleep");
             if (sleep != null && sleep instanceof Dictionary) {
                 var sd = sleep as Dictionary;
                 var hours = sd.get("hours");
                 var score = sd.get("score");
                 var lbl   = sd.get("label");
-                if (hours != null) { result[:value] = metricText(hours) + "h"; }
+                if (hours != null) {
+                    result[:value] = metricText(hours) + "h";
+                    // Graded on the hours against this person's own band, not
+                    // on Garmin's sleep score: the score is what the value on
+                    // screen is NOT, and colouring a duration by a different
+                    // measurement is how the card came to disagree with itself.
+                    result[:color] = stateColor("sleep");
+                }
                 if (score != null) {
                     result[:subtitle] = "Score " + score.toString();
-                    result[:color]    = sleepColor(score as Number);
                 } else if (lbl != null) {
                     result[:subtitle] = lbl as String;
                 }
@@ -1626,7 +1806,7 @@ class TrainBudView extends WatchUi.View {
             return result;
         }
 
-        if (cardIndex == Cards.ACTIVITY) {
+        if (cardId.equals(Cards.ACTIVITY)) {
             var activity = summary.get("activity");
             if (activity != null && activity instanceof Dictionary) {
                 var ad = activity as Dictionary;
@@ -1671,7 +1851,7 @@ class TrainBudView extends WatchUi.View {
             var sd = stress as Dictionary;
             var avg = sd.get("avg");
             var lbl = sd.get("label");
-            if (avg != null) { result[:value] = metricText(avg); result[:color] = stressColor(avg as Number); }
+            if (avg != null) { result[:value] = metricText(avg); result[:color] = stateColor("stress"); }
             if (lbl != null) { result[:subtitle] = lbl as String; }
         }
 
@@ -1679,35 +1859,25 @@ class TrainBudView extends WatchUi.View {
     }
 
     // -------------------------------------------------------------------------
-    // Color helpers
+    // Colour
+    //
+    // There are no thresholds in this file any more.
+    //
+    // recoveryColor, sleepColor, stressColor and heartRateColor used to live
+    // here, each with its own hard-coded bands. Four problems came with them.
+    // The wrist and the dashboard could disagree about whether the same score
+    // was good, and nothing reconciled them. Per-user bands were impossible
+    // without shipping the numbers to the device and implementing the same
+    // comparison twice, once in a language with no tests here. heartRateColor
+    // coloured a string holding BOTH resting and max heart rate while grading
+    // only the resting one, so the colour made a claim about a number nobody
+    // had assessed. And a missing value fell through to white, which is the
+    // same as "graded and unremarkable" -- an absence rendered as a
+    // measurement.
+    //
+    // The server grades and sends `states`; Palette.forState turns a state into
+    // a colour; anything ungraded stays PRIMARY and says nothing.
     // -------------------------------------------------------------------------
-
-    private function recoveryColor(score as Number or Null) as Number {
-        if (score == null) { return Graphics.COLOR_WHITE; }
-        if (score >= 70)   { return Graphics.COLOR_GREEN; }
-        if (score >= 50)   { return Graphics.COLOR_YELLOW; }
-        return Graphics.COLOR_RED;
-    }
-
-    private function sleepColor(score as Number or Null) as Number {
-        if (score == null) { return Graphics.COLOR_WHITE; }
-        if (score >= 80)   { return Graphics.COLOR_GREEN; }
-        if (score >= 60)   { return Graphics.COLOR_YELLOW; }
-        return Graphics.COLOR_RED;
-    }
-
-    private function stressColor(avg as Number or Null) as Number {
-        if (avg == null) { return Graphics.COLOR_WHITE; }
-        if (avg <= 25)   { return Graphics.COLOR_GREEN; }
-        if (avg <= 50)   { return Graphics.COLOR_YELLOW; }
-        return Graphics.COLOR_RED;
-    }
-
-    private function heartRateColor(resting as Number) as Number {
-        if (resting < 60)  { return Graphics.COLOR_GREEN; }
-        if (resting <= 80) { return Graphics.COLOR_YELLOW; }
-        return Graphics.COLOR_RED;
-    }
 
     // -------------------------------------------------------------------------
     // Text helpers

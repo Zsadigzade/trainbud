@@ -53,7 +53,7 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
         }
 
         var status = app.getStatus();
-        var cardIndex = app.getCardIndex();
+        var cardId = app.currentCardId();
 
         // Pairing screens
         if (status.equals("pairing_error") || status.equals("config")) {
@@ -72,7 +72,7 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
         }
 
         // Ask AI card
-        if (cardIndex == Cards.ASK_AI) {
+        if (cardId.equals(Cards.ASK_AI)) {
             // The card draws "AI not set up" when the server has no key, and
             // pressing it still submitted a prompt: a request that can only come
             // back as an error, against a screen that is not offering anything.
@@ -142,7 +142,7 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             return true;
         }
 
-        if (app.getCardIndex() == Cards.ASK_AI) {
+        if (app.currentCardId().equals(Cards.ASK_AI)) {
             // With no key the card shows one message and no menu, so paging
             // through invisible prompt entries left the user pressing DOWN
             // against a screen that never changed. Treat it as an ordinary card.
@@ -227,11 +227,11 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             return true;
         }
 
-        var cardIndex = app.getCardIndex();
+        var cardId = app.currentCardId();
         var promptStatus = app.getPromptStatus();
 
         // Ask AI card
-        if (cardIndex == Cards.ASK_AI) {
+        if (cardId.equals(Cards.ASK_AI)) {
             if (!app.isAiConfigured()) {
                 if (direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP) {
                     app.nextCard();

@@ -46,6 +46,10 @@
     <string id="TodayGatheringDays">of 14 days</string>
     <string id="TodayNothing">Nothing stands out</string>
     <string id="TodayNothingHint">against your baselines</string>
+    <!-- Shown when a finding will not fit in the band. It is counted rather
+         than dropped: the Forerunner 55 holds fewer lines than a Fenix, and the
+         second finding used to disappear with nothing to say it existed. -->
+    <string id="FindingsMore">more</string>
     <string id="Loading">Loading...</string>
     <string id="NoData">No data</string>
     <!-- Compact placeholder for the four-cell overview grid, where "No data"
