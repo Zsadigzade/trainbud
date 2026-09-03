@@ -1,5 +1,7 @@
+import { DateTime } from "luxon";
 import { median } from "./baseline.js";
 import type { DetectorInput } from "./findings.js";
+import type { MetricPoint } from "../history/store.js";
 
 // SECTION: Sleep debt and consistency
 //
@@ -29,6 +31,15 @@ const CONSISTENCY_WINDOW_DAYS = 14;
 
 /** Below this the figures describe a fortnight's mood rather than a person. */
 const MIN_NIGHTS_FOR_NEED = 14;
+
+/**
+ * How old the newest row may be and still be called "last night".
+ *
+ * One day: a watch that has not been synced since this morning is ordinary. Two
+ * weeks is not, and the store's newest row was being reported as last night
+ * however old it was.
+ */
+const LAST_NIGHT_GRACE_DAYS = 1;
 const MIN_NIGHTS_FOR_CONSISTENCY = 7;
 
 export type SleepConsistency = "steady" | "variable" | "erratic" | "unknown";
@@ -71,6 +82,23 @@ function bandFor(variationMinutes: number): SleepConsistency {
   return variationMinutes <= 60 ? "variable" : "erratic";
 }
 
+/**
+ * Nights inside the last `days` calendar days, newest last.
+ *
+ * NOT `slice(-days)`. Seven array positions are seven nights only when the
+ * store has no holes, and it routinely does -- a night gets a row only when the
+ * watch was worn. `split()` in detectors.ts carries a long comment about
+ * exactly this fault, written after a resting heart rate elevated in June was
+ * reported as "3 days running" in August. The same slice survived here, and on
+ * the live store, whose record ends 2026-08-21, this file reported that night
+ * as "last night" on 2026-09-03 and computed a debt over 08-15..08-21 while
+ * calling it "the last 7 nights".
+ */
+function withinDays(points: MetricPoint[], days: number, now: DateTime): MetricPoint[] {
+  const cutoff = now.startOf("day").minus({ days }).toISODate() ?? "";
+  return points.filter((point) => point.date > cutoff);
+}
+
 export function analyseSleep(input: DetectorInput): SleepQuality {
   const window = input.series("sleep_seconds", NEED_WINDOW_DAYS);
   const hours = window.map((point) => point.value / SECONDS_PER_HOUR);
@@ -89,7 +117,20 @@ export function analyseSleep(input: DetectorInput): SleepQuality {
     return empty;
   }
 
-  const lastNightHours = round(hours[hours.length - 1] ?? 0);
+  // "Last night" is a claim about last night. The newest row in the store is
+  // only that if it is dated last night; grace of one day for a watch that has
+  // not synced yet, and nothing beyond.
+  const newest = window.at(-1);
+  const newestAge =
+    newest === undefined
+      ? null
+      : Math.round(
+          input.now.startOf("day").diff(DateTime.fromISO(newest.date).startOf("day"), "days").days
+        );
+  const lastNightHours =
+    newest !== undefined && newestAge !== null && newestAge <= LAST_NIGHT_GRACE_DAYS
+      ? round(newest.value / SECONDS_PER_HOUR)
+      : null;
 
   if (hours.length < MIN_NIGHTS_FOR_NEED) {
     return {
@@ -105,10 +146,27 @@ export function analyseSleep(input: DetectorInput): SleepQuality {
     return { ...empty, lastNightHours, nightsCounted: hours.length };
   }
 
-  const debtWindow = hours.slice(-DEBT_WINDOW_DAYS);
+  const debtNights = withinDays(window, DEBT_WINDOW_DAYS, input.now);
+
+  // A week with nothing recorded in it has no deficit; it has no week. Stating
+  // a debt of zero here would read as "you slept exactly your usual amount",
+  // which is the absence-rendered-as-a-measurement fault this file's own
+  // neighbours were fixed for.
+  if (debtNights.length === 0) {
+    return {
+      ...empty,
+      habitualHours: round(habitual),
+      lastNightHours,
+      summary: `No nights recorded in the last ${DEBT_WINDOW_DAYS} days, so there is nothing to compare against your usual ${round(habitual)}h. The record stops at ${newest?.date ?? "an earlier date"}.`,
+    };
+  }
+
+  const debtWindow = debtNights.map((point) => point.value / SECONDS_PER_HOUR);
   const debt = debtWindow.reduce((total, night) => total + (habitual - night), 0);
 
-  const consistencyWindow = hours.slice(-CONSISTENCY_WINDOW_DAYS);
+  const consistencyWindow = withinDays(window, CONSISTENCY_WINDOW_DAYS, input.now).map(
+    (point) => point.value / SECONDS_PER_HOUR
+  );
   let variationMinutes: number | null = null;
   let consistency: SleepConsistency = "unknown";
 
@@ -127,12 +185,19 @@ export function analyseSleep(input: DetectorInput): SleepQuality {
   const habitualHours = round(habitual);
   const debtHours = round(debt);
 
+  // Names the number of nights actually MEASURED, and the window they sit in,
+  // because those are two different numbers whenever the watch went unworn.
+  const covered =
+    debtWindow.length === DEBT_WINDOW_DAYS
+      ? `the last ${DEBT_WINDOW_DAYS} nights`
+      : `${debtWindow.length} recorded nights in the last ${DEBT_WINDOW_DAYS} days`;
+
   const debtSentence =
     debtHours >= 1
-      ? `You are ${debtHours}h under your own usual ${habitualHours}h across the last ${debtWindow.length} nights.`
+      ? `You are ${debtHours}h under your own usual ${habitualHours}h across ${covered}.`
       : debtHours <= -1
-        ? `You are ${round(-debtHours)}h above your own usual ${habitualHours}h across the last ${debtWindow.length} nights.`
-        : `The last ${debtWindow.length} nights are close to your usual ${habitualHours}h.`;
+        ? `You are ${round(-debtHours)}h above your own usual ${habitualHours}h across ${covered}.`
+        : `Your sleep across ${covered} is close to your usual ${habitualHours}h.`;
 
   const consistencySentence =
     consistency === "unknown"
