@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { authenticateGarmin, clearStoredSession, sessionExists } from "./garmin/auth.js";
 import { closeCache, getCache } from "./garmin/cache.js";
 import { resetGarminClient } from "./garmin/client.js";
@@ -22,6 +22,27 @@ import { printLiveCheckResults, runLiveCheck } from "./check.js";
 // Runs before every command. Moves pre-0.3.0 state out of `.garmin/` and warns
 // once about renamed environment variables, so an existing install keeps its
 // session, cache and watch pairing across the rename.
+
+/**
+ * A numeric option, or a clear refusal.
+ *
+ * Number.parseInt("abc") is NaN, and NaN flowed straight through: `--days abc`
+ * printed "Backfilling NaN days", every date arithmetic produced Invalid Date,
+ * and the run did nothing while reporting that it was working. `--delay-ms abc`
+ * was worse -- a NaN delay is not a pause, so the throttle between Garmin
+ * requests silently disappeared on the one command that makes hundreds of them.
+ */
+function positiveIntOption(name: string, min = 1) {
+  return (value: string): number => {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < min) {
+      throw new InvalidArgumentError(
+        `${name} must be a whole number of at least ${min}. Got "${value}".`
+      );
+    }
+    return parsed;
+  };
+}
 
 function bootstrap(): void {
   // stdio transport speaks MCP on stdout — never print there.
@@ -208,7 +229,12 @@ async function runBackfill(options: {
   console.log(
     `Done. ${result.fetched} fetched, ${result.errors} failed, ${result.skipped} skipped.`
   );
-  if (result.errors > 0) {
+  if (result.stoppedBy === "rate_limit") {
+    console.log("");
+    console.log("Garmin rate limited this run, so it stopped rather than making");
+    console.log("hundreds more requests that could not have succeeded. Wait a few");
+    console.log("minutes and run it again — every day already fetched is checkpointed.");
+  } else if (result.errors > 0) {
     console.log("Failed days are retried automatically on the next run.");
   }
   closeHistoryDb();
@@ -312,7 +338,7 @@ export function createCliProgram(): Command {
   program
     .command("serve")
     .description("Start remote MCP server (Streamable HTTP) for web AI connectors")
-    .option("-p, --port <number>", "HTTP port", (value) => Number.parseInt(value, 10))
+    .option("-p, --port <number>", "HTTP port", positiveIntOption("--port"))
     .option("-H, --host <host>", "Bind host")
     .action(async (options: { port?: number; host?: string }) => {
       try {
@@ -333,8 +359,8 @@ export function createCliProgram(): Command {
   program
     .command("backfill")
     .description("Fetch Garmin history into the local store — resumable, safe to interrupt")
-    .option("-d, --days <number>", "How many days back to fetch", (value) => Number.parseInt(value, 10))
-    .option("--delay-ms <number>", "Delay between requests", (value) => Number.parseInt(value, 10))
+    .option("-d, --days <number>", "How many days back to fetch", positiveIntOption("--days"))
+    .option("--delay-ms <number>", "Delay between requests", positiveIntOption("--delay-ms", 0))
     .option(
       "-s, --source <name>",
       "Limit to one source (repeatable)",

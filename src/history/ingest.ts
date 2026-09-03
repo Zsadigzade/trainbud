@@ -11,6 +11,7 @@ import { mapActivity } from "../garmin/daily.js";
 import { parseActivityLocalDateTime, parseIsoDate } from "../utils/helpers.js";
 import type { ActivitySummary } from "../garmin/types.js";
 import { logger } from "../utils/logger.js";
+import { GarminApiError } from "../garmin/types.js";
 import { writeFixture } from "./capture.js";
 import {
   appendRawPayload,
@@ -92,6 +93,24 @@ export interface IngestResult {
   errors: number;
   firstDate: string | null;
   lastDate: string | null;
+  /**
+   * Set when the run stopped early because the upstream asked it to. The days
+   * not reached are counted in `skipped` and are deliberately not checkpointed,
+   * so the next run picks them up.
+   */
+  stoppedBy?: "rate_limit";
+}
+
+/** A GarminApiError carrying a 429, however it was wrapped on the way up. */
+function isRateLimit(error: unknown): boolean {
+  if (error instanceof GarminApiError) {
+    return error.statusCode === 429;
+  }
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return message.includes("429") || message.includes("rate limit");
+  }
+  return false;
 }
 
 export interface IngestUnit {
@@ -428,7 +447,22 @@ export async function runIngest(
       outcome = metrics.length > 0 && measuredHere ? "data" : "empty";
       result.fetched += 1;
     } catch (error) {
-      // One bad day must not end a year-long run.
+      // One bad day must not end a year-long run -- but a rate limit is not one
+      // bad day, it is the upstream saying stop, and carrying on is how a
+      // 365-day backfill answered a 429 with seventeen hundred more requests.
+      // Each of those deepened the limit and none of them could have succeeded.
+      if (isRateLimit(error)) {
+        logger.warn(
+          { error, ...unit, remaining: work.length - done },
+          "Garmin rate limited the ingest; stopping this run"
+        );
+        markIngested(unit.date, unit.source, "error", stampedAt);
+        result.errors += 1;
+        result.skipped += work.length - done - 1;
+        result.stoppedBy = "rate_limit";
+        break;
+      }
+
       logger.warn({ error, ...unit }, "Ingest failed for one day");
       outcome = "error";
       result.errors += 1;
