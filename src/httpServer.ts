@@ -11,6 +11,7 @@ import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
 import { requestPairing, checkPairStatus, approvePairing } from "./pairApi.js";
 import { submitPrompt, getPromptStatus, isAiConfigured, clearDailyInsight } from "./promptApi.js";
 import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
+import { runSelfTest } from "./selfTest.js";
 import { addContextEntry, closeContextEntry } from "./history/context.js";
 import { CONTEXT_KINDS, type ContextKind } from "./history/schema.js";
 
@@ -665,6 +666,26 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
           sendJson(res, 200, getDashboardStatus());
+          return;
+        }
+
+        // What the watch would see, asked from outside this machine.
+        //
+        // Everything else on this server reports on itself, which is exactly
+        // why the -400 report took as long as it did: the server was healthy,
+        // the watch was healthy, and the broken hop was the one nothing looked
+        // at. This fetches the configured public URL over the internet with the
+        // watch's own headers and grades the answer the way the watch grades
+        // it. Same route under /api for the CLI and for scripting.
+        if (
+          (pathname === "/dashboard/selftest" || pathname === "/api/selftest") &&
+          req.method === "GET"
+        ) {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+          sendJson(res, 200, await runSelfTest());
           return;
         }
 

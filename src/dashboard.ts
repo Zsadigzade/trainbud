@@ -120,6 +120,13 @@ export function renderDashboard(): string {
     </div>
 
     <div class="section">
+      <h2>Connection</h2>
+      <p class="muted">What the watch would see if it called right now. Everything else on this page reports on this machine, which is exactly why a dead tunnel once looked like a broken AI.</p>
+      <div id="selftest"></div>
+      <button type="button" id="run-selftest" class="btn-ghost" style="margin-top:10px;">Run check</button>
+    </div>
+
+    <div class="section">
       <h2>Watch pairing</h2>
       <div id="pairing"></div>
       <div class="alert">Open TrainBud on your watch — it shows a 6-digit code — then approve it here.</div>
@@ -179,6 +186,52 @@ export function renderDashboard(): string {
       el.textContent = message;
       el.className = 'toast show' + (isError ? ' err' : '');
       setTimeout(function () { el.className = 'toast'; }, 2600);
+    }
+
+    // Every value here comes from the server's own JSON, but it quotes bytes
+    // fetched from whatever is answering the public URL -- which is, by
+    // definition, a host we do not control. textContent everywhere; innerHTML
+    // would run whatever a hostile tunnel decided to serve.
+    function renderSelfTest(result) {
+      var host = document.getElementById('selftest');
+      host.innerHTML = '';
+
+      result.checks.forEach(function (check) {
+        var row = document.createElement('div');
+        row.className = 'row';
+
+        var label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = check.name;
+
+        var state = document.createElement('span');
+        state.className = check.ok ? 'ok' : (check.warning ? 'warn' : 'err');
+        state.textContent = check.ok ? 'ok' : (check.warning ? 'warning' : 'failed');
+
+        row.appendChild(label);
+        row.appendChild(state);
+        host.appendChild(row);
+
+        var detail = document.createElement('p');
+        detail.className = 'muted';
+        detail.style.margin = '2px 0 10px';
+        detail.textContent = check.detail + (check.fix ? '  →  ' + check.fix : '');
+        host.appendChild(detail);
+      });
+    }
+
+    function loadSelfTest() {
+      var host = document.getElementById('selftest');
+      host.innerHTML = '';
+      var busy = document.createElement('p');
+      busy.className = 'muted';
+      busy.textContent = 'Checking...';
+      host.appendChild(busy);
+
+      fetch('/dashboard/selftest', { headers: authHeaders({ 'Accept': 'application/json' }) })
+        .then(function (r) { return r.json(); })
+        .then(renderSelfTest)
+        .catch(function () { toast('Could not run the check', true); });
     }
 
     function renderPairing(pending) {
@@ -389,8 +442,16 @@ export function renderDashboard(): string {
       );
     });
 
+    document.getElementById('run-selftest').addEventListener('click', loadSelfTest);
+
     refresh();
     setInterval(refresh, 5000);
+
+    // Run once on load. The check costs one outbound request and answers the
+    // question a user arriving at this page most often has -- and it is
+    // deliberately NOT on the 5s refresh, because hitting the public URL twelve
+    // times a minute forever is how you get rate limited by your own tunnel.
+    loadSelfTest();
   </script>
 </body>
 </html>`;

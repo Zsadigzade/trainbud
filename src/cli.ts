@@ -400,6 +400,42 @@ export function createCliProgram(): Command {
       }
     });
 
+  // Separate from `check`, which exercises the Garmin tools. This asks the one
+  // question `check` cannot: what would the watch see if it called right now.
+  // The -400 report took days partly because every diagnostic ran on this
+  // machine, where everything was genuinely healthy; the broken hop was the one
+  // nothing looked at from the outside.
+  program
+    .command("doctor")
+    .description("Check what the watch would see: public URL, AI key, history depth")
+    .action(async () => {
+      try {
+        const { runSelfTest } = await import("./selfTest.js");
+        const result = await runSelfTest();
+
+        console.log("");
+        console.log("TrainBud doctor");
+        console.log("");
+        for (const check of result.checks) {
+          const mark = check.ok ? "✓" : check.warning ? "!" : "✗";
+          console.log(`  ${mark}  ${check.name}`);
+          console.log(`     ${check.detail}`);
+          if (check.fix) {
+            console.log(`     → ${check.fix}`);
+          }
+          console.log("");
+        }
+
+        if (!result.ok) {
+          process.exitCode = 1;
+        }
+      } catch (error) {
+        logger.error({ error }, "Doctor failed");
+        console.error(error instanceof Error ? error.message : "Doctor failed");
+        process.exitCode = 1;
+      }
+    });
+
   program
     .command("status")
     .description("Show session and cache status")
