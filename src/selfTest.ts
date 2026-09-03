@@ -222,10 +222,11 @@ export async function runSelfTest(
   // The detectors' own coverage figure, not a row count: it is the number the
   // 14-day threshold is actually applied to, so the dashboard and the watch
   // cannot disagree about whether there is enough history.
-  let historyDays = 0;
+  let historyDays: number;
   try {
     historyDays = runDetectors().coverage.days;
   } catch {
+    // A store that cannot be opened is a real answer here: zero days known.
     historyDays = 0;
   }
 
