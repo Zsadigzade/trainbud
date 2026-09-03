@@ -95,6 +95,39 @@ describe("resting HR elevation", () => {
   });
 });
 
+describe("a gap in the store is not a run of days", () => {
+  // The recent window was the last N POINTS, and N points are N days only when
+  // the store has no holes -- which it routinely does, because a day gets a row
+  // only when the watch was worn. Three elevated mornings from two months ago,
+  // followed by silence, were reported today as "3 days running".
+  it("does not report old points as the last three days", () => {
+    const stale = [
+      { date: "2026-06-01", value: 50 },
+      { date: "2026-06-02", value: 50 },
+      { date: "2026-06-03", value: 50 },
+    ];
+    const baseline = steadyResting(28).map((value, index) => ({
+      date:
+        NOW.startOf("day").minus({ days: 60 - index }).toISODate() ?? "",
+      value,
+    }));
+    // The three most recent POINTS are elevated, but they are weeks old.
+    const elevated = [
+      { date: "2026-07-10", value: 58 },
+      { date: "2026-07-11", value: 59 },
+      { date: "2026-07-12", value: 58 },
+    ];
+
+    const finding = detectRestingHrElevation({
+      now: NOW,
+      series: () => [...stale, ...baseline, ...elevated],
+      activities: () => [],
+    });
+
+    assert.equal(finding, null, "a two-month-old run was reported as current");
+  });
+});
+
 describe("sleep debt", () => {
   it("fires when the week falls well short of the personal median", () => {
     const finding = detectSleepDebt(
@@ -125,6 +158,52 @@ describe("sleep debt", () => {
 
   it("returns null without enough baseline history", () => {
     assert.equal(detectSleepDebt(input({ sleep_seconds: repeat(6 * 3600, 8) })), null);
+  });
+
+  // Every test above uses a perfectly constant series, so the baseline's spread
+  // is zero and the estimator's bias cannot show. Real sleep varies.
+  //
+  // Summing only the shortfalls against a MEDIAN counts roughly half the nights
+  // by construction: for a symmetric sleeper the expected one-sided shortfall is
+  // about 0.4 x the spread per night, so a week accumulates ~2.8 x the spread of
+  // "debt" from nothing but ordinary variation. At an hour of night-to-night
+  // swing that is most of the three-hour threshold, and the detector fired at a
+  // steady sleeper who owed nothing.
+  it("stays silent for a steady sleeper whose nights merely vary", () => {
+    // Deliberately sized to have failed before the fix. Against the median these
+    // seven nights carry 3.7 h of one-sided shortfall, over the 3 h threshold,
+    // from a sleeper whose weeks are identical and who owes nothing. Against the
+    // floor -- the median less the user's own spread -- they carry 0.3 h.
+    const week = [7.5, 9.0, 6.0, 8.5, 6.5, 9.2, 6.3];
+    const nights = Array.from({ length: 35 }, (_, index) =>
+      (week[index % 7] as number) * 3600
+    );
+
+    const finding = detectSleepDebt(input({ sleep_seconds: nights }));
+
+    assert.equal(
+      finding,
+      null,
+      "ordinary night-to-night variation was reported as a sleep debt"
+    );
+  });
+
+  // ...and the real thing still fires through that variation.
+  it("still fires when a varying sleeper genuinely loses a week", () => {
+    const baselineNights = Array.from({ length: 28 }, (_, index) => {
+      const swing = [0, 1, -1, 0.5, -0.5, 1.2, -1.2][index % 7] as number;
+      return (7.5 + swing) * 3600;
+    });
+    const shortWeek = Array.from({ length: 7 }, (_, index) => {
+      const swing = [0, 0.4, -0.4, 0.2, -0.2, 0.5, -0.5][index % 7] as number;
+      return (5.5 + swing) * 3600;
+    });
+
+    const finding = detectSleepDebt(
+      input({ sleep_seconds: [...baselineNights, ...shortWeek] })
+    );
+
+    assert.equal(finding?.kind, "sleep_debt");
   });
 });
 

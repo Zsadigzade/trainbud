@@ -60,9 +60,16 @@ export interface RecoveryStatusResult {
   score: number;
   status: "recovered" | "good" | "fatigued";
   recommendation: string;
+  /**
+   * Null means the signal was not measured, which is a different thing from
+   * measuring badly. Sleep defaulted to 0 seconds when the watch was not worn
+   * and scored 35 out of 100 for it, so an unworn night produced a confident
+   * "fatigued" verdict out of no data at all. A null component is dropped and
+   * the remaining weights are renormalised.
+   */
   components: {
     hrvScore: number;
-    sleepScore: number;
+    sleepScore: number | null;
     stressScore: number;
     restingHrScore: number;
   };

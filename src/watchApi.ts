@@ -181,7 +181,12 @@ export function toWatchSleep(payload: SleepPayload | null): WatchSleep | null {
 
   const score = night.sleepScore ?? payload.averageScore;
 
-  let label = "Fair";
+  // "Fair" was the default, so a night Garmin never scored was labelled as
+  // though it had been assessed and found middling. Every branch below tests
+  // `score !== null` and the fall-through case is exactly the one where there is
+  // no score at all -- a verdict on a measurement that does not exist. The
+  // duration is still real and still worth showing; the judgement is not.
+  let label = "";
   if (score !== null && score >= 80) {
     label = "Great";
   } else if (score !== null && score >= 60) {

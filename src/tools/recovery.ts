@@ -71,9 +71,22 @@ export function scoreFromHrv(hrv: number | null, status: string | null): number 
   return 40;
 }
 
-export function scoreFromSleep(score: number | null, durationSeconds: number): number {
+/**
+ * Null when the night was not measured at all.
+ *
+ * The call site passed `sleep?.sleepTimeSeconds ?? 0`, so a night with no sleep
+ * record became zero seconds, fell through every band, and scored 35 out of 100
+ * -- a confident bad-night verdict manufactured out of an unworn watch. An hour
+ * is the floor for "this is a measurement": nobody's real night is shorter, and
+ * Garmin does report tiny durations for naps and for partial wear.
+ */
+export function scoreFromSleep(score: number | null, durationSeconds: number): number | null {
   if (score !== null) {
     return clamp(score, 0, 100);
+  }
+
+  if (durationSeconds < 3600) {
+    return null;
   }
 
   const hours = durationSeconds / 3600;
@@ -141,12 +154,25 @@ export function buildRecoveryStatus(
   components: RecoveryStatusResult["components"],
   weights: RecoveryWeights
 ): RecoveryStatusResult {
-  const score = Math.round(
-    components.hrvScore * weights.hrv +
-      components.sleepScore * weights.sleep +
-      components.stressScore * weights.stress +
-      components.restingHrScore * weights.restingHr
-  );
+  // A component that was never measured is dropped and its weight redistributed
+  // across the rest, rather than being scored as though it had been measured
+  // badly. Scoring an absence is how an unworn night became "fatigued".
+  const parts: { value: number; weight: number }[] = [
+    { value: components.hrvScore, weight: weights.hrv },
+    { value: components.stressScore, weight: weights.stress },
+    { value: components.restingHrScore, weight: weights.restingHr },
+  ];
+  if (components.sleepScore !== null) {
+    parts.push({ value: components.sleepScore, weight: weights.sleep });
+  }
+
+  const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
+  const score =
+    totalWeight > 0
+      ? Math.round(
+          parts.reduce((sum, part) => sum + part.value * part.weight, 0) / totalWeight
+        )
+      : 0;
 
   let status: RecoveryStatusResult["status"] = "good";
   let recommendation = "Moderate training is reasonable. Listen to your body during hard efforts.";
@@ -211,7 +237,7 @@ export function renderRecoveryText(payload: RecoveryPayload): string {
     "",
     "Component scores:",
     `- HRV: ${recovery.components.hrvScore}`,
-    `- Sleep: ${recovery.components.sleepScore}`,
+    `- Sleep: ${recovery.components.sleepScore ?? "not measured"}`,
     `- Stress: ${recovery.components.stressScore}`,
     `- Resting HR: ${recovery.components.restingHrScore}`,
     "",

@@ -169,6 +169,50 @@ describe("recovery weights", () => {
     assert.ok(status.score > 60 && status.score <= 100, `score is ${status.score}`);
   });
 
+  // An unworn night is not a bad night.
+  //
+  // scoreFromSleep was handed `sleep?.sleepTimeSeconds ?? 0`, so a night with no
+  // record at all became zero seconds, fell through every band and scored 35 --
+  // and 35 dragged an otherwise excellent day under the 60 that reads
+  // "fatigued". The app told a well-rested user to take a rest day because their
+  // watch had been on the charger.
+  it("does not score a night that was never measured", () => {
+    assert.equal(scoreFromSleep(null, 0), null);
+    assert.equal(scoreFromSleep(null, 600), null, "a ten-minute reading is not a night");
+    assert.equal(scoreFromSleep(null, 8 * 3600), 90);
+    assert.equal(scoreFromSleep(88, 0), 88, "a real score still wins");
+  });
+
+  it("drops an unmeasured component instead of scoring it badly", () => {
+    const weights = normalizeWeights({
+      hrv: undefined,
+      sleep: undefined,
+      stress: undefined,
+      restingHr: undefined,
+    });
+
+    const measured = buildRecoveryStatus(
+      { hrvScore: 95, sleepScore: null, stressScore: 95, restingHrScore: 90 },
+      weights
+    );
+
+    assert.ok(
+      measured.score >= 90,
+      `an unworn night dragged the score to ${measured.score}`
+    );
+    assert.notEqual(measured.status, "fatigued");
+
+    // The old behaviour, for contrast: scoring the absence as 35.
+    const asZero = buildRecoveryStatus(
+      { hrvScore: 95, sleepScore: 35, stressScore: 95, restingHrScore: 90 },
+      weights
+    );
+    assert.ok(
+      asZero.score < measured.score,
+      "the regression this test exists to catch is no longer distinguishable"
+    );
+  });
+
   it("still honours weights the caller does pass", () => {
     const weights = normalizeWeights({ hrv: 1, sleep: 1, stress: undefined, restingHr: undefined });
     assert.ok(weights.hrv > 0.2 && weights.hrv < 0.5);
