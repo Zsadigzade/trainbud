@@ -4,7 +4,102 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] — server 0.4.1 · watch 1.4.0
 
-Nothing released yet.
+"The AI says it has no access to my data" was reported once and fixed once, in
+`bb1fae8`. This release is what an audit found behind it: **four more distinct
+causes of that same sentence**, none of which the first fix touched, plus six
+defects the sweep turned up alongside them. Every one was verified against this
+machine's real install, whose Garmin session is genuinely gone and whose record
+genuinely stops on 2026-08-21 — which turned out to be the most valuable test
+fixture in the project.
+
+### Fixed — the AI could not see the user's data, four more ways
+
+- **The one tool that reads the store told the model the store was empty.**
+  `get_findings` and `trainbud findings`, on a store holding 74 days:
+  *"Still gathering data — 74 of the 14 days needed."* `coverage.ready` carries
+  two refusals that need opposite answers — not enough history yet, and plenty
+  of history that stops weeks ago — and `bb1fae8` taught exactly one of the four
+  surfaces to tell them apart. `FindingsPayload.coverage` was also typed
+  `{ days, ready }` while the value assigned to it carried four fields, so the
+  renderer could not have read `throughDate` had it wanted to. One
+  `describeFindingsCoverage`, read by all four surfaces.
+
+- **Nothing on the read path had ever opened the history store.** Every
+  per-metric tool read Garmin and nothing else, so an expired session meant
+  `get_sleep_data` threw, all six of the watch summary's payload calls returned
+  null, and an MCP client got a tool error — with 598 measurements and 2139
+  archived Connect responses on disk. Tools now fall back to `raw_payload`,
+  re-run through the *same* mapper the live path uses so a stored night keeps
+  its stage breakdown, and to `daily_metric` behind it for days older than the
+  180-day archive. **The window moves too**: with the record ending 08-21, "the
+  last 7 nights" selects seven days that were never recorded, so serving the
+  store changed nothing until the window could slide to where the data is — and
+  say so, in capitals, so no model reads a fortnight-old week as this week.
+
+- **A dependency printed English into the middle of the MCP protocol stream.**
+  `garmin-connect` calls `console.log('login page title:', …)` on every
+  re-login, and `console.log` writes to stdout, which is the JSON-RPC channel
+  for `trainbud start`. Claude Desktop and Cursor — the two clients `setup`
+  configures — lose the session on any re-login inside a tool call. Stdout is
+  now claimed for the life of the process rather than one more `console` method
+  being patched at one more call site.
+
+- **Any CLI command killed the answer the watch was waiting for.**
+  `reconcilePromptJobs` ran inside `getDb()`, so the first time *any* process
+  opened `app.db` it flipped every in-flight job to *"The server stopped before
+  this answer came back."* Running `trainbud doctor` while the watch waited did
+  exactly that. It now runs once, from `serve`, and never touches a job younger
+  than five minutes.
+
+### Fixed — numbers the app stated and had not measured
+
+- **"This week against last week" compared seven days against eight.**
+  `series(kind, n)` spans `n + 1` days inclusive, so `WEEK_DAYS * 2` split at
+  `today - 7` gave halves of 7 and 8. The TRIMP load line beside it summed two
+  correct seven-day windows, so a single card disagreed with itself.
+
+- **The sleep card called a fortnight-old night "last night".**
+  `hours.slice(-7)` is the last seven *rows*, which are seven nights only if the
+  watch was worn every night. Windowed by date now, like `detectors.ts` and
+  `week.ts` already were; a week with nothing in it reports no debt rather than
+  a debt of zero.
+
+- **`status` reported 1590 empty days for a store covering 366 dates.** The
+  count was over `ingest_day` rows, which are keyed (date, source) across six
+  sources. Now 292 empty days against 74 measured — figures that add up.
+
+### Fixed — security and data loss
+
+- **The crash handler wrote the API key to the log the request logger had
+  stopped writing.** The dashboard authenticates with `?token=`, and
+  `logger.error({ error, url: req.url })` was raw. The occurrence already
+  present in `.trainbud/mcp.log` has been scrubbed. **Rotate the key**: a
+  credential that has sat in a world-readable file is exposed whatever the file
+  says now.
+
+- **Only `app.db` was hardened to 0600.** `history.db` — a year of sleep, heart
+  rate and HRV — `cache.db` and the log file were all at the default 0644.
+
+- **`setup` rewrote the user's Claude Desktop config keeping only our own key.**
+  `readMcpConfig` returned `{ mcpServers }` and the write dropped everything
+  else; a config with no `mcpServers` key at all was replaced wholesale. The
+  file is now read whole and copied to `<name>.bak.json` before being touched.
+
+- **The retry path erased the rate-limit block it had just walked into.**
+  `withGarminClient` called `resetGarminClient`, which clears the persisted
+  cooldown, and then forced a login into the live block — on the single path
+  that block exists to guard. Splitting "forget the session" from "forget the
+  limit" also lets the backoff ladder escalate, which it never could.
+
+- **The cooldown test wrote a live five-minute Garmin block into the
+  developer's own database.** Found by attempting a backfill after the suite
+  passed. Tests no longer touch the real `app.db`.
+
+### Notes
+
+Two regression tests in this release passed against the deliberately broken
+build before being rebuilt. Reverting the fix remains the only thing that
+separates a regression test from a decoration.
 
 ## [0.4.0] — server 0.4.0 · watch 1.4.0 - 2026-09-03
 
