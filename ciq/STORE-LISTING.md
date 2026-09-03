@@ -94,6 +94,30 @@ https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
 > Verify this resolves **before** submitting. The previous listing pointed at
 > `Zsadigzade/Garmin-Bud`, which no longer matches the repository name.
 
+## ⛔ Blocker before submitting 2.0.0 — screenshots are from 1.3.x
+
+`ciq/store/screenshots/store/*.png` still show the pre-2.0.0 design: the Overview grid
+before all four cells were graded, and findings drawn as coloured body text rather than
+white text with a severity marker. **They misrepresent the current app and must be
+recaptured.**
+
+They cannot be produced from the screen-tour build. That build draws a debug state
+counter ("9/28") in the top-left of every screen, which is baked into the pixels — an
+attempt to crop the tour captures into store assets produced five images with the counter
+visible. Nor can they come from `generate-store-screenshots.ps1`, which draws mockups by
+hand and says so at the top of the file.
+
+They have to come from the real app build, paired to a live server:
+
+1. `.\scripts\start-watch-stack.ps1` — server + HTTPS tunnel
+2. `cd ciq; .uild.ps1 -Device fenix847mm` — the shipping build, NOT `-Screens`
+3. `connectiq`, then `monkeydo bin\TrainBud.prg fenix847mm`
+4. Pair the simulated watch from the dashboard
+5. **File > Save Screenshot**, once per card
+
+Lead with Today, Week and Recovery — the three screens Connect cannot draw — then
+Overview and Ask.
+
 ## Required assets
 
 | Asset | Path | Size | State |
