@@ -15,8 +15,16 @@ git clone https://github.com/Zsadigzade/trainbud.git
 cd trainbud
 npm install
 npm run build
-npx trainbud setup
+npm link          # puts `trainbud` on your PATH
+trainbud setup
 ```
+
+> `npm link` is what makes the bare `trainbud` command work. Without it every
+> `trainbud ...` line below is "command not found", because TrainBud is not on
+> the npm registry — so `trainbud` does **not** work either, and would run
+> whatever gets published under that name in future. If you would rather not
+> link, every command works as `node dist/index.js <command>` from the repo root.
+> Undo with `npm unlink -g trainbud`.
 
 The setup wizard will:
 
@@ -107,7 +115,7 @@ GARMIN_PASSWORD=yourpassword
 
 ```bash
 npm run build
-npx trainbud auth
+trainbud auth
 ```
 
 You should see: `Garmin authentication successful. Session saved.`

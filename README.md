@@ -36,8 +36,16 @@ git clone https://github.com/Zsadigzade/trainbud.git
 cd trainbud
 npm install
 npm run build
-npx trainbud setup
+npm link          # puts `trainbud` on your PATH
+trainbud setup
 ```
+
+> `npm link` is what makes the bare `trainbud` command work. Without it every
+> `trainbud ...` line below is "command not found", because TrainBud is not on
+> the npm registry — so `trainbud` does **not** work either, and would run
+> whatever gets published under that name in future. If you would rather not
+> link, every command works as `node dist/index.js <command>` from the repo root.
+> Undo with `npm unlink -g trainbud`.
 
 The setup wizard walks you through credentials, authentication, and connecting Cursor or Claude Desktop — no MCP config editing required.
 
@@ -172,6 +180,21 @@ trainbud cache clear    # Clear cached data
 trainbud status         # Show session and cache status
 trainbud --version      # Print version
 ```
+
+These need `npm link` (see Quick start). From a clone without it, the same
+commands are `node dist/index.js <command>` — e.g. `node dist/index.js backfill`.
+
+### Troubleshooting: `trainbud: command not found`
+
+TrainBud is not on the npm registry, so nothing puts the command on your PATH by
+itself. Either run `npm link` once from the repo root, or call the built entry
+point directly:
+
+```bash
+node dist/index.js doctor
+```
+
+If `dist/` does not exist yet, run `npm run build` first.
 
 ## Configuration
 
