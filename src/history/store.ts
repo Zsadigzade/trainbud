@@ -149,6 +149,73 @@ export function appendRawPayload(
     .run(date, source, fetchedAt, JSON.stringify(payload ?? null));
 }
 
+/**
+ * How many revisions of one (date, source) are worth keeping.
+ *
+ * The archive exists because Garmin restates data -- a sleep score finalises
+ * hours after waking, VO2 max is recomputed after a qualifying activity -- and
+ * an archive that overwrote would hide the revision worth seeing. But the table
+ * was append-only with no ceiling at all, and every backfill re-writes every day
+ * it touches: a nightly catch-up over a year of history adds a row per day per
+ * source per run, forever. Three revisions keep the restatement visible; the
+ * fourth only records that a scheduler ran.
+ */
+export const RAW_REVISIONS_KEPT = 3;
+
+/**
+ * Age past which a raw payload is dropped entirely. The derived rows --
+ * daily_metric, activity, ingest_day -- are never touched by pruning, so
+ * history and every baseline computed from it survive intact. What is lost is
+ * only the ability to re-derive a day older than this from the original JSON.
+ */
+export const RAW_RETENTION_DAYS = 180;
+
+export interface RawPruneResult {
+  /** Rows dropped for being older than the retention window. */
+  agedOut: number;
+  /** Rows dropped for being the fourth or later revision of one day. */
+  supersededRevisions: number;
+}
+
+/**
+ * Bound the raw archive. Safe to call repeatedly; it is a no-op once the table
+ * is already within both limits.
+ */
+export function pruneRawPayloads(
+  now = nowSeconds(),
+  retentionDays = RAW_RETENTION_DAYS,
+  revisionsKept = RAW_REVISIONS_KEPT
+): RawPruneResult {
+  const database = getDb();
+  const cutoff = now - retentionDays * 86_400;
+
+  return database.transaction((): RawPruneResult => {
+    const agedOut = database
+      .prepare("DELETE FROM raw_payload WHERE fetched_at < ?")
+      .run(cutoff).changes;
+
+    // Rank within each (date, source) newest-first and drop everything past the
+    // cut. Ordering by id as well as fetched_at keeps this deterministic when
+    // two writes land in the same second, which a batched backfill does often.
+    const supersededRevisions = database
+      .prepare(
+        `DELETE FROM raw_payload
+         WHERE id IN (
+           SELECT id FROM (
+             SELECT id, ROW_NUMBER() OVER (
+               PARTITION BY date, source ORDER BY fetched_at DESC, id DESC
+             ) AS rank
+             FROM raw_payload
+           )
+           WHERE rank > ?
+         )`
+      )
+      .run(revisionsKept).changes;
+
+    return { agedOut, supersededRevisions };
+  })();
+}
+
 export function rawPayloadRevisions(
   date: string,
   source: IngestSource

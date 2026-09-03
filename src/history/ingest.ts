@@ -17,6 +17,7 @@ import {
   appendRawPayload,
   listIngestedDates,
   markIngested,
+  pruneRawPayloads,
   putActivities,
   putMetrics,
 } from "./store.js";
@@ -493,6 +494,17 @@ export async function runIngest(
 
     if (done < work.length) {
       await delay(delayMs, options.signal);
+    }
+  }
+
+  // Every run appends a raw payload per day per source, so the archive grows
+  // with the number of runs and not with the amount of history. Bounding it
+  // here means the table is trimmed by the thing that fills it, rather than
+  // waiting for someone to notice the file.
+  if (result.fetched > 0) {
+    const pruned = pruneRawPayloads();
+    if (pruned.agedOut + pruned.supersededRevisions > 0) {
+      logger.debug({ ...pruned }, "Pruned the raw payload archive");
     }
   }
 

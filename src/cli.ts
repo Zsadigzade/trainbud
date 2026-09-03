@@ -13,7 +13,13 @@ import { withGarminClient } from "./garmin/client.js";
 import { DEFAULT_SOURCES, runIngest } from "./history/ingest.js";
 import { GarminApiError } from "./garmin/types.js";
 import { startHistoryScheduler } from "./history/scheduler.js";
-import { closeHistoryDb, historyStats } from "./history/store.js";
+import {
+  closeHistoryDb,
+  historyStats,
+  pruneRawPayloads,
+  RAW_RETENTION_DAYS,
+  RAW_REVISIONS_KEPT,
+} from "./history/store.js";
 import { runDetectors } from "./detect/index.js";
 import type { IngestSource } from "./history/schema.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
@@ -168,6 +174,23 @@ async function runStatus(): Promise<void> {
     // reads as "that is all Garmin has" rather than as a broken backfill.
     console.log(`Days Garmin had no data for: ${history.emptyDays}`);
   }
+  closeHistoryDb();
+}
+
+async function runPrune(retentionDays: number): Promise<void> {
+  const before = historyStats();
+  const result = pruneRawPayloads(undefined, retentionDays);
+  const after = historyStats();
+
+  console.log("TrainBud prune — raw payload archive only");
+  console.log(`Dropped for being older than ${retentionDays} days: ${result.agedOut}`);
+  console.log(
+    `Dropped for being past revision ${RAW_REVISIONS_KEPT} of a day: ${result.supersededRevisions}`
+  );
+  console.log(`Raw payloads: ${before.rawRows} → ${after.rawRows}`);
+  console.log(
+    `Measurements and activities untouched: ${after.metricRows} measurements, ${after.activityRows} activities.`
+  );
   closeHistoryDb();
 }
 
@@ -483,6 +506,30 @@ export function createCliProgram(): Command {
       } catch (error) {
         logger.error({ error }, "Doctor failed");
         console.error(error instanceof Error ? error.message : "Doctor failed");
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("prune")
+    .description("Bound the raw payload archive. Never touches measurements or activities.")
+    .option(
+      "--days <number>",
+      `Drop raw payloads older than this many days (default ${RAW_RETENTION_DAYS})`,
+      String(RAW_RETENTION_DAYS)
+    )
+    .action(async (options: { days?: string }) => {
+      try {
+        const days = Number(options.days);
+        if (!Number.isFinite(days) || days < 1) {
+          console.error(`--days must be a positive number, got "${options.days}".`);
+          process.exitCode = 1;
+          return;
+        }
+        await runPrune(Math.floor(days));
+      } catch (error) {
+        logger.error({ error }, "Prune failed");
+        console.error(error instanceof Error ? error.message : "Prune failed");
         process.exitCode = 1;
       }
     });
