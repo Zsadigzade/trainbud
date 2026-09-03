@@ -1,4 +1,4 @@
-import { appConfig } from "./config.js";
+import { appConfig, watchSetupReadError } from "./config.js";
 import { isAiConfigured } from "./promptApi.js";
 import { getPendingPairings } from "./pairApi.js";
 import { runDetectors } from "./detect/index.js";
@@ -172,6 +172,45 @@ function describeReach(outcome: ProbeOutcome, url: string): CheckLine {
   }
 }
 
+export interface HistoryCoverage {
+  days: number;
+  ready: boolean;
+  throughDate: string | null;
+  staleDays: number;
+}
+
+/**
+ * Fourteen days is the threshold every detector uses before it will compare a
+ * day against a baseline. Depth alone is not the whole test, and reading only
+ * `days` here reproduced the exact bug `ready` was added to prevent: a store
+ * holding 74 days that stops on 08-21 answered "enough to compare a day against
+ * your own baselines" on 09-03. Every detector then correctly found nothing --
+ * because there was nothing recent to find -- and the one command whose job is
+ * to say what is wrong said everything was fine.
+ *
+ * Extracted so this can be tested without standing up a history database; the
+ * version that shipped the bug was only reachable through one.
+ */
+export function describeHistoryCoverage(coverage: HistoryCoverage): CheckLine {
+  const stale = coverage.days >= 14 && !coverage.ready;
+
+  return {
+    name: "History depth",
+    ok: coverage.ready,
+    warning: stale || (coverage.days > 0 && coverage.days < 14),
+    detail: coverage.ready
+      ? `${coverage.days} days stored through ${coverage.throughDate ?? "today"}, enough to compare a day against your own baselines.`
+      : stale
+        ? `${coverage.days} days stored, but the record stops at ${coverage.throughDate ?? "an unknown date"} — ${coverage.staleDays} days ago. Findings describe days you have already lived past.`
+        : `${coverage.days} days stored; 14 are needed before anything can be compared against a baseline.`,
+    fix: coverage.ready
+      ? undefined
+      : stale
+        ? "Run `trainbud backfill --days 20` to catch the record up."
+        : "Run `trainbud backfill --days 365`.",
+  };
+}
+
 export async function runSelfTest(
   fetchImpl: typeof fetch = fetch
 ): Promise<SelfTestResult> {
@@ -181,12 +220,26 @@ export async function runSelfTest(
   let reach: ReachClass = "not_configured";
 
   if (!publicUrl) {
-    checks.push({
-      name: "Public URL",
-      ok: false,
-      detail: "No public URL is configured, so the watch has no address to call.",
-      fix: "Set TRAINBUD_PUBLIC_URL in .env, or pair a watch once so the address is recorded.",
-    });
+    // A file that exists and will not parse is a different fault from no file
+    // at all, and reporting both as "not configured" sent the reader to set an
+    // environment variable that was never the problem.
+    const readError = watchSetupReadError();
+
+    checks.push(
+      readError === null
+        ? {
+            name: "Public URL",
+            ok: false,
+            detail: "No public URL is configured, so the watch has no address to call.",
+            fix: "Set TRAINBUD_PUBLIC_URL in .env, or pair a watch once so the address is recorded.",
+          }
+        : {
+            name: "Public URL",
+            ok: false,
+            detail: `The watch setup file exists but could not be read: ${readError}`,
+            fix: "Rewrite .trainbud/watch-setup.json as UTF-8 with no byte order mark, or re-run scripts/start-watch-stack.ps1.",
+          }
+    );
   } else {
     checks.push({
       name: "Public URL",
@@ -222,27 +275,15 @@ export async function runSelfTest(
   // The detectors' own coverage figure, not a row count: it is the number the
   // 14-day threshold is actually applied to, so the dashboard and the watch
   // cannot disagree about whether there is enough history.
-  let historyDays: number;
+  let coverage: HistoryCoverage;
   try {
-    historyDays = runDetectors().coverage.days;
+    coverage = runDetectors().coverage;
   } catch {
     // A store that cannot be opened is a real answer here: zero days known.
-    historyDays = 0;
+    coverage = { days: 0, ready: false, throughDate: null, staleDays: 0 };
   }
 
-  // Fourteen days is the threshold every detector uses before it will compare a
-  // day against a baseline, so it is the honest line between "no findings" and
-  // "cannot tell yet".
-  checks.push({
-    name: "History depth",
-    ok: historyDays >= 14,
-    warning: historyDays > 0 && historyDays < 14,
-    detail:
-      historyDays >= 14
-        ? `${historyDays} days stored, enough to compare a day against your own baselines.`
-        : `${historyDays} days stored; 14 are needed before anything can be compared against a baseline.`,
-    fix: historyDays >= 14 ? undefined : "Run `trainbud backfill --days 365`.",
-  });
+  checks.push(describeHistoryCoverage(coverage));
 
   const pending = getPendingPairings().length;
   if (pending > 0) {

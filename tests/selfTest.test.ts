@@ -137,3 +137,57 @@ describe("public URL probe", () => {
     assert.equal(seenHeaders["ngrok-skip-browser-warning"], "1");
   });
 });
+
+/**
+ * `doctor` read `coverage.days` and applied its own `>= 14`, ignoring the
+ * `ready` flag that exists precisely because a deep store can still be stale.
+ * On 2026-09-03, against a store holding 74 days that stopped on 08-21, it
+ * printed "enough to compare a day against your own baselines" — the one
+ * command whose job is to report what is wrong, reporting that nothing was.
+ */
+describe("what doctor says about the history it has", () => {
+  it("does not call a deep but stale store healthy", async () => {
+    const { describeHistoryCoverage } = await import("../src/selfTest.js");
+
+    const line = describeHistoryCoverage({
+      days: 74,
+      ready: false,
+      throughDate: "2026-08-21",
+      staleDays: 13,
+    });
+
+    assert.equal(line.ok, false, "a store 13 days behind is not a passing check");
+    assert.match(line.detail, /stops at 2026-08-21/);
+    assert.match(line.detail, /13 days ago/);
+    assert.match(line.fix ?? "", /backfill/);
+  });
+
+  it("passes a store that is both deep and current", async () => {
+    const { describeHistoryCoverage } = await import("../src/selfTest.js");
+
+    const line = describeHistoryCoverage({
+      days: 74,
+      ready: true,
+      throughDate: "2026-09-03",
+      staleDays: 0,
+    });
+
+    assert.equal(line.ok, true);
+    assert.equal(line.fix, undefined);
+  });
+
+  it("still tells a new user they need more days, not that they are behind", async () => {
+    const { describeHistoryCoverage } = await import("../src/selfTest.js");
+
+    const line = describeHistoryCoverage({
+      days: 3,
+      ready: false,
+      throughDate: "2026-09-03",
+      staleDays: 0,
+    });
+
+    assert.equal(line.ok, false);
+    assert.match(line.detail, /14 are needed/);
+    assert.doesNotMatch(line.detail, /stops at/);
+  });
+});
