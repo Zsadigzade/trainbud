@@ -37,6 +37,9 @@ const EMPTY_PARTS = {
   vo2max: null,
   heartRate: null,
   context: [],
+  week: null,
+  race: null,
+  aiConfigured: true,
   updatedAt: "2026-08-19T20:00:00.000Z",
 };
 

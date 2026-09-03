@@ -40,7 +40,7 @@ function input(
   };
 }
 
-function repeat(value: number, count: number): number[] {
+function repeat<T>(value: T, count: number): T[] {
   return Array.from({ length: count }, () => value);
 }
 

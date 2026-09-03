@@ -20,6 +20,8 @@ const EMPTY_PARTS = {
   findings: [],
   coverage: { days: 0, ready: false },
   context: [],
+  week: null,
+  race: null,
   updatedAt: "2026-09-02T20:00:00.000Z",
 };
 

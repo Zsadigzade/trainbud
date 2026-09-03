@@ -177,6 +177,9 @@ describe("watch mappers", () => {
       findings: [],
       coverage: { days: 0, ready: false },
       context: [],
+      week: null,
+      race: null,
+      aiConfigured: true,
       updatedAt: "2026-08-19T20:00:00.000Z",
     });
 

@@ -61,7 +61,7 @@ describe("check reports AI as configured from a dashboard-saved key", () => {
   it("finds a key that exists only in the settings table", async () => {
     const { setSetting } = await import("../src/appDb.js");
     const { isAiConfigured } = await import("../src/promptApi.js");
-    const { checkSetup } = await import("../src/check.ts");
+    const { checkSetup } = await import("../src/check.js");
 
     // Guard the guard: if a later import ever puts the key back, the assertion
     // below would fail for a reason that has nothing to do with what is being
