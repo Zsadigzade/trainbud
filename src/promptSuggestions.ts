@@ -81,6 +81,32 @@ function contextPrompt(entries: ContextEntry[]): string | null {
   return null;
 }
 
+/**
+ * The user's questions, reduced to what the menu can actually show.
+ *
+ * `profile.ts` refuses a blank, an over-wide or a sixth question on write, so
+ * in practice nothing is dropped here. It is done anyway because the watch
+ * payload must not depend on when a stored row happened to be written: this
+ * field existed in the schema from 0.5.0 with nothing reading or validating it,
+ * and a row saved by hand or by an older build still has to render.
+ */
+function usableCustom(custom: readonly string[]): string[] {
+  const chosen: string[] = [];
+
+  for (const raw of custom) {
+    const prompt = raw.trim();
+    if (!prompt || prompt.length > MAX_LENGTH || chosen.includes(prompt)) {
+      continue;
+    }
+    chosen.push(prompt);
+    if (chosen.length >= PROMPT_COUNT) {
+      break;
+    }
+  }
+
+  return chosen;
+}
+
 function fill(seed: string[], pool: string[]): string[] {
   const chosen = [...seed];
 
@@ -102,19 +128,27 @@ function fill(seed: string[], pool: string[]): string[] {
  */
 export function buildPromptSuggestions(
   result: DetectionResult,
-  context: ContextEntry[] = []
+  context: ContextEntry[] = [],
+  custom: readonly string[] = []
 ): string[] {
+  // The user's own questions lead, in every state. A question someone took the
+  // trouble to write is a better use of one of five slots than one this file
+  // guessed -- and on a cold start it is the only question here that is not
+  // about data the app does not have yet.
+  const own = usableCustom(custom);
+
   if (!result.coverage.ready) {
-    return describeFindingsCoverage(result.coverage).state === "stale"
-      ? [...STALE]
-      : [...COLD_START];
+    return fill(
+      own,
+      describeFindingsCoverage(result.coverage).state === "stale" ? STALE : COLD_START
+    );
   }
 
   const fromFindings = result.findings
     .map((finding: Finding) => FROM_FINDING[finding.kind])
     .filter((prompt): prompt is string => typeof prompt === "string");
 
-  const seed: string[] = [];
+  const seed: string[] = [...own];
   for (const prompt of fromFindings) {
     if (!seed.includes(prompt)) {
       seed.push(prompt);
@@ -129,5 +163,12 @@ export function buildPromptSuggestions(
   return fill(seed, GENERIC);
 }
 
-/** Exported for the test that keeps every prompt inside the watch's width. */
+/**
+ * Exported for the test that keeps every prompt inside the watch's width, and
+ * for the profile schema, which refuses to store a question the menu could
+ * never show. This file owns both numbers: the menu is what they describe.
+ */
 export const PROMPT_MAX_LENGTH = MAX_LENGTH;
+
+/** How many the watch draws. Also the cap on how many the user may write. */
+export const PROMPT_SLOTS = PROMPT_COUNT;

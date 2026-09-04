@@ -108,6 +108,7 @@ It is also where you tell TrainBud who it is talking to:
 | Thresholds | Where green becomes amber and amber becomes red — on the watch too |
 | Watch cards | Which cards appear on the wrist and in what order, live on the next sync |
 | AI model, tone, answer length | How the Ask card and the daily insight sound |
+| Your own Ask questions | Up to five, 32 characters each. They lead the watch's Ask menu; the rest of the slots stay generated from what fired |
 | Monthly spending cap | Optional. Refuses an Ask past the cap instead of spending past it |
 | Privacy | Local feature counters, on by default, with a delete button |
 

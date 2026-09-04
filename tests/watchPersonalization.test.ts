@@ -162,3 +162,24 @@ describe("the budget the watch is warned about", () => {
     });
   });
 });
+
+// A setting is implemented when something reads it. `ai.customPrompts` was in
+// the schema from 0.5.0 and reached nothing: this asserts it is on the wire the
+// watch actually fetches, not merely storable.
+describe("the user's own Ask questions reach the watch", () => {
+  it("leads the menu with them", () => {
+    profile.updateProfile({ ai: { customPrompts: ["Is my knee ok to run on?"] } });
+
+    const prompts = watchApi.buildWatchSummaryFrom(EMPTY_PARTS).prompts;
+
+    assert.equal(prompts[0], "Is my knee ok to run on?");
+    assert.equal(prompts.length, 5);
+  });
+
+  it("offers the generated five when the user wrote none", () => {
+    const prompts = watchApi.buildWatchSummaryFrom(EMPTY_PARTS).prompts;
+
+    assert.ok(!prompts.includes("Is my knee ok to run on?"));
+    assert.equal(prompts.length, 5);
+  });
+});

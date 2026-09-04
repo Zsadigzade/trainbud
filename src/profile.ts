@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { getSetting, setSetting } from "./appDb.js";
+// The Ask menu's own limits. Imported rather than restated: a second copy of
+// "five" and "32" here would drift from the file that decides what the watch
+// draws, and the drift would look like a working setting.
+import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptSuggestions.js";
 
 // SECTION: Profile — everything TrainBud knows about you that Garmin does not
 //
@@ -94,7 +98,14 @@ const profileSchema = z.object({
     // record its tokens with an unknown cost and quietly make the monthly cap
     // unenforceable, so the choice is limited to what `usage.ts` has rates for.
     model: z.enum(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"]),
-    customPrompts: z.array(z.string().max(120)).max(8),
+    // The Ask menu the user writes for themselves. Bounded by what the menu
+    // can show rather than by a round number: five slots, and a width the
+    // watch can draw without clipping. It shipped in 0.5.0 as `max(120)` and
+    // `max(8)` with nothing reading it, which stored questions that could not
+    // have appeared and questions that would have been cut off mid-word.
+    customPrompts: z
+      .array(z.string().trim().min(1).max(PROMPT_MAX_LENGTH))
+      .max(PROMPT_SLOTS),
   }),
   budget: z.object({
     monthlyUsd: z.number().min(0).max(10_000).nullable(),

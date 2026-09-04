@@ -145,3 +145,81 @@ describe("prompt suggestions", () => {
     }
   });
 });
+
+// The user's own questions, from the dashboard. They lead: a question someone
+// took the trouble to write is a better use of a slot than one this file
+// guessed, and there are only five slots.
+describe("custom prompts", () => {
+  it("leads with the user's questions, in the order they wrote them", () => {
+    const prompts = buildPromptSuggestions(ready([finding("rhr_elevated")]), [], [
+      "Is my knee ok to run on?",
+      "How is my cycling FTP?",
+    ]);
+
+    assert.equal(prompts[0], "Is my knee ok to run on?");
+    assert.equal(prompts[1], "How is my cycling FTP?");
+  });
+
+  it("still fills the rest from what actually fired", () => {
+    const prompts = buildPromptSuggestions(ready([finding("sleep_debt")]), [], ["Is my knee ok?"]);
+
+    assert.equal(prompts.length, 5);
+    assert.equal(prompts[1], "How do I clear sleep debt?");
+  });
+
+  it("gives the whole menu over when the user wrote five", () => {
+    const own = ["One?", "Two?", "Three?", "Four?", "Five?"];
+
+    assert.deepEqual(buildPromptSuggestions(ready([finding("rhr_elevated")]), [], own), own);
+  });
+
+  // Their questions are theirs on day three as well. The cold-start list exists
+  // because this file's own guesses would be unanswerable then, not because the
+  // user's are.
+  it("leads with them before there is enough history", () => {
+    const prompts = buildPromptSuggestions(
+      { findings: [], coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 } },
+      [],
+      ["Is my knee ok?"]
+    );
+
+    assert.equal(prompts[0], "Is my knee ok?");
+    assert.match(prompts[1] ?? "", /how much data/i);
+    assert.equal(prompts.length, 5);
+  });
+
+  it("ignores blanks and trims what it keeps", () => {
+    const prompts = buildPromptSuggestions(ready([]), [], ["  Is my knee ok?  ", "   ", ""]);
+
+    assert.equal(prompts[0], "Is my knee ok?");
+    assert.equal(prompts[1], "Should I train today?");
+  });
+
+  // The schema refuses these on write. This is the second line, because the
+  // payload must not depend on when a stored row happened to be written.
+  it("drops a question wider than the watch can render", () => {
+    const tooWide = "x".repeat(PROMPT_MAX_LENGTH + 1);
+
+    const prompts = buildPromptSuggestions(ready([]), [], [tooWide, "Is my knee ok?"]);
+
+    assert.ok(!prompts.includes(tooWide));
+    assert.equal(prompts[0], "Is my knee ok?");
+  });
+
+  it("does not repeat a question the user wrote and the app would have offered", () => {
+    const prompts = buildPromptSuggestions(ready([]), [], ["Should I train today?"]);
+
+    assert.equal(prompts[0], "Should I train today?");
+    assert.equal(new Set(prompts).size, 5);
+  });
+
+  it("gives the identical list for the identical input", () => {
+    const own = ["Is my knee ok?"];
+    const result = ready([finding("rhr_elevated")]);
+
+    assert.deepEqual(
+      buildPromptSuggestions(result, [], own),
+      buildPromptSuggestions(result, [], own)
+    );
+  });
+});

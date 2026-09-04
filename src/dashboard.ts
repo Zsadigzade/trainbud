@@ -1,4 +1,5 @@
 import { CARD_IDS } from "./profile.js";
+import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptSuggestions.js";
 import { CONTEXT_KINDS } from "./history/schema.js";
 import { appConfig } from "./config.js";
 import { columnChart, dumbbellChart, lineChart } from "./dashboardCharts.js";
@@ -134,6 +135,35 @@ function renderCardRows(order: string[], hidden: string[]): string {
     </li>`
     )
     .join("");
+}
+
+/**
+ * One row of the Ask-menu editor.
+ *
+ * Rendered server-side for the questions that exist and once more into a
+ * `<template>`, so the Add button clones the same markup rather than a second
+ * copy of it written in the client script. Two copies of a row is how an
+ * attribute gets fixed in one place and not the other.
+ *
+ * The move buttons carry no `disabled` here: the client recomputes them on
+ * load, on add and on remove, and one owner of that rule is enough.
+ */
+function promptRow(text: string): string {
+  return `<li class="card-row prompt-row">
+      <input type="text" class="prompt-text" maxlength="${PROMPT_MAX_LENGTH}"
+             value="${escapeHtml(text)}" placeholder="A question in your own words"
+             aria-label="Ask question">
+      <span class="card-moves">
+        <span class="prompt-count muted">0/${PROMPT_MAX_LENGTH}</span>
+        <button type="button" class="btn-icon" data-move="up" data-prompt-move="up" aria-label="Move up">&uarr;</button>
+        <button type="button" class="btn-icon" data-move="down" data-prompt-move="down" aria-label="Move down">&darr;</button>
+        <button type="button" class="btn-icon" data-prompt-remove aria-label="Remove">&times;</button>
+      </span>
+    </li>`;
+}
+
+function renderPromptRows(prompts: string[]): string {
+  return prompts.map((text) => promptRow(text)).join("");
 }
 
 function money(value: number): string {
@@ -290,7 +320,13 @@ export function renderDashboard(publicUrl?: string): string {
                 padding: 7px 0; border-bottom: 1px solid var(--line); }
     .card-row:last-child { border-bottom: none; }
     .card-toggle { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
-    .card-moves { display: flex; gap: 6px; }
+    .card-moves { display: flex; gap: 6px; align-items: center; }
+    .prompt-row { gap: 10px; }
+    .prompt-row input { flex: 1 1 auto; min-width: 0; }
+    /* Tabular figures so the count does not jitter the buttons sideways as it
+       ticks from 9 to 10. */
+    .prompt-count { font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .prompt-count.full { color: var(--caution); }
 
     pre { background: var(--ground); border: 1px solid var(--line); border-radius: 8px;
           padding: 11px; overflow-x: auto; font-size: 0.78rem; color: var(--muted); }
@@ -512,6 +548,20 @@ export function renderDashboard(publicUrl?: string): string {
                   )
                   .join("")}
               </select></label>
+            <div class="field">
+              <span>Your own Ask questions</span>
+              <ul class="cards" id="prompt-list">${renderPromptRows(profile.ai.customPrompts)}</ul>
+              <template id="prompt-template">${promptRow("")}</template>
+              <p class="muted" id="prompt-empty"${profile.ai.customPrompts.length ? ' hidden' : ""}>
+                None yet — the watch offers questions drawn from what fired.
+              </p>
+              <div class="actions"><button type="button" id="prompt-add">Add question</button></div>
+            </div>
+            <p class="muted">These lead the Ask menu on your wrist, in this order, in every state.
+              Whatever is left of the ${PROMPT_SLOTS} slots is filled from what actually fired — "Why is my
+              resting HR up?" on the day it is. ${PROMPT_MAX_LENGTH} characters is what the watch can draw
+              on one line; longer wraps into the next question.</p>
+
             <label class="field"><span>Monthly spending cap (USD)</span>
               <input type="number" name="monthlyUsd" min="0" step="0.5" value="${profile.budget.monthlyUsd ?? ""}" placeholder="No cap"></label>
             <p class="muted">Empty means no cap and nothing is ever refused. With a number, an Ask past the cap is refused on the watch with a message rather than silently charged.</p>
@@ -815,12 +865,94 @@ export function renderDashboard(publicUrl?: string): string {
       });
     })();
 
+    // The Ask menu the user writes for themselves. Rows are ordered, so the
+    // editor needs the same up/down the card list has -- the order is what the
+    // watch draws, and there are only ${PROMPT_SLOTS} slots to spend.
+    var askQuestions = (function () {
+      var list = document.getElementById('prompt-list');
+      var template = document.getElementById('prompt-template');
+      var addButton = document.getElementById('prompt-add');
+      var empty = document.getElementById('prompt-empty');
+
+      function rows() { return list.querySelectorAll('.prompt-row'); }
+
+      function refresh() {
+        var all = rows();
+        all.forEach(function (row, index) {
+          row.querySelector('[data-prompt-move="up"]').disabled = index === 0;
+          row.querySelector('[data-prompt-move="down"]').disabled = index === all.length - 1;
+          count(row);
+        });
+        // Saving is refused past the limit anyway; disabling the button says so
+        // before the round trip instead of after it.
+        addButton.disabled = all.length >= ${PROMPT_SLOTS};
+        empty.hidden = all.length > 0;
+      }
+
+      function count(row) {
+        var input = row.querySelector('.prompt-text');
+        var label = row.querySelector('.prompt-count');
+        var used = input.value.trim().length;
+        label.textContent = used + '/' + ${PROMPT_MAX_LENGTH};
+        label.className = 'prompt-count muted' + (used >= ${PROMPT_MAX_LENGTH} ? ' full' : '');
+      }
+
+      list.addEventListener('input', function (e) {
+        var row = e.target.closest('.prompt-row');
+        if (row) { count(row); }
+      });
+
+      list.addEventListener('click', function (e) {
+        var move = e.target.closest('[data-prompt-move]');
+        if (move) {
+          var row = move.closest('.prompt-row');
+          if (move.getAttribute('data-prompt-move') === 'up' && row.previousElementSibling) {
+            list.insertBefore(row, row.previousElementSibling);
+          } else if (move.getAttribute('data-prompt-move') === 'down' && row.nextElementSibling) {
+            list.insertBefore(row.nextElementSibling, row);
+          }
+          refresh();
+          return;
+        }
+        if (e.target.closest('[data-prompt-remove]')) {
+          e.target.closest('.prompt-row').remove();
+          refresh();
+        }
+      });
+
+      addButton.addEventListener('click', function () {
+        list.appendChild(template.content.cloneNode(true));
+        refresh();
+        var all = rows();
+        all[all.length - 1].querySelector('.prompt-text').focus();
+      });
+
+      refresh();
+
+      // An empty row is a row someone added and did not fill, not a question.
+      // The schema refuses a blank, so dropping them here is the difference
+      // between saving and a 400 naming a field the user cannot see.
+      return function collect() {
+        var out = [];
+        rows().forEach(function (row) {
+          var text = row.querySelector('.prompt-text').value.trim();
+          if (text) { out.push(text); }
+        });
+        return out;
+      };
+    })();
+
     document.getElementById('ai-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target;
       var cap = f.monthlyUsd.value.trim();
       saveProfile({
-        ai: { model: f.model.value, tone: f.tone.value, length: f.length.value },
+        ai: {
+          model: f.model.value,
+          tone: f.tone.value,
+          length: f.length.value,
+          customPrompts: askQuestions()
+        },
         budget: { monthlyUsd: cap === '' ? null : Number(cap) }
       }, 'AI settings saved');
     });

@@ -491,7 +491,8 @@ export function buildWatchSummaryFrom(
     race: toWatchRace(parts.race),
     prompts: buildPromptSuggestions(
       { findings: parts.findings, coverage: parts.coverage },
-      parts.context
+      parts.context,
+      profile.ai.customPrompts
     ),
     ai_configured: parts.aiConfigured,
     states: {

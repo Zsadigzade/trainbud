@@ -47,6 +47,8 @@ that rather than pretending everything is fine.
 
 The Ask card offers questions drawn from those same findings, so instead of the same
 five generic prompts every day you get "Why is my resting HR up?" on the day it is.
+You can also write up to five questions of your own in the companion dashboard, and
+those lead the menu.
 
 The numbers are all still there, one swipe on:
 • Overview — recovery, sleep, stress and VO2 max in one grid
@@ -165,6 +167,9 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
   the companion dashboard, and the watch follows them. Resting heart rate is graded on
   the distance from your own median rather than on the rate itself — 58 bpm means
   something different for different people.
+- **Your own questions on the Ask card.** Write up to five in the dashboard and they
+  lead the menu on the wrist, ahead of the generated ones. The remaining slots still
+  come from what actually stood out that day.
 - **Your carousel.** Hide cards you never open and put the rest in the order you want,
   from the dashboard. It applies on the watch's next sync; there is nothing to change in
   Connect IQ settings.

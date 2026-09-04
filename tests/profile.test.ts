@@ -188,3 +188,68 @@ describe("metric state", () => {
     assert.equal(profile.stateFor("restingHrDelta", 9), "hard");
   });
 });
+
+// The watch menu is five slots wide and 32 characters across. Storing anything
+// that cannot appear there is the failure this field shipped with: it existed
+// in the schema from 0.5.0 and nothing read it or wrote it.
+describe("the user's own Ask questions", () => {
+  it("stores what the dashboard sends", () => {
+    const saved = profile.updateProfile({
+      ai: { customPrompts: ["Is my knee ok to run on?", "How is my FTP?"] },
+    });
+
+    assert.deepEqual(saved.ai.customPrompts, ["Is my knee ok to run on?", "How is my FTP?"]);
+    profile.__resetProfileCacheForTests();
+    assert.deepEqual(profile.getProfile().ai.customPrompts, [
+      "Is my knee ok to run on?",
+      "How is my FTP?",
+    ]);
+  });
+
+  it("defaults to none, so the generated questions are what a fresh install gets", () => {
+    assert.deepEqual(profile.getProfile().ai.customPrompts, []);
+  });
+
+  it("refuses a sixth question, because the menu has five slots", () => {
+    assert.throws(
+      () =>
+        profile.updateProfile({
+          ai: { customPrompts: ["a?", "b?", "c?", "d?", "e?", "f?"] },
+        }),
+      /customPrompts/
+    );
+  });
+
+  it("refuses a question wider than the watch can draw", () => {
+    assert.throws(
+      () => profile.updateProfile({ ai: { customPrompts: ["x".repeat(33)] } }),
+      /customPrompts/
+    );
+  });
+
+  it("refuses an empty question rather than storing a blank slot", () => {
+    assert.throws(() => profile.updateProfile({ ai: { customPrompts: ["   "] } }), /customPrompts/);
+  });
+
+  it("clears them when the user deletes the last row", () => {
+    // A patch replaces the array rather than merging into it, so removing the
+    // fifth question does not leave it behind. Sent as [] by the dashboard.
+    profile.updateProfile({ ai: { customPrompts: ["Is my knee ok?", "How is my FTP?"] } });
+
+    assert.deepEqual(profile.updateProfile({ ai: { customPrompts: [] } }).ai.customPrompts, []);
+  });
+
+  it("replaces rather than merges when one is removed", () => {
+    profile.updateProfile({ ai: { customPrompts: ["first?", "second?", "third?"] } });
+
+    const saved = profile.updateProfile({ ai: { customPrompts: ["first?", "third?"] } });
+
+    assert.deepEqual(saved.ai.customPrompts, ["first?", "third?"]);
+  });
+
+  it("trims what it stores, so the width limit means what it says", () => {
+    const saved = profile.updateProfile({ ai: { customPrompts: ["  Is my knee ok?  "] } });
+
+    assert.deepEqual(saved.ai.customPrompts, ["Is my knee ok?"]);
+  });
+});

@@ -35,6 +35,22 @@ was never in a position to make.
   is a cap that can never trip. Every total carries the count of calls it could
   not price and says when it is a floor rather than a total.
 
+### Added — the Ask menu you write yourself
+
+Up to five questions, set in the dashboard, that lead the Ask menu on the wrist in
+the order you put them — ahead of the generated ones, in every state, including the
+first fortnight when the app has nothing of its own worth asking about. Whatever
+slots are left still fill from what actually fired, so "Why is my resting HR up?"
+keeps its place on the day it is up.
+
+**`ai.customPrompts` had existed since the profile landed and nothing read it.** It
+was in the schema, it validated, it saved — and no dashboard control wrote it and no
+code path consumed it, so a question typed against that API could never have appeared
+on a watch. The bounds it shipped with said as much: eight questions for a five-slot
+menu, 120 characters for a line the watch draws at 32. Both now come from
+`promptSuggestions.ts`, which owns the menu, and the profile refuses to store a
+question that could not be shown.
+
 ### Added — a training dashboard
 
 - Phone first, because the pairing flow already was. Findings, the week against
