@@ -31,4 +31,4 @@
 #   .\build.ps1 -Device fr55 -Screens
 #   monkeydo bin\TrainBud-screens.prg fr55
 base.sourcePath = $(base.sourcePath);source-screens
-base.excludeAnnotations = glance;screensStub
+base.excludeAnnotations = glance;screensStub;tourNoLabel

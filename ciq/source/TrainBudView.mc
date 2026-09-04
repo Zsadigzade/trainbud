@@ -127,7 +127,7 @@ class TrainBudView extends WatchUi.View {
     // and a long string here covers the card headings underneath it.
     //
     private function drawTourLabel(dc as Dc) as Void {
-        if (!ScreenTour.isActive()) { return; }
+        if (!ScreenTour.isActive() || !ScreenTour.labelVisible()) { return; }
         var text = (ScreenTour.index() + 1).toString() + "/"
             + ScreenTour.count().toString();
         // Blue, not grey: the Forerunner 55's eight-colour palette has no grey

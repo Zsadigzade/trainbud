@@ -18,6 +18,9 @@ module ScreenTour {
     /** False in every build a user can install. */
     function isActive() as Boolean { return false; }
 
+    /** Never asked in a store build -- isActive() is checked first. */
+    function labelVisible() as Boolean { return false; }
+
     function count() as Number { return 0; }
 
     function index() as Number { return 0; }

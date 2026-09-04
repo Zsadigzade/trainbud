@@ -94,29 +94,44 @@ https://github.com/Zsadigzade/trainbud/blob/main/docs/PRIVACY-POLICY.md
 > Verify this resolves **before** submitting. The previous listing pointed at
 > `Zsadigzade/Garmin-Bud`, which no longer matches the repository name.
 
-## ⛔ Blocker before submitting 2.0.0 — screenshots are from 1.3.x
+## Screenshots
 
-`ciq/store/screenshots/store/*.png` still show the pre-2.0.0 design: the Overview grid
-before all four cells were graded, and findings drawn as coloured body text rather than
-white text with a severity marker. **They misrepresent the current app and must be
-recaptured.**
+`ciq/store/screenshots/store/*.png` — five 390×390 captures of the fr70 display, in
+listing order: **Today, Week, Recovery, Overview, Ask**. Today, Week and Recovery lead
+because they are the three screens Garmin Connect cannot draw.
 
-They cannot be produced from the screen-tour build. That build draws a debug state
-counter ("9/28") in the top-left of every screen, which is baked into the pixels — an
-attempt to crop the tour captures into store assets produced five images with the counter
-visible. Nor can they come from `generate-store-screenshots.ps1`, which draws mockups by
-hand and says so at the top of the file.
+Regenerate them with two commands:
 
-They have to come from the real app build, paired to a live server:
+```powershell
+.\ciq\build.ps1 -Device fr70 -Screens -NoLabel
+.\scripts\capture-store-shots.ps1 -Device fr70
+```
 
-1. `.\scripts\start-watch-stack.ps1` — server + HTTPS tunnel
-2. `cd ciq; .uild.ps1 -Device fenix847mm` — the shipping build, NOT `-Screens`
-3. `connectiq`, then `monkeydo bin\TrainBud.prg fenix847mm`
-4. Pair the simulated watch from the dashboard
-5. **File > Save Screenshot**, once per card
+`-NoLabel` is not optional, and `capture-store-shots.ps1` refuses to run against any
+other build. Three things have gone wrong with these assets, and each is now closed by
+construction rather than by remembering:
 
-Lead with Today, Week and Recovery — the three screens Connect cannot draw — then
-Overview and Ask.
+- **Drawn, not captured.** Before 1.2.0 the set came from
+  `generate-store-screenshots.ps1`, which redraws the screens in PowerShell and never
+  runs the app. It now writes to `ciq/store/mockups/` and refuses to run without
+  `-IUnderstandTheseAreMockups`.
+- **The tour's state counter.** The screen-tour build paints "9/28" over the app's own
+  pixels, and on 2026-09-04 five crops of a tour capture reached the tree with it above
+  the title. `-NoLabel` compiles the counter out (`ScreenTour.labelVisible()`), so it
+  cannot return through a keypress that failed to land, and the capture script re-checks
+  every saved image for the counter's colour anyway.
+- **A guessed crop.** The same attempt cut a square out of the middle of the simulator
+  window, which is off-centre and carries the watch case — including the vendor
+  wordmark printed on the bezel — into an image meant to be the screen. The crop is
+  now taken from the geometry the SDK publishes: `capture-sim.ps1 -Display` locates the
+  device artwork in the window, adds `display.location` from the device's
+  `simulator.json`, and blacks out the corners a round display does not physically have.
+  If the artwork is not found at 1:1 it refuses instead of cropping something plausible.
+
+The numbers in these captures are the tour's sample data, not one person's live account:
+the rendering is the shipping code, the values are representative. Reaching Week's spike
+and the Ask card's finding-derived prompts from live data would need a year of history
+to land on the right day.
 
 ## Required assets
 
@@ -125,7 +140,7 @@ Overview and Ask.
 | Launcher icons | `ciq/resources-launcher-<size>/drawables/` | 35–70, exact per device | generated |
 | Store icon | `ciq/store/store_icon.png` | 130×130 | generated |
 | Cover | `ciq/store/cover_500.png` | 500×500 | generated |
-| Screenshots | `ciq/store/screenshots/` | 1–3 per device family | captured 2026-08-19 from a paired app on the fr70 simulator: overview, recovery, sleep, activity, stress |
+| Screenshots | `ciq/store/screenshots/store/` | 390×390, under 150 KB each | captured 2026-09-04 from the fr70 simulator, screen only: today, week, recovery, overview, ask |
 
 Icons come from `scripts/generate-icons.ps1`; re-run it after changing the product
 list and it rewrites `monkey.jungle` to match. The previous set was a large letter
@@ -138,15 +153,11 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > the app, and they had drifted from the real UI besides. That script now writes to
 > `ciq/store/mockups/` and refuses to run without an explicit flag.
 >
-> To produce real ones:
+> To produce real ones, see **Screenshots** above:
 > ```powershell
-> .\scripts\start-watch-stack.ps1            # server + HTTPS tunnel
-> cd ciq; .\build.ps1 -Device fenix847mm
-> connectiq                                  # simulator
-> monkeydo bin\TrainBud.prg fenix847mm
-> # pair the simulated watch via the dashboard, then File > Save Screenshot per card
+> .\ciq\build.ps1 -Device fr70 -Screens -NoLabel
+> .\scripts\capture-store-shots.ps1 -Device fr70
 > ```
-> Capture at least: glance, Overview, Recovery, and Ask AI with a real answer.
 
 ## What changed in 2.0.0
 

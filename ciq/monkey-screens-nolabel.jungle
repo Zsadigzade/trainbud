@@ -1,0 +1,24 @@
+# The screen tour with the state counter off, for Connect IQ Store assets.
+#
+# Identical to monkey-screens.jungle but for the last annotation: excluding
+# `tourLabel` leaves ScreenTour.labelVisible() answering false, so nothing is
+# drawn over the app's own pixels and a crop of the display is the app alone.
+#
+# Two files rather than one file listed twice with a different exclusion,
+# because `base.excludeAnnotations` is ASSIGNED and not appended -- chaining
+# two jungles that both set it leaves only the last one standing, which is how
+# the glance came back and a capture run photographed it twenty-three times.
+# build.ps1 lists exactly one of these two, ever.
+#
+# Store assets ONLY come from a build made with this file. The counter is baked
+# into the pixels: cropping a labelled capture into 390x390 store screenshots
+# produced five images with "9/28" over the title on 2026-09-04, and they were
+# one commit from the store.
+#
+# Debug only, like its sibling. build.ps1 -Package refuses -Screens outright.
+#
+# Usage:
+#   .\build.ps1 -Device fr70 -Screens -NoLabel
+#   .\scripts\capture-store-shots.ps1 -Device fr70
+base.sourcePath = $(base.sourcePath);source-screens
+base.excludeAnnotations = glance;screensStub;tourLabel

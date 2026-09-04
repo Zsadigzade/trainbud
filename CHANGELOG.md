@@ -90,6 +90,34 @@ simulator being flaky, and was not: the tour allocated a second full payload
 while the first was still live, and on that device it is the difference between
 fitting and not. All 28 states now capture on fr55 and fenix847mm.
 
+### Fixed — store screenshots the app actually drew
+
+The Connect IQ listing still carried five 1.3.x captures: an Overview grid from
+before all four cells were graded, and findings as coloured body text rather
+than white text with a severity marker. Replacing them had already failed twice
+in one day — once because the screen tour paints its state counter over the app
+("9/28" above the title, in five images that reached the tree), once because the
+crop was measured inwards from the simulator window instead of from the device,
+so it sat off-centre and carried the watch case, and the vendor's wordmark
+printed on it, into a picture meant to be the screen.
+
+- **`build.ps1 -Screens -NoLabel`** compiles the counter out through a
+  `ScreenTour.labelVisible()` annotation pair, so no keypress can bring it back.
+- **`capture-sim.ps1 -Display -Device <id>`** locates the device artwork in the
+  window and adds `display.location` from the SDK's own `simulator.json`,
+  writing the display at native resolution — 390×390 on fr70 — with the corners
+  a round screen cannot physically show blacked out. If the artwork is not
+  there at 1:1 it refuses, rather than cropping something plausible.
+- **`capture-store-shots.ps1`** drives the tour, refuses any build but the
+  label-free one, re-checks every saved image for the counter's colour, and
+  stops the run when a keypress does not land instead of naming every remaining
+  file after the state before it.
+
+`ciq/store/screenshots/store/` is now Today, Week, Recovery, Overview and Ask as
+2.0.0 draws them. The five whole-watch 558x558 images that sat beside them are
+gone: nothing referenced them, they were 1.3.x too, and they were pictures of a
+watch rather than of a screen.
+
 ---
 
 ## [0.4.1] — server 0.4.1 · watch 1.4.0

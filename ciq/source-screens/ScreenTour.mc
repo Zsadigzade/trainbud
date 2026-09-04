@@ -58,6 +58,20 @@ module ScreenTour {
 
     function isActive() as Boolean { return true; }
 
+    // Whether the state counter is drawn on top of the app's own pixels.
+    //
+    // On for a review pass: the number is the only independent check that a
+    // capture landed on the state its filename claims, and it earned that job
+    // on the first run. Off for store assets, because the counter is baked
+    // into the pixels -- five 390x390 crops with "9/28" over the title were
+    // one commit away from the Connect IQ store on 2026-09-04.
+    //
+    // Decided by the jungle, not by a keypress. A keypress that does not land
+    // is the exact failure this build already has a history of, and here it
+    // would leave the number in an image nobody looks at again.
+    (:tourLabel)   function labelVisible() as Boolean { return true; }
+    (:tourNoLabel) function labelVisible() as Boolean { return false; }
+
     function count() as Number { return STATE_COUNT; }
 
     function index() as Number { return _index; }

@@ -33,6 +33,12 @@ param(
     # the widget view.
     [switch]$Screens,
 
+    # Build the tour with its state counter off, which is the only build a
+    # Connect IQ Store screenshot may come from. The counter is drawn over the
+    # app's own pixels, so a labelled capture cropped to the display carries
+    # "9/28" into the store. Pairs with scripts/capture-store-shots.ps1.
+    [switch]$NoLabel,
+
     # Export every device in the manifest as ciq/bin/TrainBud.iq.
     [switch]$Package
 )
@@ -70,7 +76,14 @@ if ($Dev) {
 # last base.excludeAnnotations standing, the glance view came back, and the
 # simulator sat in the glance list while a capture run photographed it 23 times.
 if ($NoGlance -and -not $Screens) { $Jungles += "monkey-noglance.jungle" }
-if ($Screens) { $Jungles += "monkey-screens.jungle" }
+# Exactly one of the two screen-tour jungles, never both: they differ only in
+# which half of the labelVisible() pair they exclude, and listing both would
+# leave whichever came last.
+if ($Screens) {
+    if ($NoLabel) { $Jungles += "monkey-screens-nolabel.jungle" }
+    else          { $Jungles += "monkey-screens.jungle" }
+}
+if ($NoLabel -and -not $Screens) { throw "-NoLabel only means anything with -Screens: it turns off the screen tour's own state counter." }
 $JungleArg = $Jungles -join ";"
 
 Push-Location $CiqRoot
@@ -82,7 +95,9 @@ if ($Package) {
 } else {
     $Suffix = ""
     if ($Dev) { $Suffix += "-dev" }
-    if ($Screens) { $Suffix += "-screens" }
+    if ($Screens) {
+        if ($NoLabel) { $Suffix += "-screens-nolabel" } else { $Suffix += "-screens" }
+    }
     elseif ($NoGlance) { $Suffix += "-noglance" }
     $OutPath = Join-Path $CiqRoot "bin\TrainBud$Suffix.prg"
     & (Join-Path $SdkBin "monkeyc.bat") -f $JungleArg -o $OutPath -y $KeyPath -d $Device -w
