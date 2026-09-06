@@ -23,16 +23,15 @@ Guide the user through one-time setup. TrainBud is an unofficial MCP server for 
 
 ## Setup workflow
 
-1. **Install** from a clone. TrainBud is **not published to npm**, so
-   `npx trainbud` and `npm install -g trainbud` do not work — `npm view trainbud`
-   returns 404, and if that name is ever registered by someone else those
-   commands would run their package:
+1. **Install.** These skills ship inside the repo, so you are almost certainly in
+   a clone and want to run the working tree rather than the published release:
    ```bash
    npm install && npm run build
    npm link          # puts `trainbud` on your PATH
    ```
    Without `npm link`, every command below is `node dist/index.js <command>`
-   from the repo root.
+   from the repo root. To use the released version instead, `npm install -g
+   trainbud` or prefix any command with `npx`.
 
 2. **Run the wizard** (interactive — user must enter email/password in terminal):
    ```bash

@@ -6,6 +6,7 @@ TrainBud is an open-source MCP server that connects your Garmin Connect fitness 
 
 > **Disclaimer:** TrainBud is an unofficial community project. It is not affiliated with, endorsed by, or sponsored by Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 
+[![npm](https://img.shields.io/npm/v/trainbud)](https://www.npmjs.com/package/trainbud)
 [![CI](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml/badge.svg)](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node 20+](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](.nvmrc)

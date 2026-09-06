@@ -38,8 +38,7 @@ Alternatively, run the setup wizard (creates `.env` in the current project):
 trainbud setup
 ```
 
-(needs the CLI installed — see below. TrainBud is not on npm, so `npx trainbud`
-resolves nothing.)
+(or `npx trainbud setup`, which needs nothing installed.)
 
 ## Setup workflow
 
@@ -47,14 +46,14 @@ resolves nothing.)
 
 2. **Install CLI** (pick one):
    ```bash
-   # TrainBud is NOT on the npm registry yet: `npm view trainbud` returns 404,
-   # so `npm install -g trainbud` and `npx trainbud` cannot work, and would run
-   # someone else's package if that name is ever claimed. Install from source:
-   git clone https://github.com/Zsadigzade/trainbud.git && cd trainbud
-   npm install && npm run build && npm link
+   npm install -g trainbud        # puts `trainbud` on your PATH
+   # or use it without installing: npx trainbud <command>
+   # or from source:
+   #   git clone https://github.com/Zsadigzade/trainbud.git && cd trainbud
+   #   npm install && npm run build && npm link
    ```
 
-3. **Verify** all 9 tools:
+3. **Verify** every tool:
    ```bash
    trainbud check
    ```

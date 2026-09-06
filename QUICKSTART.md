@@ -11,20 +11,18 @@ Get TrainBud running in about 5 minutes.
 ## Recommended: one-command setup
 
 ```bash
-git clone https://github.com/Zsadigzade/trainbud.git
-cd trainbud
-npm install
-npm run build
-npm link          # puts `trainbud` on your PATH
+npx trainbud setup
+```
+
+To keep `trainbud` on your PATH instead of typing `npx` every time:
+
+```bash
+npm install -g trainbud
 trainbud setup
 ```
 
-> `npm link` is what makes the bare `trainbud` command work. Without it every
-> `trainbud ...` line below is "command not found", because TrainBud is not on
-> the npm registry — so `trainbud` does **not** work either, and would run
-> whatever gets published under that name in future. If you would rather not
-> link, every command works as `node dist/index.js <command>` from the repo root.
-> Undo with `npm unlink -g trainbud`.
+Every command below works either way — as `trainbud <command>` if you installed
+globally, or as `npx trainbud <command>` if you did not.
 
 The setup wizard will:
 
@@ -33,7 +31,7 @@ The setup wizard will:
 3. Authenticate with Garmin Connect
 4. Detect Cursor and Claude Desktop on your machine
 5. Offer to add TrainBud to your MCP client config automatically
-6. Optionally run a live API check against all 9 tools
+6. Optionally run a live API check against every tool
 
 After setup, **restart your MCP client completely** (Cursor or Claude Desktop), then ask:
 
@@ -86,9 +84,10 @@ TrainBud live check
 All 9 checks passed. TrainBud is ready to use.
 ```
 
-## Manual setup (alternative)
+## Manual setup, or running from source
 
-If you prefer to configure files yourself:
+If you prefer to configure files yourself, or you want to run an unreleased
+commit:
 
 ### 1. Install
 
@@ -96,7 +95,11 @@ If you prefer to configure files yourself:
 git clone https://github.com/Zsadigzade/trainbud.git
 cd trainbud
 npm install
+npm link          # puts `trainbud` on your PATH; undo with `npm unlink -g trainbud`
 ```
+
+Without `npm link`, every `trainbud <command>` from a clone is
+`node dist/index.js <command>` run from the repo root.
 
 ### 2. Configure credentials
 

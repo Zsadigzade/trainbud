@@ -66,11 +66,10 @@ if (-not (Test-Path $DistEntry)) {
 
 # Start HTTP server
 Write-Host "Starting trainbud serve..."
-# NOT `npx trainbud serve`. TrainBud is not on the npm registry, so npx has
-# nothing to resolve unless `npm link` happens to have run on this machine --
-# and if that name is ever registered by someone else, npx runs their code
-# instead. `node dist/index.js` is the same entry point the bin field points at,
-# with no resolution step to get wrong.
+# `node dist/index.js`, not `npx trainbud serve`: this script exists to run the
+# working tree you just built, and npx would fetch the published release instead
+# -- which is the opposite of what you want while developing. Same entry point
+# the bin field points at, with no resolution step in between.
 $serveJob = Start-Job -ScriptBlock {
     Set-Location $using:RepoRoot
     node dist/index.js serve 2>&1

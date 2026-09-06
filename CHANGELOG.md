@@ -2,7 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — server 0.5.0 · watch 2.0.2
+## [0.5.1] — server 0.5.1 · watch 2.0.2 — 2026-09-06
+
+First release published to npm: `npx trainbud setup`. Trusted publishing over
+OIDC, no stored token — see `docs/RELEASING.md`.
+
+### Fixed — the published package was 42% dead weight
+
+- **134 of 274 files in the tarball were source maps that resolved to nothing.**
+  `.js.map` and `.d.ts.map` both point at `../src/*.ts`, and `files` does not
+  ship `src`, so every map in the published package referenced a file that was
+  not there. Excluded with `!dist/**/*.map`; maps are still generated locally.
+  **274 files → 140, 1.0 MB → 644 kB unpacked.**
+
+### Fixed — docs that told users the package did not exist
+
+- `QUICKSTART.md` led with `git clone` and stated TrainBud was not on the npm
+  registry. Both Claude Code setup skills said the same, one of them in the very
+  step that installs the CLI. All now lead with `npx trainbud setup`, with the
+  clone path kept for running an unreleased commit.
+- README gains an npm version badge.
+
 
 ### Fixed — a rotated key left the watch with no way back
 
