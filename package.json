@@ -1,6 +1,6 @@
 {
   "name": "trainbud",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "TrainBud \u2014 talk to your Connect fitness data through Claude and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
@@ -32,8 +32,12 @@
     "garmin",
     "garmin-connect",
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "claude",
+    "cursor",
+    "chatgpt",
+    "connect-iq",
     "fitness",
     "health",
     "trainbud"

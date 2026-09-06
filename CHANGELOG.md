@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] — server 0.5.2 · watch 2.0.2 — 2026-09-06
+
+### Added — a paired watch no longer holds the master key
+
+- **Pairing mints a token scoped to that device.** `/api/pair/<code>/status` used
+  to hand the watch `TRAINBUD_API_KEY` itself: the credential that also opens the
+  dashboard and `/mcp`, sent to a device over a public tunnel, with no way to take
+  it back except rotating the key for everything at once. It now mints a
+  256-bit token per pairing and stores only its SHA-256, so a copy of `app.db` is
+  not a working watch credential.
+- **`trainbud devices`** lists paired watches with when they were paired and last
+  seen; **`trainbud devices revoke <id>`** (or `--all`) takes one away without
+  logging out the dashboard, the MCP endpoint, or the other watches. Revoking is
+  now the documented way to remove a watch — rotating `TRAINBUD_API_KEY` is not.
+- **Nothing on the watch changed and no re-pair is forced.** The field name in the
+  pairing response is unchanged, the master key is still accepted, and a watch
+  paired before this release keeps working. Re-pair it to swap its stored master
+  key for a scoped token.
+
+### Added — security headers, on every response including the 401s
+
+- The server shipped 0.5.1 with none, while being reachable from the internet for
+  as long as the watch's tunnel is up. Now sends `Content-Security-Policy`
+  (`frame-ancestors 'none'`, `form-action 'self'`, no external script or style),
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`, and
+  the two `Cross-Origin-*` policies. Applied before routing, so an error path
+  cannot miss them.
+- `script-src` keeps `'unsafe-inline'`: the dashboard is server-rendered HTML with
+  inline handlers, and a nonce policy is a rewrite of the page, not a header.
+- **HSTS only when the request actually arrived over TLS.** Pinning https on a
+  host the user reaches at `http://127.0.0.1:3847` would lock them out of their
+  own dashboard.
+
+### Changed
+
+- npm keywords: added `mcp-server`, `cursor`, `chatgpt`, `connect-iq`.
+- 569 tests (567 pass, 2 skipped), up from 551.
+
 ## [0.5.1] — server 0.5.1 · watch 2.0.2 — 2026-09-06
 
 First release published to npm: `npx trainbud setup`. Trusted publishing over

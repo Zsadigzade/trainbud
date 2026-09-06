@@ -21,10 +21,11 @@ none is planned. Both are described under "What is stored on your computer" belo
 - Reads the **Server URL** you enter in the Connect IQ app settings on your phone
 - Pairs with your server using a six-digit code you approve in the companion dashboard,
   then stores the resulting access token in Connect IQ local storage. **That token is
-  your server's API key, not a narrower per-watch credential** — approving a pairing
-  hands the watch the same key that opens the dashboard and the MCP endpoint. Treat a
-  paired watch as something that holds a password to your server, and revoke it by
-  changing `TRAINBUD_API_KEY` and pairing again
+  scoped to the watch** — since 0.5.2 a pairing mints a credential for that device
+  alone, and only its SHA-256 is stored on your server. Revoke one watch with
+  `trainbud devices revoke <id>`; the dashboard, the MCP endpoint and every other paired
+  watch are unaffected. A watch paired before 0.5.2 still holds the server API key
+  itself: re-pair it to swap that for a scoped token
 - Sends authenticated requests to that server over HTTPS to fetch a health summary, and —
   only if you use the Ask AI card — to submit a preset question
 - Includes, on that same summary request, the id of the card you were last looking at

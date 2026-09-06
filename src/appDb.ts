@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appConfig } from "./config.js";
+import { generateDeviceToken, hashDeviceToken, looksLikeDeviceToken } from "./deviceTokens.js";
 import { restrictExistingFile } from "./utils/secretFile.js";
 
 // SECTION: App DB — settings, pair tokens, prompt jobs
@@ -42,6 +43,18 @@ export const APP_DB_SCHEMA = `
       expires_at  INTEGER NOT NULL,
       approved_at INTEGER
     );
+    -- One row per paired watch. Only the SHA-256 of the token is kept; see
+    -- deviceTokens.ts for why the plaintext is not stored anywhere. Created by
+    -- IF NOT EXISTS on every open, so a database written before 0.5.2 gains
+    -- the table without a migration step and without touching its other rows.
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash   TEXT    NOT NULL UNIQUE,
+      label        TEXT    NOT NULL,
+      created_at   INTEGER NOT NULL,
+      last_seen_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS prompt_jobs (
       id           TEXT PRIMARY KEY,
       prompt       TEXT NOT NULL,
@@ -204,6 +217,76 @@ export function listPendingPairTokens(): PairToken[] {
   return getDb()
     .prepare("SELECT code, created_at, expires_at, approved_at FROM pair_tokens WHERE expires_at > ? AND approved_at IS NULL ORDER BY created_at DESC")
     .all(now) as PairToken[];
+}
+
+// Device tokens
+
+export interface DeviceToken {
+  id: number;
+  label: string;
+  created_at: number;
+  last_seen_at: number | null;
+}
+
+/**
+ * Mints a token, stores its hash, and returns the plaintext exactly once.
+ *
+ * There is no way to read it back afterwards, which is the point: the only
+ * copy that survives this call is the one the watch stores. A lost token is
+ * re-paired, not recovered.
+ */
+export function createDeviceToken(label: string): { id: number; token: string } {
+  const token = generateDeviceToken();
+  const now = Math.floor(Date.now() / 1000);
+  const result = getDb()
+    .prepare("INSERT INTO device_tokens (token_hash, label, created_at, last_seen_at) VALUES (?, ?, ?, NULL)")
+    .run(hashDeviceToken(token), label, now);
+  return { id: Number(result.lastInsertRowid), token };
+}
+
+/**
+ * The id behind a token, or null.
+ *
+ * The lookup is an indexed equality match on a hash rather than a constant-time
+ * comparison, and that is deliberate: timing here can only leak how close a
+ * guess came to an existing *hash*, and producing a token that hashes to a
+ * known value is the preimage problem. The master key comparison in
+ * httpServer.ts is timing-safe because there the secret itself is compared.
+ */
+export function findDeviceTokenId(token: string): number | null {
+  if (!looksLikeDeviceToken(token)) return null;
+  const row = getDb()
+    .prepare("SELECT id FROM device_tokens WHERE token_hash = ?")
+    .get(hashDeviceToken(token)) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+/**
+ * Records that a device was seen, at most once a minute.
+ *
+ * The watch polls, and an unthrottled write here would mean a database write
+ * per request for a column nobody reads more precisely than "today".
+ */
+export function touchDeviceToken(id: number, now = Math.floor(Date.now() / 1000)): void {
+  getDb()
+    .prepare("UPDATE device_tokens SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)")
+    .run(now, id, now - 60);
+}
+
+export function listDeviceTokens(): DeviceToken[] {
+  return getDb()
+    .prepare("SELECT id, label, created_at, last_seen_at FROM device_tokens ORDER BY created_at DESC")
+    .all() as DeviceToken[];
+}
+
+/** True if a row was actually removed, so the CLI can say so honestly. */
+export function revokeDeviceToken(id: number): boolean {
+  return getDb().prepare("DELETE FROM device_tokens WHERE id = ?").run(id).changes > 0;
+}
+
+/** Returns how many were revoked. */
+export function revokeAllDeviceTokens(): number {
+  return getDb().prepare("DELETE FROM device_tokens").run().changes;
 }
 
 // Prompt jobs

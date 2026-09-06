@@ -1,5 +1,6 @@
-import { createPairToken, getPairToken, approvePairToken, deletePairToken, listPendingPairTokens } from "./appDb.js";
+import { createPairToken, getPairToken, approvePairToken, deletePairToken, listPendingPairTokens, createDeviceToken } from "./appDb.js";
 import { appConfig } from "./config.js";
+import { defaultDeviceLabel } from "./deviceTokens.js";
 
 // SECTION: Pairing API
 
@@ -36,9 +37,18 @@ export function checkPairStatus(code: string, publicUrl?: string): PairStatusRes
 
   if (token.approved_at !== null) {
     deletePairToken(code);
+
+    // What the watch receives here used to be appConfig.mcpApiKey: the master
+    // key, handed to a device over a tunnel, with no way to take it back except
+    // rotating the key for everything. It is now a token minted for this
+    // pairing alone, revocable by itself. The field name is unchanged on
+    // purpose -- the watch stores whatever arrives here and sends it as a
+    // bearer token, so nothing on the device had to change and no already
+    // paired watch has to pair again.
+    const device = createDeviceToken(defaultDeviceLabel());
     return {
       approved: true,
-      api_key: appConfig.mcpApiKey,
+      api_key: device.token,
       server_url: publicUrl || appConfig.publicUrl,
     };
   }

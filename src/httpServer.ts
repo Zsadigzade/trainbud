@@ -18,7 +18,14 @@ import {
   recentAiUsage,
   recordFeature,
 } from "./usage.js";
-import { closeAppDb, reconcilePromptJobsOnStartup, setSetting } from "./appDb.js";
+import {
+  closeAppDb,
+  findDeviceTokenId,
+  reconcilePromptJobsOnStartup,
+  setSetting,
+  touchDeviceToken,
+} from "./appDb.js";
+import { looksLikeDeviceToken } from "./deviceTokens.js";
 import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
 import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
@@ -247,6 +254,51 @@ function sessionCookieHeader(req: IncomingMessage, id: string): string {
   return `${SESSION_COOKIE}=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
+/**
+ * Set on every response, before routing, so a 401 and a 500 carry them too.
+ *
+ * This server is reachable from the public internet whenever the tunnel the
+ * watch needs is up, and it was sending no security headers at all.
+ *
+ * `script-src` has to keep `'unsafe-inline'`: the dashboard is server-rendered
+ * HTML with one inline script and inline handlers, and a nonce-based policy is
+ * a rewrite of the page, not a header change. What the policy still buys is
+ * real -- no external script or style can load, the page cannot be framed, and
+ * `form-action 'self'` stops a submission being retargeted.
+ *
+ * HSTS is conditional on purpose. It is sent only on a request that actually
+ * arrived over TLS, because pinning https on a host someone later serves over
+ * plain http locally is a self-inflicted outage.
+ */
+function applySecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+    ].join("; ")
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  // The dashboard is reached with ?token=<key> exactly once before the redirect
+  // to a clean URL. no-referrer keeps that one URL out of any outbound request.
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+
+  const forwarded = req.headers["x-forwarded-proto"];
+  const proto = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+  if (proto === "https") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  }
+}
+
 function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
   const header = req.headers.authorization;
   const headerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
@@ -254,7 +306,27 @@ function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
   if (token !== null && matchesApiKey(token)) {
     return true;
   }
+  if (token !== null && matchesDeviceToken(token)) {
+    return true;
+  }
   return hasValidSession(req);
+}
+
+/**
+ * A paired watch presents a token minted for it alone.
+ *
+ * Checked after the master key, and only for strings shaped like a device
+ * token, so the dashboard and MCP paths -- which never carry one -- do not pay
+ * a database lookup per request. Revoking the row is what logs a watch out;
+ * rotating the master key no longer has to, which is what made rotation brick
+ * a watch before 2.0.2.
+ */
+function matchesDeviceToken(token: string): boolean {
+  if (!looksLikeDeviceToken(token)) return false;
+  const id = findDeviceTokenId(token);
+  if (id === null) return false;
+  touchDeviceToken(id);
+  return true;
 }
 
 /**
@@ -621,6 +693,8 @@ export function createHttpMcpServer(): HttpMcpServer {
       });
 
       const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+        applySecurityHeaders(req, res);
+
         // A Host that is not a valid authority is not worth a 500: fall back to
         // a name that always parses. The host only matters for reading the path
         // and, in resolvePublicUrl, for telling a paired watch where to call

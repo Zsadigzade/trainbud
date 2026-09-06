@@ -24,6 +24,7 @@ import {
 import { describeFindingsCoverage, runDetectors } from "./detect/index.js";
 import type { IngestSource } from "./history/schema.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
+import { listDeviceTokens, revokeAllDeviceTokens, revokeDeviceToken } from "./appDb.js";
 
 // SECTION: Bootstrap
 //
@@ -541,6 +542,54 @@ export function createCliProgram(): Command {
       } catch (error) {
         logger.error({ error }, "Prune failed");
         console.error(error instanceof Error ? error.message : "Prune failed");
+        process.exitCode = 1;
+      }
+    });
+
+  // Revoking a watch used to mean rotating TRAINBUD_API_KEY, which logged out
+  // the dashboard and every MCP client at the same time -- and, until watch
+  // 2.0.2, left the watch holding a dead key it would not replace. A paired
+  // watch now carries a token of its own, and this is where it is taken away.
+  const devicesCommand = program.command("devices").description("List and revoke paired watches");
+
+  devicesCommand
+    .command("list", { isDefault: true })
+    .description("Show paired watches, newest first")
+    .action(() => {
+      const devices = listDeviceTokens();
+      if (devices.length === 0) {
+        console.log("No paired watches. Pair one from the watch app's setup screen.");
+        return;
+      }
+      for (const device of devices) {
+        const created = new Date(device.created_at * 1000).toISOString().slice(0, 10);
+        const seen = device.last_seen_at
+          ? new Date(device.last_seen_at * 1000).toISOString().slice(0, 16).replace("T", " ")
+          : "never";
+        console.log(`${String(device.id).padStart(3)}  ${device.label}  paired ${created}  last seen ${seen}`);
+      }
+    });
+
+  devicesCommand
+    .command("revoke [id]")
+    .description("Revoke one paired watch, or --all of them")
+    .option("--all", "Revoke every paired watch")
+    .action((id: string | undefined, options: { all?: boolean }) => {
+      if (options.all) {
+        const count = revokeAllDeviceTokens();
+        console.log(count === 0 ? "Nothing to revoke." : `Revoked ${count} watch${count === 1 ? "" : "es"}.`);
+        return;
+      }
+      const numericId = Number(id);
+      if (!id || !Number.isInteger(numericId)) {
+        console.error("Pass the id from `trainbud devices list`, or --all.");
+        process.exitCode = 1;
+        return;
+      }
+      if (revokeDeviceToken(numericId)) {
+        console.log(`Revoked ${numericId}. That watch will show "Watch not authorised" and can pair again.`);
+      } else {
+        console.error(`No paired watch with id ${numericId}.`);
         process.exitCode = 1;
       }
     });

@@ -224,6 +224,8 @@ trainbud findings       # What stands out against your own baselines
 trainbud start          # Start the MCP server (stdio)
 trainbud auth           # Force re-authentication
 trainbud cache clear    # Clear cached data
+trainbud devices        # List paired watches
+trainbud devices revoke <id>   # Take one watch's access away
 trainbud status         # Show session and cache status
 trainbud --version      # Print version
 ```
@@ -265,10 +267,14 @@ repo root, or call the built entry point directly with `node dist/index.js docto
 - The dashboard takes the key once, on `/dashboard?token=…`, then trades it for an
   `HttpOnly` session cookie and redirects to a clean URL — so the key does not sit in
   your address bar, your history, or a screenshot
-- **A paired watch holds the API key itself**, not a scoped per-device token. Pairing
-  approval hands over the same key that opens the dashboard and `/mcp`. Revoke a watch
-  by changing `TRAINBUD_API_KEY` and pairing again. A narrower per-device token is
-  planned; until then, treat pairing as handing out a password
+- **A paired watch holds a token scoped to that watch**, minted at pairing and stored
+  on the server as a SHA-256 hash. `trainbud devices` lists them, `trainbud devices
+  revoke <id>` takes one away — without logging out the dashboard, `/mcp`, or your
+  other watches. A watch paired before 0.5.2 holds the API key itself; re-pair it to
+  swap that for a scoped token
+- Every response carries `Content-Security-Policy`, `X-Content-Type-Options`,
+  `X-Frame-Options` and `Referrer-Policy`, including the 401s. HSTS is sent only on a
+  request that actually arrived over TLS, so the loopback dashboard stays reachable
 
 ### What TrainBud is not
 
