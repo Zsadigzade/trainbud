@@ -109,6 +109,7 @@ MIT.
 Talk to your training data — and ask from your wrist
 
 **Alternates:**
+
 - Your fitness data, in the AI you already use
 - Ask your own training history what it means
 
