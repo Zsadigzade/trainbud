@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v*"
+  # Manual trigger, so the release path can be exercised without inventing a
+  # version. Run it against a version already on the registry: npm answers
+  # "cannot publish over the previously published versions", which is proof
+  # that OIDC authenticated -- the registry only reaches that check after it
+  # has accepted who you are. An authentication failure looks completely
+  # different. This exists because the token-based version of this workflow
+  # was broken for ten weeks and nothing revealed it.
+  workflow_dispatch:
 
 # Trusted publishing (OIDC). npm authenticates this exact repo and workflow
 # directly, so no npm token is stored anywhere -- which matters because the
