@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] — server 0.5.0 · watch 2.0.0
 
+### Security — the key stopped living in the address bar
+
+- **The dashboard trades `?token=` for a session cookie and redirects to a clean
+  URL.** The API key opened the dashboard and then stayed in the address bar for
+  the whole session, which put it in browser history, in the tunnel provider's
+  access log, and in every screenshot of the page — and this page is about to be
+  screenshotted by people announcing it. The token still gets you in; what carries
+  you afterwards is an opaque 32-byte session id held in the server's memory, so it
+  grants nothing after a restart and cannot be replayed against another server.
+  `HttpOnly` keeps page script off it and `SameSite=Lax` is what stops cookie auth
+  from adding the CSRF that a Bearer header never had. `Secure` goes on only when
+  the request arrived over TLS, because a browser silently discards a Secure cookie
+  on `http://127.0.0.1` — which is how the local dashboard is reached.
+  A Bearer header still works untouched, and is what the watch and MCP clients use.
+- **The paired watch holds the API key itself, and the docs now say so.** Approving
+  a pairing hands the watch the same credential that opens the dashboard and `/mcp`,
+  not a narrower per-device token. The privacy policy implied a scoped token; it now
+  states what is actually handed over and how to revoke it. A per-device token is
+  still owed.
+- **`scripts/start-watch-stack.ps1` no longer defaults to the maintainer's own ngrok
+  domain.** Anyone who cloned the repo and ran the script published a tunnel pointed
+  at somebody else's address. It reads `TRAINBUD_NGROK_DOMAIN` and refuses to guess.
+
+### Changed — the README a launch link lands on
+
+- Quick start leads with `npx trainbud setup`; the clone-and-link path moves into a
+  "from source" fold. The old first instruction was four commands and a caveat.
+- A **"What TrainBud is not"** section: no hosted service, not an official Garmin
+  integration, not MFA-compatible, and the AI features bill to your own key.
+- The test count said 33. It is 551.
+
 TrainBud knew a great deal about your body and nothing about you. This release
 adds the half that was missing, and takes four decisions off the watch that it
 was never in a position to make.

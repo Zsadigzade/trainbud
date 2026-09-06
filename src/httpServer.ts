@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import http from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { closeCache } from "./garmin/cache.js";
 import {
@@ -163,11 +163,98 @@ function normalizePathname(pathname: string): string {
   return pathname;
 }
 
+// SECTION: Dashboard session
+//
+// The dashboard used to authenticate with `?token=<API key>` and nothing else,
+// so the live key sat in the address bar for the whole session -- in browser
+// history, in the tunnel provider's access log, and in every screenshot of the
+// page. The token still works, but now only as the way in: the first request
+// carrying it is handed an opaque session cookie and redirected to a clean
+// URL, and the cookie is what the page uses from then on.
+//
+// The session id is not the key. It is a random 32-byte value that maps to an
+// expiry in this process's memory, so it grants nothing after a restart and
+// cannot be replayed against a different server.
+const SESSION_COOKIE = "tb_session";
+const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
+const SESSION_PRUNE_THRESHOLD = 64;
+
+const dashboardSessions = new Map<string, number>();
+
+function parseCookies(req: IncomingMessage): Map<string, string> {
+  const jar = new Map<string, string>();
+  const header = req.headers.cookie;
+  if (!header) return jar;
+
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 1) continue;
+    const name = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim();
+    if (name) jar.set(name, value);
+  }
+  return jar;
+}
+
+function hasValidSession(req: IncomingMessage): boolean {
+  const id = parseCookies(req).get(SESSION_COOKIE);
+  if (!id) return false;
+
+  const expiresAt = dashboardSessions.get(id);
+  if (expiresAt === undefined) return false;
+  if (expiresAt <= Date.now()) {
+    dashboardSessions.delete(id);
+    return false;
+  }
+  return true;
+}
+
+function createDashboardSession(): string {
+  // Sessions are only created by a request that already proved it holds the
+  // API key, so the map cannot be grown by a stranger. It is still pruned, so
+  // a long-lived server does not accumulate one entry per browser forever.
+  if (dashboardSessions.size >= SESSION_PRUNE_THRESHOLD) {
+    const now = Date.now();
+    for (const [id, expiresAt] of dashboardSessions) {
+      if (expiresAt <= now) dashboardSessions.delete(id);
+    }
+  }
+
+  const id = randomBytes(32).toString("hex");
+  dashboardSessions.set(id, Date.now() + SESSION_TTL_MS);
+  return id;
+}
+
+/** Exposed for tests: drops every session, as a restart would. */
+export function clearDashboardSessions(): void {
+  dashboardSessions.clear();
+}
+
+/**
+ * `Secure` is omitted when the request did not arrive over TLS, because a
+ * browser silently discards a Secure cookie on a plain-http origin -- which is
+ * exactly how the local `http://127.0.0.1:3847` dashboard is reached. Through
+ * a tunnel the proxy sets `x-forwarded-proto: https`, and the flag goes on.
+ *
+ * `SameSite=Lax` is what keeps cookie auth from adding CSRF: it is sent on
+ * top-level navigations and same-origin requests, never on a cross-site POST.
+ */
+function sessionCookieHeader(req: IncomingMessage, id: string): string {
+  const forwarded = req.headers["x-forwarded-proto"];
+  const proto = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+  const secure = proto === "https" ? "; Secure" : "";
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  return `${SESSION_COOKIE}=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
 function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
   const header = req.headers.authorization;
   const headerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
   const token = headerToken ?? queryToken ?? null;
-  return token !== null && matchesApiKey(token);
+  if (token !== null && matchesApiKey(token)) {
+    return true;
+  }
+  return hasValidSession(req);
 }
 
 /**
@@ -687,6 +774,21 @@ export function createHttpMcpServer(): HttpMcpServer {
             res.end("<h1>401 Unauthorized</h1><p>Add <code>Authorization: Bearer YOUR_API_KEY</code> header, or use the URL <code>/dashboard?token=YOUR_API_KEY</code></p>");
             return;
           }
+
+          // The key came in on the URL. Trade it for a session cookie and
+          // bounce to the bare path, so the address bar -- and anything that
+          // copies it: history, a tunnel log, a screenshot posted in a thread
+          // -- never holds the key again. Anyone still driving the dashboard
+          // with a Bearer header is left alone; there is no URL to clean.
+          if (queryToken && !hasValidSession(req)) {
+            res.writeHead(302, {
+              "Set-Cookie": sessionCookieHeader(req, createDashboardSession()),
+              Location: "/dashboard",
+            });
+            res.end();
+            return;
+          }
+
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           res.end(renderDashboard(resolvePublicUrl(req)));
           return;

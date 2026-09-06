@@ -1,18 +1,24 @@
 # Starts trainbud serve + ngrok tunnel for the Connect IQ watch widget.
 # Run from repo root: .\scripts\start-watch-stack.ps1
 #
-# SETUP: Set your ngrok static domain below, or pass it as an argument:
+# SETUP: set TRAINBUD_NGROK_DOMAIN in your environment, or pass it as an argument:
+#   $env:TRAINBUD_NGROK_DOMAIN = "your-domain.ngrok-free.app"
 #   .\scripts\start-watch-stack.ps1 -NgrokDomain your-domain.ngrok-free.app
 #
 # Get a free static domain at: https://dashboard.ngrok.com/domains
 # Alternatively use Cloudflare Tunnel (see README).
 
 param(
-    # The static domain the Connect IQ app is built against: ciq/resources/settings/
-    # properties.xml ships this as the default ServerUrl, and a sideloaded app has no
-    # settings screen to change it on. Passing a different domain here means the watch
-    # is talking to an address the server is no longer on.
-    [string]$NgrokDomain = "backpedal-immorally-cathouse.ngrok-free.dev"
+    # The static domain the sideloaded Connect IQ app is pointed at. A sideload has
+    # no settings screen, so the domain baked into ciq/resources-dev is the only
+    # address that watch will ever call: passing a different one here means the app
+    # is talking to somewhere the server is not.
+    #
+    # This defaulted to the maintainer's own domain until 2026-09-06, which meant
+    # anyone who cloned the repo and ran the script published a tunnel pointed at
+    # someone else's address. It comes from the environment now, and the script
+    # says what to set rather than guessing.
+    [string]$NgrokDomain = $env:TRAINBUD_NGROK_DOMAIN
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,8 +28,14 @@ Set-Location $RepoRoot
 $ServerPort = 3847
 
 if (-not $NgrokDomain) {
-    Write-Host "ERROR: NgrokDomain not set." -ForegroundColor Red
-    Write-Host "Usage: .\scripts\start-watch-stack.ps1 -NgrokDomain your-domain.ngrok-free.app"
+    Write-Host "ERROR: no ngrok domain. This script will not guess one." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Set it once, in .env or your shell profile:"
+    Write-Host '    $env:TRAINBUD_NGROK_DOMAIN = "your-domain.ngrok-free.app"'
+    Write-Host "Or pass it per run:"
+    Write-Host "    .\scripts\start-watch-stack.ps1 -NgrokDomain your-domain.ngrok-free.app"
+    Write-Host ""
+    Write-Host "Free static domain: https://dashboard.ngrok.com/domains"
     Write-Host "Or use Cloudflare Tunnel: cloudflared tunnel --url http://127.0.0.1:$ServerPort"
     exit 1
 }

@@ -32,24 +32,38 @@ See [examples/prompts.md](./examples/prompts.md) for more ideas.
 ## Quick start
 
 ```bash
+npx trainbud setup
+```
+
+The setup wizard walks you through credentials, authentication, and connecting Cursor or
+Claude Desktop — no MCP config editing required. Then restart your MCP client and ask it
+what you did today.
+
+To keep `trainbud` on your PATH instead of typing `npx` every time:
+
+```bash
+npm install -g trainbud
+trainbud setup
+```
+
+Needs Node 20+. Full walkthrough: [QUICKSTART.md](./QUICKSTART.md)
+
+<details>
+<summary><b>From source</b> (for contributors, or to run an unreleased commit)</summary>
+
+```bash
 git clone https://github.com/Zsadigzade/trainbud.git
 cd trainbud
 npm install
 npm run build
-npm link          # puts `trainbud` on your PATH
+npm link          # puts `trainbud` on your PATH; undo with `npm unlink -g trainbud`
 trainbud setup
 ```
 
-> `npm link` is what makes the bare `trainbud` command work. Without it every
-> `trainbud ...` line below is "command not found", because TrainBud is not on
-> the npm registry — so `trainbud` does **not** work either, and would run
-> whatever gets published under that name in future. If you would rather not
-> link, every command works as `node dist/index.js <command>` from the repo root.
-> Undo with `npm unlink -g trainbud`.
-
-The setup wizard walks you through credentials, authentication, and connecting Cursor or Claude Desktop — no MCP config editing required.
-
-Full walkthrough: [QUICKSTART.md](./QUICKSTART.md)
+Without `npm link`, every `trainbud <command>` in this README is
+`node dist/index.js <command>` run from the repo root. If `dist/` does not exist yet,
+run `npm run build` first.
+</details>
 
 ## Claude Code plugin (recommended)
 
@@ -134,10 +148,10 @@ View recovery, sleep, activity, stress, and VO2 max on your Garmin watch via a C
 2. Build and sideload the widget — see [ciq/README.md](./ciq/README.md)
 3. In **Garmin Connect Mobile** → Connect IQ → TrainBud settings, set:
    - **Server URL** — your tunnel URL (e.g. `https://abc.trycloudflare.com`)
-4. Open the widget on your watch — it shows a pairing code. Approve it in the dashboard (`/dashboard?token=YOUR_API_KEY`) to complete setup.
+4. Open the widget on your watch — it shows a pairing code. Approve it in the dashboard (`/dashboard?token=YOUR_API_KEY`) to complete setup. The dashboard swaps that token for a session cookie and drops it from the URL, so the address bar is safe to screenshot afterwards.
 
 The glance shows recovery and sleep from the last cached summary, so it renders without
-waiting on the network. Open it and tap or swipe to cycle through seven cards. The watch
+waiting on the network. Open it and tap or swipe to cycle through the cards you left switched on in the dashboard. The watch
 calls `GET /api/watch` — a compact JSON summary, not the full MCP protocol.
 
 ## Connect to Claude Desktop
@@ -162,7 +176,8 @@ Edit `claude_desktop_config.json`:
 }
 ```
 
-After `npm link`, you can use the CLI directly:
+With `trainbud` on your PATH (`npm install -g trainbud`, or `npm link` from a clone),
+point the client at the command instead of a path:
 
 ```json
 {
@@ -212,20 +227,14 @@ trainbud status         # Show session and cache status
 trainbud --version      # Print version
 ```
 
-These need `npm link` (see Quick start). From a clone without it, the same
-commands are `node dist/index.js <command>` — e.g. `node dist/index.js backfill`.
+Every one of these also works as `npx trainbud <command>` without installing anything.
 
 ### Troubleshooting: `trainbud: command not found`
 
-TrainBud is not on the npm registry, so nothing puts the command on your PATH by
-itself. Either run `npm link` once from the repo root, or call the built entry
-point directly:
-
-```bash
-node dist/index.js doctor
-```
-
-If `dist/` does not exist yet, run `npm run build` first.
+Either use `npx trainbud <command>`, or install it globally with
+`npm install -g trainbud`. Running from a clone instead? Run `npm link` once from the
+repo root, or call the built entry point directly with `node dist/index.js doctor`
+(after `npm run build`).
 
 ## Configuration
 
@@ -250,6 +259,25 @@ If `dist/` does not exist yet, run `npm run build` first.
 - Tool errors are sanitized before reaching the AI client
 - Uses the unofficial [`garmin-connect`](https://www.npmjs.com/package/garmin-connect) npm package (not Garmin's enterprise OAuth API)
 - **MFA is not supported** by the underlying library — disable MFA or use an app-specific password
+- The server binds `127.0.0.1` by default. It is only reachable from the internet if
+  you point a tunnel at it, and every route except `/health` needs the API key
+- The dashboard takes the key once, on `/dashboard?token=…`, then trades it for an
+  `HttpOnly` session cookie and redirects to a clean URL — so the key does not sit in
+  your address bar, your history, or a screenshot
+- **A paired watch holds the API key itself**, not a scoped per-device token. Pairing
+  approval hands over the same key that opens the dashboard and `/mcp`. Revoke a watch
+  by changing `TRAINBUD_API_KEY` and pairing again. A narrower per-device token is
+  planned; until then, treat pairing as handing out a password
+
+### What TrainBud is not
+
+- **Not a hosted service.** There is no TrainBud account and no TrainBud server. You run
+  it, on your machine, against your own Garmin credentials
+- **Not an official Garmin integration.** It drives an unofficial library against the
+  Connect web API. Garmin can change that API without notice, and does
+- **Not MFA-compatible.** If your Connect account has MFA on, this will not log in
+- **Not free to ask.** The AI features run on your own Anthropic key and are billed to
+  you. The dashboard meters every call and can refuse past a cap you set
 
 ## Troubleshooting
 
@@ -270,7 +298,7 @@ If `dist/` does not exist yet, run `npm run build` first.
 ```bash
 npm install
 npm run build
-npm test          # 33 tests via Node test runner
+npm test          # 551 tests via the Node test runner
 npm run lint
 npm run dev       # Start with auto-reload
 ```
