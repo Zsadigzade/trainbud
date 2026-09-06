@@ -10,6 +10,21 @@
    reports to nobody: if it fails, nothing turns red anywhere you are looking, and the
    only symptom is a version that never appears on the registry.
 
+## Testing the release path without spending a version
+
+`workflow_dispatch` runs the same workflow against `main`. Because the current version is
+already on the registry, the publish step ends with
+
+```
+npm error You cannot publish over the previously published versions: X.Y.Z
+```
+
+**That is the pass condition.** The registry only reaches its version check after it has
+accepted the identity, so reaching it proves OIDC authenticated. An authentication
+failure looks nothing like it (`ENEEDAUTH`, `EOTP`, or a 403). Run this after any change
+to `publish.yml`, the workflow filename, or the npm trusted-publisher settings —
+confirmed working this way on 2026-09-06.
+
 ## Why there is no npm token
 
 There used to be one, in `secrets.NPM_TOKEN`, and it stopped being a workable design:
@@ -28,7 +43,9 @@ in a refactor:
   npm looks for a credential that is not there, and the error names authentication
   rather than the missing permission.
 - **npm >= 11.5.1.** Node 22 ships npm 10, which ignores OIDC entirely, so the workflow
-  upgrades npm before publishing.
+  upgrades npm — **after `npm ci` and the tests, not before**. Upgrading first left
+  `better-sqlite3` with no compiled bindings and failed 133 tests while `ci.yml` stayed
+  green on the same commit. Only `npm publish` needs the newer npm.
 
 The trusted publisher is configured at
 **npmjs.com → Packages → trainbud → Settings → Trusted publishing**, pinned to
