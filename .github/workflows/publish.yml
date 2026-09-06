@@ -5,6 +5,15 @@ on:
     tags:
       - "v*"
 
+# Trusted publishing (OIDC). npm authenticates this exact repo and workflow
+# directly, so no npm token is stored anywhere -- which matters because the
+# token path this workflow used before no longer works: granular tokens with
+# "bypass 2FA" lost sensitive package-management actions in August 2026, and
+# creating a package is one of them. See docs/RELEASING.md.
+permissions:
+  id-token: write # required for OIDC; without it npm falls back to a token and fails
+  contents: write # the release step writes a GitHub release
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -15,9 +24,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+
+      # OIDC publishing needs npm >= 11.5.1. Node 22 ships npm 10, which would
+      # ignore the OIDC token, look for a credential that is not there, and
+      # fail with an authentication error that says nothing about the version.
+      - name: Use an npm that can do OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Install dependencies
         run: npm ci
@@ -36,8 +53,6 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
