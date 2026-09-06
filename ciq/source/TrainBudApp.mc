@@ -438,6 +438,14 @@ class TrainBudApp extends Application.AppBase {
         Storage.setValue(STORAGE_SERVER_URL, serverUrl);
     }
 
+    // Drop the stored key so the next fetch falls into the pairing branch.
+    //
+    // The server URL is deliberately kept: it is still correct, and a user who
+    // rotated a key should not have to retype an address on a watch.
+    function clearApiKey() as Void {
+        Storage.deleteValue(STORAGE_API_KEY);
+    }
+
     // -------------------------------------------------------------------------
     // Health summary fetch
     // -------------------------------------------------------------------------
@@ -608,6 +616,22 @@ class TrainBudApp extends Application.AppBase {
         // meant the user saw plausible, ageing numbers forever and was never
         // told the one thing they could act on, which is to pair again.
         if (_summaryFailClass == Fail.UNAUTHORIZED) {
+            // Saying "not authorised" was not enough: the key stayed in
+            // Storage, and fetchSummary() only starts pairing when the key is
+            // *empty*, so every retry re-sent the dead key and 401'd again.
+            // There was no way out of a rotated key from the watch at all --
+            // and rotating the key is exactly what the docs tell you to do to
+            // revoke a paired watch. Reinstalling the app was the only cure.
+            //
+            // A 401 means this key will never work again, so dropping it loses
+            // nothing and turns the next press into a fresh pairing code.
+            // Status stays "error", not "pairing_error": that screen reads the
+            // *pairing* fail class, which is unset here, so it would draw
+            // "Could not reach TrainBud" for a server that answered 401. The
+            // error screen already names this cause correctly. Clearing the key
+            // is enough on its own — the next fetchSummary() finds no key and
+            // starts pairing.
+            clearApiKey();
             setStatus("error");
             WatchUi.requestUpdate();
             return;

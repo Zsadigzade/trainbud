@@ -2,7 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — server 0.5.0 · watch 2.0.0
+## [Unreleased] — server 0.5.0 · watch 2.0.2
+
+### Fixed — a rotated key left the watch with no way back
+
+- **A 401 cleared nothing, so the watch could never pair again.** The summary
+  fetch classified the failure correctly and drew "Watch not authorised / Pair
+  this watch again", then kept the dead key in `Application.Storage`. Pressing
+  the button called `fetchSummary()`, which only starts pairing when the key is
+  *empty*, so every press re-sent the same dead key and got the same 401. The
+  instruction on screen was not something the watch could actually do, and
+  reinstalling the app was the only cure — for a state the security docs
+  actively tell users to create, since rotating `TRAINBUD_API_KEY` is how you
+  revoke a paired watch. A 401 now drops the stored key, and the next press
+  requests a fresh pairing code. The server URL is kept: it is still right, and
+  nobody should retype an address on a watch.
+- Status deliberately stays `error` rather than `pairing_error`: that screen
+  reads the *pairing* fail class, which is unset on a summary 401, so it would
+  have drawn "Could not reach TrainBud" about a server that answered.
+
+### Note on versions
+
+**The store served 2.0.1 and this repository could not build it** — no tag, no
+manifest bump, no changelog entry. This release is **2.0.2**, built from `main`,
+so the shipped artifact and the source agree again.
+
 
 ### Security — the key stopped living in the address bar
 
