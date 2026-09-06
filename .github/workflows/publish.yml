@@ -36,14 +36,6 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
-      # OIDC publishing needs npm >= 11.5.1. Node 22 ships npm 10, which would
-      # ignore the OIDC token, look for a credential that is not there, and
-      # fail with an authentication error that says nothing about the version.
-      - name: Use an npm that can do OIDC
-        run: |
-          npm install -g npm@latest
-          npm --version
-
       - name: Install dependencies
         run: npm ci
 
@@ -58,6 +50,16 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # OIDC publishing needs npm >= 11.5.1; Node 22 ships npm 10, which ignores
+      # the OIDC token entirely and fails naming authentication rather than the
+      # version. This runs *after* install and tests on purpose: doing it first
+      # left better-sqlite3 with no compiled bindings, so 133 tests failed here
+      # while ci.yml stayed green on the same commit.
+      - name: Use an npm that can do OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Publish to npm
         run: npm publish --access public
