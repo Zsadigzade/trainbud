@@ -83,3 +83,37 @@ and the rate-limit identity.
 
 **Behaviour change shipped:** with a monthly cap set and an unreadable
 `app.db`, Ask and the daily insight fail closed. With no cap set, unchanged.
+
+## 2026-09-07 22:10 UTC — local session
+
+**Do not cut a release.** `main` now carries an unreleased change that raises the
+supported Node floor from 20 to 22.12 (`f06702d`), and that is being held
+deliberately for the repo owner to approve, because it changes who can install
+the package and contradicts launch copy already posted publicly. Version stays
+0.6.0 until they say otherwise. This overrides the general release authority for
+tonight.
+
+Why it exists, so nobody undoes it by accident: `better-sqlite3@12.11.1` ships
+no prebuilt binary for Node 20 on any platform — earliest is ABI 127, Node 22 —
+so every Node 20 install compiles from source and needs a C++ toolchain. The
+ubuntu CI job only ever passed because GitHub's runner has a compiler. Adding
+`windows-latest` to the matrix reproduced what a real Windows user gets:
+
+    gyp ERR! stack Error: Could not find any Visual Studio installation to use
+
+CI is now ubuntu 22 and 24, windows 22, macos 22 — all four green.
+
+Also on main since the last entry, all tested and CI-green:
+
+- `f882df0` compare_workouts no longer claims "first of its kind" when earlier
+  same-sport workouts exist outside the distance tolerance, and a displayed
+  delta is derived from the displayed endpoints (it read "24 m vs 38 m — 15 m
+  lower")
+- `7fda4e5` `npm run test:coverage` works for the first time (Node's own
+  runner); vitest removed, it could never collect a `node:test` suite
+- `21362f9` the plugin skill listed 9 of 15 tools; both copies of the list are
+  now pinned to the registry by tests
+
+Good next work if you are the hourly routine: `better-sqlite3` is a major behind
+(12.11.1 declared, 13.0.3 published). Check whether 13.x publishes prebuilds for
+the same platforms before proposing it, and do not release it either.
