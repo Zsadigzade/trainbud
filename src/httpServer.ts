@@ -94,7 +94,7 @@ export interface HttpMcpServer {
  * can send its own X-Forwarded-For and the proxy appends the address it
  * actually saw.
  */
-function getClientKey(req: IncomingMessage): string {
+export function getClientKey(req: IncomingMessage): string {
   const socketAddress = req.socket.remoteAddress ?? "unknown";
   if (!isLoopbackAddress(socketAddress)) {
     return socketAddress;
