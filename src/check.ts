@@ -103,7 +103,20 @@ export function checkSetup(): ToolCheckResult[] {
   return results;
 }
 
-function buildDefaultToolChecks(): ToolCheckCase[] {
+/**
+ * Tools deliberately left out of the live check, and why.
+ *
+ * `check` is a diagnostic people run when something looks wrong, so it may not
+ * write to the user's own history to prove it works. Anything excluded has to
+ * be named here rather than simply omitted from the list below -- a silent gap
+ * is what let `check` report "all tools" while exercising nine of fourteen.
+ */
+export const TOOLS_WITHOUT_LIVE_CHECK = new Map<string, string>([
+  ["remember_context", "writes a goal or race into your own history"],
+  ["log_subjective", "writes a session note into your own history"],
+]);
+
+export function buildDefaultToolChecks(): ToolCheckCase[] {
   const endDate = DateTime.now().toISODate();
   const startDate = DateTime.now().minus({ days: 30 }).toISODate();
 
@@ -123,6 +136,9 @@ function buildDefaultToolChecks(): ToolCheckCase[] {
     { name: "get_stress_levels", args: { days: 7 } },
     { name: "get_vo2_max_trends", args: { days: 30 } },
     { name: "get_training_insights", args: { days: 7 } },
+    { name: "get_findings", args: {} },
+    { name: "get_week_review", args: {} },
+    { name: "get_user_context", args: {} },
   ];
 }
 
@@ -265,6 +281,25 @@ export async function runLiveCheck(): Promise<ToolCheckResult[]> {
   for (const check of checks) {
     const result = await runToolCheck(check);
     results.push({ ...result, section: "Tools" });
+  }
+
+  // The filter above drops checks for tools that no longer exist. Nothing used
+  // to look the other way, so a newly added tool was simply never exercised and
+  // the summary still said every check passed. An unaccounted tool is now a
+  // visible advisory rather than a silent omission.
+  const covered = new Set(checks.map((check) => check.name));
+  const unaccounted = [...registered].filter(
+    (name) => !covered.has(name) && !TOOLS_WITHOUT_LIVE_CHECK.has(name)
+  );
+
+  if (unaccounted.length > 0) {
+    results.push({
+      section: "Tools",
+      name: "Tool coverage",
+      ok: true,
+      warning: true,
+      summary: `no live check for ${unaccounted.join(", ")} — add one in check.ts`,
+    });
   }
 
   return results;
