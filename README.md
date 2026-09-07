@@ -211,6 +211,7 @@ Restart your MCP client, then start asking questions.
 | `get_training_insights` | Combined weekly summary (activities, sleep, recovery, stress) |
 | `get_findings` | What stands out against **your own** 28-day baselines, not a population average |
 | `get_week_review` | This week against last, the load forecast, sleep debt, and your next race |
+| `compare_workouts` | One workout against your own earlier efforts of the same type and distance |
 | `remember_context` | Record a goal, a race and its date, an injury, or a note |
 | `get_user_context` | What is on record about you, on any date |
 | `log_subjective` | How a session actually felt — RPE, soreness, mood |

@@ -45,6 +45,8 @@ Use these prompts after connecting **TrainBud** in your MCP client (Cursor, Clau
 21. Compare my last workout to my average training load this month.
 22. Am I overtraining? Look at my activities, sleep, stress, and recovery together.
 23. Summarize my fitness this week in plain English — workouts, sleep, HR, and weight.
+24. How did my last run compare with the other times I ran that distance?
+25. Was that session faster or slower than usual, and was my heart rate higher?
 
 ## Desktop clients
 
