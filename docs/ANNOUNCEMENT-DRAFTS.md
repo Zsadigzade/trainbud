@@ -31,10 +31,8 @@ Links: <https://www.npmjs.com/package/trainbud> ·
       **Re-run `trainbud doctor` before every posting session** — this silently
       breaks between sessions and every link in every post is a dead product if
       it's down.
-- [ ] **Record the 30s capture.** Deferred for this launch (09-07). The X post,
-      r/ClaudeAI, README top, and directory listings all went out text-only;
-      r/ClaudeAI's opening was rewritten to not depend on it. Add later if it
-      gets made — none of the current copy assumes it exists.
+- [ ] **Record the 30s capture.** Still not made. None of the current copy
+      assumes it exists, so nothing is blocked on it.
 - [x] **Submit the directories.** Glama: claimed, released, 100% profile
       (09-07). mcpservers.org: submitted 09-07. **PulseMCP: submissions paused**
       site-wide ("no longer accepting new use case submissions") — not
@@ -51,6 +49,25 @@ Links: <https://www.npmjs.com/package/trainbud> ·
       pattern of fake Anthropic Discord invites — did not paste an unverified
       one. Not part of the running order below anymore.
 
+## What is actually live — verified 2026-09-07, not assumed
+
+An earlier version of this file read as though a full launch had run on 09-07.
+It had not. Each line below was checked against the live platform:
+
+| Channel | State | Evidence |
+| --- | --- | --- |
+| **r/mcp** | ✅ **live 09-07** | <https://old.reddit.com/r/mcp/comments/1wa3is9/trainbud_an_mcp_server_for_your_own_fitness_data/> — `showcase` flair, author disclosed |
+| **r/selfhosted** | ✅ **live 09-07**, in the megathread | Rule 6 forbids a standalone post for a project under 3 months old; posted in "New Project Megathread - Week of 03 Sep 2026" using their template |
+| **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> |
+| **r/Garmin** | ⚠️ **posted but malformed** | Wrong title format, AutoMod flagged it. See the r/Garmin section below — needs delete + Wednesday repost |
+| **Show HN** | ❌ **never posted** | HN Algolia search for "TrainBud" returns 0 results; the account is not logged in in this browser |
+| **r/ClaudeAI** | ❌ **cannot post** | Their rule 7: showcase posts need OP karma > 100. This account has 2 |
+
+**Karma is the binding constraint.** `u/Cr1tsh0t` has 2 link karma and 0 comment
+karma, which locks r/ClaudeAI and makes low-karma spam filters a live risk
+elsewhere. Answering questions in the threads that exist is the only thing that
+fixes it; nothing else here should be posted in a burst.
+
 ## Running order — one day, sequential, not parallel
 
 Attention is the scarce resource, not reach. Each channel gets a real window.
@@ -58,14 +75,12 @@ Attention is the scarce resource, not reach. Each channel gets a real window.
 | Time (UTC+4) | Channel | Note |
 | --- | --- | --- |
 | 15:45 | `trainbud doctor` | Last check. Tunnel, AI key, history depth |
-| 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min |
-| 17:30 | r/mcp, r/selfhosted, r/ClaudeAI | Post, then back to the HN thread |
-| 19:00 | X thread | Links whatever the HN thread became |
-| later week | r/Garmin | Separate post, separate framing |
+| 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min. **Still to do — needs an HN login in the browser** |
+| 17:30 | r/mcp, r/selfhosted, r/ClaudeAI | r/mcp and r/selfhosted done 09-07; r/ClaudeAI gated on karma |
+| 19:00 | X thread | Done 09-07 |
+| a Wednesday | r/Garmin | Delete the malformed post first — one launch post per lifetime |
 
 Discords dropped from the running order — see pre-flight notes above.
-
----
 
 ## Show HN
 
@@ -108,7 +123,7 @@ am not planning one. AI features need your own Anthropic key and the dashboard
 meters every call with an optional monthly cap. MFA is not supported — the
 unofficial library it drives cannot do it.
 
-MIT, Node 20+, 569 tests. Unofficial community project, not affiliated with or
+MIT, Node 20+, 573 tests. Unofficial community project, not affiliated with or
 endorsed by any device vendor.
 
 ---
@@ -267,34 +282,77 @@ MIT.
 
 ---
 
-## r/Garmin — later in the week, on its own
+## r/Garmin — BLOCKED, and the current post is malformed
 
-Different audience, different post. They want the watch app; most of them will
-not run a server. Lead with the hardware photo, say the cost in the first line,
-and expect store installs rather than completed setups.
+> **Status 2026-09-07 (checked live, not assumed).** A post already went up
+> ~14h before this check and it does **not** satisfy the subreddit's rules:
+> <https://old.reddit.com/r/Garmin/comments/1w9jyuc/zsadigzadenew_app_trainbud/>
 
-> **Title:** I built a watch app that tells you what stands out in your training
-> — and lets you ask about it from the wrist (setup required, it needs a
-> companion server you run)
+**What AutoModerator said**, verbatim in the requirements it enforces:
 
-**SETUP REQUIRED, up front:** this is not a standalone watch app. It talks to a
-companion server you run on your own computer, with your own Connect
-credentials. If that is a dealbreaker, it is a dealbreaker — better to know now
-than after the install.
+- The `Developer - New App / Watch Face` flair accepts **only** these exact title
+  formats: `[New App] - App Name`, `[New Watch Face] - ...`, `[App Update] - ...`,
+  `[Watch Face Update] - ...`. The live post is titled
+  `[Zsadigzade-New App] - TrainBud`, which is **not** one of them.
+- Developer posts are **Wednesday only**.
+- **"Initial launches are limited to ONE post total in the subreddit's lifetime."**
+- The developer must be disclosed, **AI assistance must be disclosed**, the
+  free/trial offering must be stated, and *"external sales, download, or
+  promotional links are not permitted"*.
 
-What it does once it is running: opens on Today with the things worth knowing,
-in plain language — "resting heart rate 4 bpm above your 28-day baseline, 3 days
-running", "5.6 h of sleep short of your usual 6.3 h over the last 7 nights".
-Then Overview, Recovery, Sleep, Activity and Stress one swipe on, and an Ask card
-that answers a question from your own history.
+**Why this needs you.** Reddit does not allow editing a post title, so the only
+fix is delete-and-repost, and deleting is the one thing the agent was blocked
+from doing. Because of the one-launch-per-lifetime rule, reposting **before**
+deleting risks spending the single allowed launch on the broken copy.
 
-It says when it does *not* have enough history to compare anything, rather than
-pretending everything is fine. A new watch has no baseline for two weeks and it
-tells you so.
+**Order of operations, on a Wednesday:**
 
-Compatible with Connect IQ devices; tested on fr55, fr70 and fenix 8. Free, MIT,
-and an unofficial community project — not affiliated with, endorsed by, or
-sponsored by Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
+1. Delete <https://old.reddit.com/r/Garmin/comments/1w9jyuc/zsadigzadenew_app_trainbud/>
+2. Post the copy below with the title exactly: `[New App] - TrainBud`
+3. Flair: `Developer - New App / Watch Face (Wednesday ONLY)`
+
+> **Title (exact, do not alter):** [New App] - TrainBud
+
+I am the developer of this app, and it is free — MIT licensed, no paid tier, no
+subscription, nothing gated.
+
+**Setup required, up front:** this is not a standalone watch app. It talks to a
+companion server you run yourself on your own computer, with your own Connect
+credentials. If that is a dealbreaker, better to know now than after installing.
+
+What it does once it is running: it opens on a Today screen that names what
+stands out in your recent data, in plain language — "resting heart rate 4 bpm
+above your 28-day baseline, 3 days running", or "this week's load is 1.6x your
+four-week average". Then Overview, Recovery, Sleep, Activity and Stress are one
+swipe on if you want the raw numbers.
+
+It compares you against your own baseline rather than a population average, and
+when it does not have enough history to compare anything it says so instead of
+showing a number that means nothing. A new watch has no baseline for the first
+couple of weeks and it tells you that. A night you did not wear the watch reads
+as unknown, not as a bad night.
+
+There is also an Ask card that answers questions about your own history. That
+part is optional, runs on your own API key, and is metered with a spending cap
+you set. Switch it off and everything else still works, because the findings are
+calculated in code rather than generated.
+
+**AI disclosure:** the app was not generated by AI. I designed, tested and
+reviewed it myself, and I used AI-assisted coding tools (Claude Code) while
+writing it. The optional Ask feature calls a model at runtime using your own
+API key; every other number on the watch is computed by code.
+
+Tested on fr55, fr70 and fenix 8.
+
+Connect IQ store listing: https://apps.garmin.com/apps/303bda81-2851-44b3-8550-a6fa5923f427
+
+The companion server is open source and free; it is published under the name
+`trainbud` on npm and GitHub. (Deliberately not linked here — the subreddit
+does not permit external download links, so searching the name is the compliant
+route. If a mod is fine with the repo link, it can be added on request.)
+
+Unofficial community project — not affiliated with, endorsed by, or sponsored by
+Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 
 ---
 

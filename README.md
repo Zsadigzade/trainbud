@@ -308,7 +308,7 @@ repo root, or call the built entry point directly with `node dist/index.js docto
 ```bash
 npm install
 npm run build
-npm test          # 551 tests via the Node test runner
+npm test          # 573 tests via the Node test runner
 npm run lint
 npm run dev       # Start with auto-reload
 ```
