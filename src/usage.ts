@@ -52,6 +52,8 @@ export interface AiSpend {
   costUsd: number;
   /** Calls whose model had no published price here. */
   unpricedCalls: number;
+  /** True when the usage table could not be read, so these totals mean nothing. */
+  readFailed: boolean;
 }
 
 export interface BudgetState {
@@ -61,6 +63,8 @@ export interface BudgetState {
   exceeded: boolean;
   /** True when unpriced calls make `spentUsd` a floor rather than a total. */
   incomplete: boolean;
+  /** True when the spend could not be read at all, so `spentUsd` means nothing. */
+  spendUnknown: boolean;
 }
 
 /**
@@ -154,10 +158,20 @@ export function aiSpendSince(sinceUnixSeconds: number): AiSpend {
       outputTokens: row.output_tokens,
       costUsd: row.cost_usd,
       unpricedCalls: row.unpriced,
+      readFailed: false,
     };
   } catch (err) {
+    // Returning zeros here used to be indistinguishable from a month with no
+    // spending in it, which quietly disarmed every cap the user had set.
     logger.warn({ err }, "could not read AI usage");
-    return { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, unpricedCalls: 0 };
+    return {
+      calls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      unpricedCalls: 0,
+      readFailed: true,
+    };
   }
 }
 
@@ -183,7 +197,8 @@ export function budgetState(): BudgetState {
       spentUsd: spend.costUsd,
       remainingUsd: null,
       exceeded: false,
-      incomplete: spend.unpricedCalls > 0,
+      incomplete: spend.unpricedCalls > 0 || spend.readFailed,
+      spendUnknown: spend.readFailed,
     };
   }
 
@@ -193,7 +208,8 @@ export function budgetState(): BudgetState {
     spentUsd: spend.costUsd,
     remainingUsd: remaining,
     exceeded: spend.costUsd >= cap,
-    incomplete: spend.unpricedCalls > 0,
+    incomplete: spend.unpricedCalls > 0 || spend.readFailed,
+    spendUnknown: spend.readFailed,
   };
 }
 
@@ -207,9 +223,35 @@ export class BudgetExceededError extends Error {
   }
 }
 
-/** Throws when a cap is set and already reached. No cap means never throws. */
+/**
+ * Thrown when a cap exists but the spending behind it could not be read.
+ *
+ * Distinct from BudgetExceededError on purpose: one says you have spent your
+ * limit, the other says nobody can tell, and the fixes are different.
+ */
+export class BudgetUnverifiableError extends Error {
+  constructor() {
+    super(
+      "A monthly AI budget is set, but this month's spending could not be verified " +
+        "from the local database. Refusing the call rather than spending against a " +
+        "cap that cannot be checked. Run `trainbud doctor` to inspect the store."
+    );
+  }
+}
+
+/**
+ * Throws when a cap is set and already reached, or set and unverifiable.
+ *
+ * No cap means never throws: someone who set no limit asked for no limit, and
+ * a transient read failure must not take their AI features away.
+ */
 export function assertWithinBudget(): void {
   const state = budgetState();
+
+  if (state.capUsd !== null && state.spendUnknown) {
+    throw new BudgetUnverifiableError();
+  }
+
   if (state.exceeded) {
     throw new BudgetExceededError(state);
   }
