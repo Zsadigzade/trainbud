@@ -188,8 +188,6 @@ MIT, Node 20+. `npx trainbud setup`.
 > **Title:** Built an MCP server that lets Claude answer questions about my own
 > training data — and a watch app that asks it from my wrist
 
-Lead with the video.
-
 `npx trainbud setup` writes your Claude Desktop config for you — no MCP JSON
 editing. There is also a Claude Code plugin, which installs the skills and the
 MCP server in one step:
