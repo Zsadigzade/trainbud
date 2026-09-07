@@ -304,6 +304,73 @@ repo root, or call the built entry point directly with `node dist/index.js docto
 | No sleep/HR data | Ensure your Garmin device has synced to Garmin Connect |
 | Server won't start | Check that `GARMIN_EMAIL` and `GARMIN_PASSWORD` are set in `.env` |
 
+## Docker
+
+The image is built and exercised in CI on every push, so it is not a promise
+that quietly rots.
+
+```bash
+docker build -t trainbud .
+```
+
+**One thing matters more than the rest: mount a volume at `/app/.trainbud`.**
+That is where the SQLite history, the cached session and the log live. Without
+it, every container restart throws away your downloaded history and
+re-authenticates from scratch.
+
+### As an MCP server for a desktop client
+
+The default entrypoint speaks MCP over stdio, so the client runs the container:
+
+```json
+{
+  "mcpServers": {
+    "trainbud": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GARMIN_EMAIL", "-e", "GARMIN_PASSWORD",
+        "-v", "trainbud-data:/app/.trainbud",
+        "trainbud"
+      ]
+    }
+  }
+}
+```
+
+`-i` is required — without it the container has no stdin and the client sees a
+server that connects and immediately goes quiet. The two `-e` flags with no
+value pass the variables through from your own environment, so your credentials
+stay out of the config file.
+
+### As an HTTP server, for the watch app or a web client
+
+```bash
+docker run --rm -p 3847:3847 \
+  -e GARMIN_EMAIL -e GARMIN_PASSWORD \
+  -e TRAINBUD_API_KEY \
+  -e TRAINBUD_HOST=0.0.0.0 \
+  -v trainbud-data:/app/.trainbud \
+  --entrypoint node trainbud dist/index.js serve
+```
+
+`TRAINBUD_HOST=0.0.0.0` is needed inside a container: the server binds
+`127.0.0.1` by default, which is the right default on a laptop and unreachable
+from outside a container.
+
+### Filling the history
+
+`trainbud setup` is interactive and assumes a terminal, so with Docker do the
+one-off backfill directly:
+
+```bash
+docker run --rm -e GARMIN_EMAIL -e GARMIN_PASSWORD \
+  -v trainbud-data:/app/.trainbud \
+  --entrypoint node trainbud dist/index.js backfill
+```
+
+The same pattern runs `doctor`, `check` and `devices`.
+
 ## Development
 
 ```bash
