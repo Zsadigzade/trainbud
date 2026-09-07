@@ -15,7 +15,7 @@ Use TrainBud MCP tools when the `trainbud` server is connected. Do not guess fit
 
 If MCP tools are unavailable, tell the user to run **`/trainbud:trainbud-setup`**, set `GARMIN_EMAIL` / `GARMIN_PASSWORD`, restart Claude Code, and try again.
 
-## MCP tools (9)
+## MCP tools (15)
 
 | Tool | Use for |
 |------|---------|
@@ -28,6 +28,12 @@ If MCP tools are unavailable, tell the user to run **`/trainbud:trainbud-setup`*
 | `get_stress_levels` | Daily stress averages |
 | `get_vo2_max_trends` | VO2 max fitness trends |
 | `get_training_insights` | Combined weekly summary |
+| `get_findings` | What stands out against the user's **own** 28-day baselines |
+| `get_week_review` | This week against last, load forecast, sleep debt, next race |
+| `compare_workouts` | One workout against their own earlier efforts at that distance |
+| `remember_context` | Record a goal, a race and its date, an injury, or a note |
+| `get_user_context` | What is on record about the user, on any date |
+| `log_subjective` | How a session felt — RPE, soreness, mood |
 
 ## How to respond
 
@@ -47,7 +53,11 @@ If MCP tools are unavailable, tell the user to run **`/trainbud:trainbud-setup`*
 | Weight / body comp | `get_body_composition` |
 | Stress / overtraining | `get_stress_levels`, `get_training_insights` |
 | VO2 max / fitness | `get_vo2_max_trends` |
-| Weekly summary | `get_training_insights` |
+| Weekly summary | `get_training_insights`, `get_week_review` |
+| Anything unusual / how am I doing? | `get_findings` — prefer this over reading raw metrics |
+| How did that session compare? | `compare_workouts` |
+| Goals, races, injuries | `remember_context`, `get_user_context` |
+| How a session felt | `log_subjective` |
 
 ## Example prompts
 
