@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { activityToolDefinitions } from "./activities.js";
+import { compareToolDefinitions } from "./compare.js";
 import { contextToolDefinitions } from "./context.js";
 import { findingsToolDefinitions } from "./findings.js";
 import { bodyCompositionToolDefinitions } from "./bodyComposition.js";
@@ -27,6 +28,7 @@ export const toolRegistry: ToolDefinition[] = [
   ...trainingInsightsToolDefinitions,
   ...findingsToolDefinitions,
   ...weekToolDefinitions,
+  ...compareToolDefinitions,
   ...contextToolDefinitions,
 ];
 
@@ -97,6 +99,10 @@ export const toolSchemas = {
   }),
   get_findings: z.object({}),
   get_week_review: z.object({}),
+  compare_workouts: z.object({
+    activity_id: z.number().int().optional(),
+    limit: z.number().int().positive().optional(),
+  }),
   remember_context: z.object({
     kind: z.enum(["goal", "race", "injury", "note"]).describe("What sort of thing this is"),
     text: z.string().describe("What to remember, in the user's own words where possible"),

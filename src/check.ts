@@ -139,6 +139,7 @@ export function buildDefaultToolChecks(): ToolCheckCase[] {
     { name: "get_findings", args: {} },
     { name: "get_week_review", args: {} },
     { name: "get_user_context", args: {} },
+    { name: "compare_workouts", args: {} },
   ];
 }
 

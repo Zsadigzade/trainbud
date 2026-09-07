@@ -322,7 +322,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/VAULT.md](./docs/VAULT.md) fo
 - [x] VO2 max trends
 - [x] Stress levels
 - [x] Training insights
-- [ ] Workout comparison
+- [x] Workout comparison
 - [x] Docker image
 
 ## License

@@ -1,0 +1,191 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import type { StoredActivity } from "../src/history/store.js";
+import {
+  compareWorkouts,
+  findComparableWorkouts,
+  renderWorkoutComparison,
+} from "../src/detect/compare.js";
+
+/**
+ * "Workout comparison" was the last unchecked item on the README roadmap.
+ *
+ * The rule the rest of this codebase is built on applies here too: a missing
+ * measurement is `unknown`, never zero. A run whose heart-rate strap dropped
+ * out must not be reported as 40 bpm below the last one, and a comparison
+ * against nothing at all has to say so rather than inventing a baseline of
+ * zero -- the same confusion that produced two real bugs in recovery.
+ */
+function activity(overrides: Partial<StoredActivity> & { activityId: number }): StoredActivity {
+  return {
+    date: "2026-09-01",
+    startTimeLocal: "2026-09-01 07:00:00",
+    name: "Run",
+    type: "running",
+    distanceMeters: 5000,
+    durationSeconds: 1500,
+    avgHr: 150,
+    maxHr: 170,
+    elevationGainMeters: 20,
+    calories: 400,
+    averageSpeedMps: 3.33,
+    ...overrides,
+  };
+}
+
+describe("choosing what a workout is comparable to", () => {
+  const subject = activity({ activityId: 100, date: "2026-09-07", distanceMeters: 5000 });
+
+  it("keeps only earlier workouts of the same type", () => {
+    const pool = [
+      subject,
+      activity({ activityId: 1, date: "2026-09-01", type: "cycling", distanceMeters: 5000 }),
+      activity({ activityId: 2, date: "2026-09-02", distanceMeters: 5100 }),
+      activity({ activityId: 3, date: "2026-09-09", distanceMeters: 5000 }),
+    ];
+
+    const found = findComparableWorkouts(subject, pool);
+
+    assert.deepEqual(
+      found.map((a) => a.activityId),
+      [2],
+      "a different sport, a later date and the workout itself are all excluded"
+    );
+  });
+
+  it("rejects a workout of a very different distance", () => {
+    const pool = [
+      activity({ activityId: 4, date: "2026-09-02", distanceMeters: 5400 }),
+      activity({ activityId: 5, date: "2026-09-03", distanceMeters: 12000 }),
+      activity({ activityId: 6, date: "2026-09-04", distanceMeters: 800 }),
+    ];
+
+    const found = findComparableWorkouts(subject, pool);
+
+    assert.deepEqual(found.map((a) => a.activityId), [4]);
+  });
+
+  it("orders by closeness of distance, so the first is the most like it", () => {
+    const pool = [
+      activity({ activityId: 7, date: "2026-09-02", distanceMeters: 5500 }),
+      activity({ activityId: 8, date: "2026-09-03", distanceMeters: 5010 }),
+      activity({ activityId: 9, date: "2026-09-04", distanceMeters: 4700 }),
+    ];
+
+    assert.deepEqual(
+      findComparableWorkouts(subject, pool).map((a) => a.activityId),
+      [8, 9, 7]
+    );
+  });
+
+  it("falls back to duration when the sport records no distance", () => {
+    const strength = activity({
+      activityId: 200,
+      date: "2026-09-07",
+      type: "strength_training",
+      distanceMeters: 0,
+      durationSeconds: 3600,
+    });
+    const pool = [
+      activity({ activityId: 10, date: "2026-09-01", type: "strength_training", distanceMeters: 0, durationSeconds: 3500 }),
+      activity({ activityId: 11, date: "2026-09-02", type: "strength_training", distanceMeters: 0, durationSeconds: 600 }),
+    ];
+
+    assert.deepEqual(
+      findComparableWorkouts(strength, pool).map((a) => a.activityId),
+      [10],
+      "a ten minute session is not a comparison for an hour"
+    );
+  });
+});
+
+describe("comparing a workout with the ones like it", () => {
+  const subject = activity({
+    activityId: 100,
+    date: "2026-09-07",
+    distanceMeters: 5000,
+    durationSeconds: 1500,
+    avgHr: 150,
+  });
+
+  it("reports the deltas against the closest previous workout", () => {
+    const closest = activity({
+      activityId: 2,
+      date: "2026-09-01",
+      distanceMeters: 5000,
+      durationSeconds: 1600,
+      avgHr: 155,
+    });
+
+    const result = compareWorkouts(subject, [closest]);
+
+    assert.equal(result.closest?.activityId, 2);
+    assert.equal(result.metrics.duration.state, "known");
+    assert.equal(result.metrics.duration.delta, -100);
+    assert.equal(result.metrics.duration.direction, "lower");
+    assert.equal(result.metrics.avgHr.delta, -5);
+    // 1500s over 5km is 300 s/km; 1600s over 5km is 320.
+    assert.equal(result.metrics.pace.current, 300);
+    assert.equal(result.metrics.pace.reference, 320);
+    assert.equal(result.metrics.pace.direction, "faster");
+  });
+
+  it("calls a missing measurement unknown rather than a delta from zero", () => {
+    const closest = activity({ activityId: 3, date: "2026-09-01", avgHr: null });
+
+    const result = compareWorkouts(subject, [closest]);
+
+    assert.equal(result.metrics.avgHr.state, "unknown");
+    assert.equal(result.metrics.avgHr.delta, null);
+  });
+
+  it("says so when there is nothing comparable at all", () => {
+    const result = compareWorkouts(subject, []);
+
+    assert.equal(result.closest, null);
+    assert.equal(result.comparableCount, 0);
+    assert.match(renderWorkoutComparison(result), /no comparable/i);
+  });
+
+  it("needs three samples before it will quote a typical value", () => {
+    const two = [
+      activity({ activityId: 4, date: "2026-09-01", durationSeconds: 1600 }),
+      activity({ activityId: 5, date: "2026-09-02", durationSeconds: 1700 }),
+    ];
+
+    assert.equal(compareWorkouts(subject, two).metrics.duration.typical, null);
+
+    const three = [...two, activity({ activityId: 6, date: "2026-09-03", durationSeconds: 1800 })];
+
+    assert.equal(compareWorkouts(subject, three).metrics.duration.typical, 1700);
+  });
+
+  it("renders something a person can read", () => {
+    const closest = activity({ activityId: 7, date: "2026-09-01", durationSeconds: 1600, avgHr: 155 });
+    const text = renderWorkoutComparison(compareWorkouts(subject, [closest]));
+
+    assert.match(text, /2026-09-01/);
+    assert.match(text, /faster|slower/);
+    assert.doesNotMatch(text, /NaN|undefined|Infinity/);
+  });
+  it("says which one it means when both happened the same day", () => {
+    // Three treadmill intervals in one session is normal, and "compared with
+    // 2026-09-07" is useless when the subject is also 2026-09-07.
+    const morning = activity({
+      activityId: 8,
+      date: "2026-09-07",
+      startTimeLocal: "2026-09-07 06:10:00",
+      durationSeconds: 1600,
+    });
+    const later = activity({
+      activityId: 9,
+      date: "2026-09-07",
+      startTimeLocal: "2026-09-07 18:40:00",
+      durationSeconds: 1500,
+    });
+
+    const text = renderWorkoutComparison(compareWorkouts(later, [morning]));
+
+    assert.match(text, /06:10/, "the earlier workout needs a time, not just a date");
+  });
+});
