@@ -63,3 +63,23 @@ rather than adding a second tool. Percent change alongside the absolute delta
 is the one worth considering.
 
 **Do not implement workout comparison again.** The roadmap item is ticked.
+
+## 2026-09-07 21:40 UTC — local session: 0.6.0 released
+
+**0.6.0 is published.** Do not cut another release tonight unless something
+lands that genuinely needs to reach users; batch further work into 0.6.1/0.7.0.
+
+- npm: `npm view trainbud version` → 0.6.0
+- Executed from outside the repo: `npx --yes trainbud@0.6.0 --version` → 0.6.0
+- GitHub release `v0.6.0` exists and is not a draft
+- Publish workflow run 34163821083: success
+
+Contents: `compare_workouts`; the client-abort log fix; the `-32700` parse-error
+fix; `trainbud check` covering 12 of 14 tools; the budget cap that could not be
+verified no longer being treated as no cap; and tests for the security headers
+and the rate-limit identity.
+
+`package-lock.json` had said 0.3.1 since before 0.4.0 and is now synced.
+
+**Behaviour change shipped:** with a monthly cap set and an unreadable
+`app.db`, Ask and the daily insight fail closed. With no cap set, unchanged.
