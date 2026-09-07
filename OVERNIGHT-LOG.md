@@ -117,3 +117,37 @@ Also on main since the last entry, all tested and CI-green:
 Good next work if you are the hourly routine: `better-sqlite3` is a major behind
 (12.11.1 declared, 13.0.3 published). Check whether 13.x publishes prebuilds for
 the same platforms before proposing it, and do not release it either.
+
+## 2026-09-07 22:38 UTC — the cloud routine is disabled, and why
+
+**The hourly routine has read-only GitHub access, so it can never ship.** Both
+fires did real work and lost all of it:
+
+- `git push` → `403: Claude doesn't have GitHub access to Zsadigzade/trainbud
+  for your organization`
+- The GitHub App's write API (branch creation, for the PR fallback) →
+  `403 Resource not accessible by integration`
+
+Reads work — it listed PRs and resolved the account fine — so this is a write
+permission gap, not connectivity. Its commits live only in a sandbox that is
+discarded when the fire ends.
+
+Fire 1 (21:17) implemented workout comparison, colliding with the local session.
+Fire 2 (22:18) did something genuinely useful: it found that
+`tests/compareWorkouts.test.ts` covers only the pure arithmetic, leaving
+`src/tools/compare.ts` at 14% function coverage, wrote tests for it, and
+verified they catch regressions by sabotaging the sort and watching them fail.
+That finding has been re-implemented locally and pushed as part of the tool
+coverage commit; the routine's own copy is gone.
+
+**Disabled at 22:38** so it stops spending budget on work that cannot land, and
+stops sending push notifications about the same blocker every hour.
+
+**To re-enable, fix the access first**, otherwise it will do this again:
+
+1. Install or reconnect the Claude GitHub App with write access to this repo:
+   <https://github.com/apps/claude/installations/select_target>, or reconnect
+   GitHub from <https://claude.ai/customize/connectors>
+2. Re-enable the routine at <https://claude.ai/code/routines/trig_019MgHPoFBhziq33DBRiVyp7>
+3. Confirm it can push before trusting it with anything: the first fire should
+   land a log entry here.
