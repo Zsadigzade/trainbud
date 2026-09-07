@@ -4,7 +4,10 @@ Get TrainBud running in about 5 minutes.
 
 ## Prerequisites
 
-- Node.js 20 or newer ([`.nvmrc`](./.nvmrc) included)
+- Node.js 22 or newer ([`.nvmrc`](./.nvmrc) included) — 22 is the floor because
+  the SQLite driver ships prebuilt binaries from Node 22 onward. On Node 20 npm
+  has to compile it from source, which needs a C++ toolchain and fails outright
+  on a typical Windows machine.
 - A Garmin Connect account with synced device data
 - Garmin Connect **MFA disabled** (the underlying library does not support MFA yet)
 

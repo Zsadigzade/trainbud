@@ -13,18 +13,18 @@ jobs:
     # exact places a cross-platform claim goes wrong without anyone noticing.
     #
     # The full matrix on every platform would be six jobs for little more
-    # signal, so the other two run the supported floor, Node 20.
+    # signal, so the other two run the supported floor, Node 22.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        node-version: [20, 22]
+        node-version: [22, 24]
         include:
           - os: windows-latest
-            node-version: 20
+            node-version: 22
           - os: macos-latest
-            node-version: 20
+            node-version: 22
 
     steps:
       - uses: actions/checkout@v4
