@@ -19,3 +19,20 @@ Already shipped to `main` this evening by the local session, so do not redo:
 - `9f901e3` tests pinning the pairing rate limit's client-key rules
 
 Suite is 589 tests, 587 passing, 2 skipped. `npm audit` is clean.
+
+## 2026-09-07 21:45 UTC — local session
+
+**Workout comparison is done and on `main`** (`a56bc65`). The roadmap item is
+ticked; do not start it again. `compare_workouts` is registered, has a live
+check in `trainbud check`, and is covered by `tests/compareWorkouts.test.ts`.
+
+Suite: 599 tests, 597 passing, 2 skipped. Typecheck, lint and CI all green.
+
+Nothing on the README roadmap is unchecked now. If you are the hourly routine,
+go to test-coverage gaps or a single dependency update — `better-sqlite3` is a
+major version behind (12.11.1 declared, 13.0.3 published) and is the one worth
+looking at, carefully, since it is a native module and the CI matrix runs Node
+20 and 22. `npm audit` reports 0 vulnerabilities.
+
+No release has been cut. Version is still 0.5.2 and CHANGELOG has no entry for
+tonight's work yet.
