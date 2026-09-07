@@ -25,21 +25,31 @@ Links: <https://www.npmjs.com/package/trainbud> ·
 
 ## Pre-flight — do these before the first post goes up
 
-- [ ] **Publish 0.5.2.** The drafts below claim per-device tokens ship today.
-      That is true in `main`, not on npm until the tag runs. Tag, then *check the
-      run* — a tag-triggered workflow reports to no one, and that is how "not on
-      npm" survived as a fact for ten weeks.
-- [ ] **Tunnel up.** `trainbud doctor` in one line. Every link in every post is
-      a dead product if the tunnel is down, and a reviewer cannot test a
-      BYO-server app without one.
-- [ ] **Record the 30s capture.** Ask in Claude Desktop → answer streams back →
-      cut to the wrist. One asset, used in the X post, the r/ClaudeAI post, the
-      README top, and every directory listing.
-- [ ] **Submit the directories first**, so the listings exist before the traffic:
-      Glama, PulseMCP, mcpservers.org, and an `awesome-mcp-servers` PR. Skip
-      Smithery — it leans toward remotely-hosted servers and this one is
-      local-credentials-only.
-- [ ] Repo topics and npm keywords are already set. Nothing to do.
+- [x] **Publish 0.5.2.** Live on npm, tag run checked.
+- [x] **Tunnel up.** `trainbud doctor` was 3/4 on 09-07 (tunnel answering, not
+      forwarding) — `start-watch-stack.ps1` was stale. Restarted, now 4/4.
+      **Re-run `trainbud doctor` before every posting session** — this silently
+      breaks between sessions and every link in every post is a dead product if
+      it's down.
+- [ ] **Record the 30s capture.** Deferred for this launch (09-07). The X post,
+      r/ClaudeAI, README top, and directory listings all went out text-only;
+      r/ClaudeAI's opening was rewritten to not depend on it. Add later if it
+      gets made — none of the current copy assumes it exists.
+- [x] **Submit the directories.** Glama: claimed, released, 100% profile
+      (09-07). mcpservers.org: submitted 09-07. **PulseMCP: submissions paused**
+      site-wide ("no longer accepting new use case submissions") — not
+      something to retry, check back later if it reopens. `awesome-mcp-servers`
+      PR #13766 open, badge added, awaiting merge. Skip Smithery — it leans
+      toward remotely-hosted servers and this one is local-credentials-only.
+- [x] Repo topics and npm keywords are already set. Nothing to do.
+- [x] ~~Discords~~ **Dropped.** The one official MCP Discord
+      (discord.gg/6CSzBmMkjX per modelcontextprotocol.io itself) explicitly
+      tells members to avoid "service or product marketing" — it's a
+      contributor/spec-development space, not a showcase channel, wrong venue
+      regardless of timing. An "Anthropic Discord" invite could not be verified
+      from a primary source in one session, and there is a documented phishing
+      pattern of fake Anthropic Discord invites — did not paste an unverified
+      one. Not part of the running order below anymore.
 
 ## Running order — one day, sequential, not parallel
 
@@ -51,8 +61,9 @@ Attention is the scarce resource, not reach. Each channel gets a real window.
 | 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min |
 | 17:30 | r/mcp, r/selfhosted, r/ClaudeAI | Post, then back to the HN thread |
 | 19:00 | X thread | Links whatever the HN thread became |
-| 20:00 | MCP / Anthropic Discords | Async, no thread to hold |
 | later week | r/Garmin | Separate post, separate framing |
+
+Discords dropped from the running order — see pre-flight notes above.
 
 ---
 
