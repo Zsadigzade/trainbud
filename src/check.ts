@@ -1,9 +1,10 @@
 import fs from "node:fs";
+import path from "node:path";
 import { DateTime } from "luxon";
 import { assertGarminCredentials, appConfig, deprecatedEnvNames, getEnvFilePath } from "./config.js";
 import { executeTool, listRegisteredToolNames } from "./tools/index.js";
 import { configureLogger } from "./utils/logger.js";
-import { getDataDir, getLegacyDataDir } from "./paths.js";
+import { getDataDir, getLegacyDataDir, getProjectRoot } from "./paths.js";
 import { isAiConfigured } from "./promptApi.js";
 
 // SECTION: Live Diagnostics
@@ -31,11 +32,71 @@ export interface ToolCheckResult {
 // diagnoses the whole stack rather than one layer of it.
 // -----------------------------------------------------------------------------
 
+/** The engines range this build was published with, or a marker when it cannot be read. */
+function readPackageEngines(): string {
+  try {
+    const pkgPath = path.join(getProjectRoot(), "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { engines?: { node?: string } };
+    return pkg.engines?.node ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+/**
+ * Whether the Node running this is the Node this package supports.
+ *
+ * Split out and given the version as an argument so it can be tested against
+ * versions this process is not running, which is the whole point: the case
+ * worth getting right is the one where somebody else is on Node 20.
+ */
+export function describeNodeVersion(
+  running: string,
+  requirement: string
+): { ok: boolean; warning: boolean; summary: string } {
+  const floor = /(\d+)\.(\d+)\.(\d+)/.exec(requirement);
+
+  if (!floor) {
+    return {
+      ok: true,
+      warning: true,
+      summary: `Node ${running} — package.json engines.node ("${requirement}") could not be read`,
+    };
+  }
+
+  const parts = (value: string): number[] =>
+    (/(\d+)\.(\d+)\.(\d+)/.exec(value) ?? ["0", "0", "0", "0"]).slice(1, 4).map(Number);
+
+  const [major, minor, patch] = parts(running);
+  const [floorMajor, floorMinor, floorPatch] = [Number(floor[1]), Number(floor[2]), Number(floor[3])];
+
+  const below =
+    major! < floorMajor ||
+    (major === floorMajor && minor! < floorMinor) ||
+    (major === floorMajor && minor === floorMinor && patch! < floorPatch);
+
+  if (below) {
+    return {
+      ok: false,
+      warning: false,
+      summary:
+        `Node ${running} — this needs ${floorMajor}.${floorMinor} or newer. ` +
+        `The SQLite driver ships no prebuilt binary below Node ${floorMajor}, so an ` +
+        `older Node has to compile it from source and usually cannot.`,
+    };
+  }
+
+  return { ok: true, warning: false, summary: `Node ${running}` };
+}
+
 export function checkSetup(): ToolCheckResult[] {
   const results: ToolCheckResult[] = [];
   const add = (name: string, ok: boolean, summary: string, warning = false): void => {
     results.push({ name, ok, summary, warning, section: "Setup" });
   };
+
+  const engines = readPackageEngines();
+  const nodeCheck = describeNodeVersion(process.versions.node, engines);
+  add("Node version", nodeCheck.ok, nodeCheck.summary, nodeCheck.warning);
 
   const envPath = getEnvFilePath();
   add(".env file", fs.existsSync(envPath), fs.existsSync(envPath) ? envPath : `missing — run "trainbud setup"`);
