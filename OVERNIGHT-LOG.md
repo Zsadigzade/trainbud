@@ -16,6 +16,6 @@ Already shipped to `main` this evening by the local session, so do not redo:
 - `0e9a55b` `trainbud check` covers 12 of 14 tools, 2 excused, gap now reported
 - `527b701` unparseable body answers 400/-32700 instead of 500/-32603
 - `935881a` restored 7 security/device-token tests an earlier commit overwrote
-- `2f0b8b1` tests pinning the pairing rate limit's client-key rules
+- `9f901e3` tests pinning the pairing rate limit's client-key rules
 
 Suite is 589 tests, 587 passing, 2 skipped. `npm audit` is clean.
