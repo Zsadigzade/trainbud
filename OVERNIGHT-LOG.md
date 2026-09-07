@@ -36,3 +36,30 @@ looking at, carefully, since it is a native module and the CI matrix runs Node
 
 No release has been cut. Version is still 0.5.2 and CHANGELOG has no entry for
 tonight's work yet.
+
+## 2026-09-07 21:35 UTC — local session (collision notice)
+
+**Two sessions built `compare_workouts` at once.** The 21:17 cloud fire cloned
+the repo three minutes before the claim above was pushed, so it started the same
+roadmap item in good faith. Not its fault; the claim simply arrived late.
+
+What is on `main` is the local implementation:
+
+- `src/detect/compare.ts` — pure arithmetic, `src/tools/compare.ts` — the tool
+- reads the local store (works with Garmin unreachable, like `get_findings`)
+- picks comparables by closeness of scale, ±20% on distance or duration
+- withholds a "typical" value below three samples
+- honours `getProfile().units`, so pace is per mile and elevation in feet on an
+  imperial profile (`7eb1848` — that gap came from reading the cloud attempt)
+
+The cloud attempt (`src/tools/workoutComparison.ts`, baseline-average over a
+day window, percent change) is **not** on main and should not be merged as-is:
+a second tool registered under the same name `compare_workouts` breaks the
+pinned registry assertion in `tests/contextTools.test.ts` and would register a
+duplicate name with MCP.
+
+If anything from it is worth keeping, port the idea into `detect/compare.ts`
+rather than adding a second tool. Percent change alongside the absolute delta
+is the one worth considering.
+
+**Do not implement workout comparison again.** The roadmap item is ticked.
