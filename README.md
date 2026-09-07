@@ -321,7 +321,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/VAULT.md](./docs/VAULT.md) fo
 - [x] Stress levels
 - [x] Training insights
 - [ ] Workout comparison
-- [ ] Docker image
+- [x] Docker image
 
 ## License
 
