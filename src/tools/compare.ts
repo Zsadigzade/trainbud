@@ -28,6 +28,10 @@ export interface WorkoutComparisonPayload {
   subject: StoredActivity | null;
   closest: StoredActivity | null;
   comparableCount: number;
+  /** Earlier workouts of the same sport, before the distance filter. */
+  earlierSameType: number;
+  /** The nearest of those by scale, comparable or not. */
+  nearest: StoredActivity | null;
   metrics: WorkoutComparison["metrics"] | null;
 }
 
@@ -106,7 +110,14 @@ export async function compareWorkoutsTool(
     return {
       type: "text",
       text,
-      data: { subject: null, closest: null, comparableCount: 0, metrics: null },
+      data: {
+        subject: null,
+        closest: null,
+        comparableCount: 0,
+        earlierSameType: 0,
+        nearest: null,
+        metrics: null,
+      },
     };
   }
 
@@ -128,6 +139,8 @@ export async function compareWorkoutsTool(
       subject: comparison.subject,
       closest: comparison.closest,
       comparableCount: comparison.comparableCount,
+      earlierSameType: comparison.earlierSameType,
+      nearest: comparison.nearest,
       metrics: comparison.metrics,
     },
   };
