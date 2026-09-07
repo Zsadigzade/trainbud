@@ -440,6 +440,26 @@ export function readNumericField(raw: string, field: string): number | null {
   return null;
 }
 
+/**
+ * A request this server could not accept, as opposed to a fault inside it.
+ *
+ * Both cases below used to surface as HTTP 500 with JSON-RPC -32603, the code
+ * reserved for an internal error -- so a client sending a bad body was recorded
+ * exactly like a server that had broken. /mcp is reachable through the public
+ * tunnel whenever the watch is paired, so anything probing it manufactured
+ * server errors indistinguishable from real ones.
+ */
+export class MalformedRequestError extends Error {
+  constructor(
+    readonly httpStatus: number,
+    readonly rpcCode: number,
+    message: string
+  ) {
+    super(message);
+    this.name = "MalformedRequestError";
+  }
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -449,7 +469,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     total += buffer.length;
 
     if (total > MAX_BODY_BYTES) {
-      throw new Error("Request body too large");
+      throw new MalformedRequestError(413, -32600, "Request body too large");
     }
 
     chunks.push(buffer);
@@ -460,7 +480,12 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     return undefined;
   }
 
-  return JSON.parse(raw) as unknown;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    // JSON-RPC 2.0 reserves -32700 for a body that is not valid JSON.
+    throw new MalformedRequestError(400, -32700, "Parse error: request body is not valid JSON");
+  }
 }
 
 /**
@@ -552,6 +577,23 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
     const parsedBody = req.method === "POST" ? await readJsonBody(req) : undefined;
     await transport.handleRequest(req, res, parsedBody);
   } catch (error) {
+    if (error instanceof MalformedRequestError) {
+      logger.debug({ error }, "HTTP MCP request rejected as malformed");
+
+      if (!res.headersSent && !res.destroyed && !res.writableEnded) {
+        sendJson(res, error.httpStatus, {
+          jsonrpc: "2.0",
+          error: {
+            code: error.rpcCode,
+            message: error.message,
+          },
+          id: null,
+        });
+      }
+
+      return;
+    }
+
     // A client that hung up is the ordinary end of a streaming request, not a
     // fault worth an error line; it stays in the log at debug level.
     if (isClientAbortError(error)) {
