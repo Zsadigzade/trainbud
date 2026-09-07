@@ -49,3 +49,18 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  # The README and the launch copy both offer a Docker image, and nothing ever
+  # built it. An image that does not build is a worse promise than no image.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t trainbud:ci .
+
+      # Proves the entrypoint resolves and the native module loaded, which is the
+      # part that breaks when the base image moves.
+      - name: Run the CLI inside it
+        run: docker run --rm --entrypoint node trainbud:ci dist/index.js --version
