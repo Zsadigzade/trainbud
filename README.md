@@ -10,7 +10,7 @@ TrainBud is an open-source MCP server that connects your Garmin Connect fitness 
 [![CI](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml/badge.svg)](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node 20+](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](.nvmrc)
-[![Zsadigzade/trainbud MCP server](https://glama.ai/mcp/servers/Zsadigzade/trainbud/badges/score.svg)](https://glama.ai/mcp/servers/Zsadigzade/trainbud)
+[![Trainbud MCP server — quality and maintenance score on Glama](https://img.shields.io/endpoint?url=https%3A%2F%2Fglama.ai%2Fmcp%2Fservers%2FZsadigzade%2Ftrainbud%2Fbadges%2Fshields.json)](https://glama.ai/mcp/servers/Zsadigzade/trainbud)
 
 ## Try it
 
