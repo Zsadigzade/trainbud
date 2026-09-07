@@ -463,6 +463,42 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw) as unknown;
 }
 
+/**
+ * Codes and messages Node produces when the peer goes away mid-request, rather
+ * than when this server got something wrong.
+ *
+ * A streaming MCP request ends this way routinely: a watch loses Bluetooth, a
+ * browser tab closes, the tunnel drops. It was recorded at error level with a
+ * full stack, and on this machine's own log that single event accounted for 712
+ * of 795 error-level lines -- burying the ingest failures, the rejected API key
+ * and the Garmin auth retries in the file the troubleshooting docs tell users
+ * to read.
+ */
+const CLIENT_ABORT_CODES = new Set([
+  "ECONNRESET",
+  "ECONNABORTED",
+  "EPIPE",
+  "ERR_STREAM_PREMATURE_CLOSE",
+  "ABORT_ERR",
+]);
+
+const CLIENT_ABORT_MESSAGES = new Set(["aborted", "socket hang up", "premature close"]);
+
+/** True when the request died because the client went away, not because we failed. */
+export function isClientAbortError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const { code, message } = error as { code?: unknown; message?: unknown };
+
+  if (typeof code === "string" && CLIENT_ABORT_CODES.has(code)) {
+    return true;
+  }
+
+  return typeof message === "string" && CLIENT_ABORT_MESSAGES.has(message.toLowerCase());
+}
+
 async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!isAuthorized(req)) {
     res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
@@ -516,9 +552,17 @@ async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Prom
     const parsedBody = req.method === "POST" ? await readJsonBody(req) : undefined;
     await transport.handleRequest(req, res, parsedBody);
   } catch (error) {
-    logger.error({ error }, "HTTP MCP request failed");
+    // A client that hung up is the ordinary end of a streaming request, not a
+    // fault worth an error line; it stays in the log at debug level.
+    if (isClientAbortError(error)) {
+      logger.debug({ error }, "HTTP MCP request abandoned by the client");
+    } else {
+      logger.error({ error }, "HTTP MCP request failed");
+    }
 
-    if (!res.headersSent) {
+    // Writing a 500 into a socket the client already destroyed only risks a
+    // second failure on top of the first.
+    if (!res.headersSent && !res.destroyed && !res.writableEnded) {
       sendJson(res, 500, {
         jsonrpc: "2.0",
         error: {
