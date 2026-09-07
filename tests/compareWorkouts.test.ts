@@ -188,4 +188,29 @@ describe("comparing a workout with the ones like it", () => {
 
     assert.match(text, /06:10/, "the earlier workout needs a time, not just a date");
   });
+  it("speaks miles and feet when the profile says imperial", () => {
+    // The profile carries a units setting and the rest of the app honours it.
+    // A comparison that always answers in km is wrong for half its readers.
+    const closest = activity({ activityId: 12, date: "2026-09-01", durationSeconds: 1600 });
+    const comparison = compareWorkouts(subject, [closest]);
+
+    const metric = renderWorkoutComparison(comparison, "metric");
+    const imperial = renderWorkoutComparison(comparison, "imperial");
+
+    assert.match(metric, /\/km/);
+    assert.doesNotMatch(metric, /\/mi\b/);
+
+    assert.match(imperial, /\/mi\b/);
+    assert.doesNotMatch(imperial, /\/km/);
+    // 300 s/km is 8m 03s per mile.
+    assert.match(imperial, /8m 03s\/mi/);
+  });
+
+  it("reports elevation in feet for an imperial profile", () => {
+    const closest = activity({ activityId: 13, date: "2026-09-01", elevationGainMeters: 10 });
+    const text = renderWorkoutComparison(compareWorkouts(subject, [closest]), "imperial");
+
+    assert.match(text, /ft/);
+    assert.doesNotMatch(text, /\d+ m\b/);
+  });
 });

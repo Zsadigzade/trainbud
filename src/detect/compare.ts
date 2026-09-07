@@ -228,8 +228,18 @@ function formatDurationSeconds(seconds: number): string {
   return `${minutes}m ${String(rest).padStart(2, "0")}s`;
 }
 
-function formatPace(secondsPerKm: number): string {
+function formatPace(secondsPerKm: number, units: Units): string {
+  if (units === "imperial") {
+    return `${formatDurationSeconds(secondsPerKm * (METRES_PER_MILE / 1000))}/mi`;
+  }
   return `${formatDurationSeconds(secondsPerKm)}/km`;
+}
+
+function formatElevation(metres: number, units: Units): string {
+  if (units === "imperial") {
+    return `${Math.round(metres * FEET_PER_METRE)} ft`;
+  }
+  return `${Math.round(metres)} m`;
 }
 
 function line(label: string, metric: MetricComparison, format: (value: number) => string): string {
@@ -267,7 +277,15 @@ function describeWhen(closest: StoredActivity, subject: StoredActivity): string 
   return time ? `${closest.date} at ${time}` : closest.date;
 }
 
-export function renderWorkoutComparison(comparison: WorkoutComparison): string {
+export type Units = "metric" | "imperial";
+
+const METRES_PER_MILE = 1609.344;
+const FEET_PER_METRE = 3.28084;
+
+export function renderWorkoutComparison(
+  comparison: WorkoutComparison,
+  units: Units = "metric"
+): string {
   const { subject, closest } = comparison;
 
   if (!closest) {
@@ -288,10 +306,10 @@ export function renderWorkoutComparison(comparison: WorkoutComparison): string {
       `(${comparison.comparableCount} comparable ${plural} found):`,
     "",
     line("Duration", comparison.metrics.duration, formatDurationSeconds),
-    line("Pace", comparison.metrics.pace, formatPace),
+    line("Pace", comparison.metrics.pace, (value) => formatPace(value, units)),
     line("Avg HR", comparison.metrics.avgHr, (value) => `${Math.round(value)} bpm`),
     line("Max HR", comparison.metrics.maxHr, (value) => `${Math.round(value)} bpm`),
-    line("Elevation", comparison.metrics.elevationGain, (value) => `${Math.round(value)} m`),
+    line("Elevation", comparison.metrics.elevationGain, (value) => formatElevation(value, units)),
     line("Calories", comparison.metrics.calories, (value) => `${Math.round(value)}`),
   ].join("\n");
 }

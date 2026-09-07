@@ -7,6 +7,7 @@ import {
 import { getActivitiesBetween, type StoredActivity } from "../history/store.js";
 import type { ToolResult } from "../garmin/types.js";
 import type { ToolDefinition } from "./types.js";
+import { getProfile } from "../profile.js";
 
 // SECTION: Workout comparison
 //
@@ -66,7 +67,7 @@ export async function compareWorkoutsTool(
 
   return {
     type: "text",
-    text: renderWorkoutComparison(comparison),
+    text: renderWorkoutComparison(comparison, getProfile().units),
     data: {
       subject: comparison.subject,
       closest: comparison.closest,
