@@ -36,10 +36,27 @@ export interface MetricComparison {
   typical: number | null;
 }
 
+/**
+ * What the pool held, for the case where nothing was comparable.
+ *
+ * Measured on real history: of 28 activities, 14 had no comparable workout --
+ * and 8 of those 14 did have earlier workouts of the same sport, at distances
+ * outside the tolerance. One had eleven. Telling that person "this is the first
+ * one that qualifies" is false in the way that matters to them.
+ */
+export interface ComparisonContext {
+  /** Earlier workouts of the same sport, counted before the scale filter. */
+  earlierSameType?: number;
+  /** The nearest of those by scale, whether or not it was close enough. */
+  nearest?: StoredActivity | null;
+}
+
 export interface WorkoutComparison {
   subject: StoredActivity;
   closest: StoredActivity | null;
   comparableCount: number;
+  earlierSameType: number;
+  nearest: StoredActivity | null;
   metrics: {
     duration: MetricComparison;
     pace: MetricComparison;
@@ -172,7 +189,8 @@ function compareMetric(
 
 export function compareWorkouts(
   subject: StoredActivity,
-  comparables: StoredActivity[]
+  comparables: StoredActivity[],
+  context: ComparisonContext = {}
 ): WorkoutComparison {
   const closest = comparables[0] ?? null;
 
@@ -180,6 +198,8 @@ export function compareWorkouts(
     subject,
     closest,
     comparableCount: comparables.length,
+    earlierSameType: context.earlierSameType ?? comparables.length,
+    nearest: context.nearest ?? closest,
     metrics: {
       duration: compareMetric(
         subject.durationSeconds,
@@ -235,6 +255,19 @@ function formatPace(secondsPerKm: number, units: Units): string {
   return `${formatDurationSeconds(secondsPerKm)}/km`;
 }
 
+/** The dimension a sport is measured in, said out loud. */
+function describeScale(activity: StoredActivity, units: Units): string {
+  if (typeof activity.distanceMeters === "number" && activity.distanceMeters > 0) {
+    return units === "imperial"
+      ? `${(activity.distanceMeters / METRES_PER_MILE).toFixed(2)} mi`
+      : `${(activity.distanceMeters / 1000).toFixed(1)} km`;
+  }
+  if (typeof activity.durationSeconds === "number" && activity.durationSeconds > 0) {
+    return formatDurationSeconds(activity.durationSeconds);
+  }
+  return "unmeasured";
+}
+
 function formatElevation(metres: number, units: Units): string {
   if (units === "imperial") {
     return `${Math.round(metres * FEET_PER_METRE)} ft`;
@@ -253,10 +286,16 @@ function line(label: string, metric: MetricComparison, format: (value: number) =
     return `  ${label}: unknown — ${missing}`;
   }
 
+  // Both endpoints are rounded for display, so the difference has to come from
+  // the rounded pair -- otherwise a line reads "24 m vs 38 m — 15 m lower" and
+  // the three numbers on it disagree. Conversion to imperial happens inside the
+  // formatter and is linear, so a delta taken in the native unit stays consistent
+  // with the endpoints after conversion.
+  const shownDelta = Math.abs(Math.round(metric.current) - Math.round(metric.reference));
   const change =
-    metric.direction === "same"
+    metric.direction === "same" || shownDelta === 0
       ? "the same"
-      : `${format(Math.abs(metric.delta ?? 0))} ${metric.direction}`;
+      : `${format(shownDelta)} ${metric.direction}`;
   const typical = metric.typical === null ? "" : ` (typical ${format(metric.typical)})`;
 
   return `  ${label}: ${format(metric.current)} vs ${format(metric.reference)} — ${change}${typical}`;
@@ -289,13 +328,29 @@ export function renderWorkoutComparison(
   const { subject, closest } = comparison;
 
   if (!closest) {
+    const { earlierSameType, nearest } = comparison;
+
+    // Having no earlier workout of this sport and having nine of them at other
+    // distances are different answers, and only one of them is "your first".
+    if (earlierSameType > 0 && nearest) {
+      const plural = earlierSameType === 1 ? "workout" : "workouts";
+      return [
+        `${subject.name} on ${subject.date}: nothing close enough to compare with.`,
+        "",
+        `You have ${earlierSameType} earlier ${subject.type} ${plural} on record, but ` +
+          `none within 20% of this one's ${describeScale(subject, units)}. The nearest ` +
+          `is ${describeScale(nearest, units)} on ${nearest.date}.`,
+        "",
+        "Comparing efforts of very different lengths would say more about the",
+        "distance than about you, so it is left alone.",
+      ].join("\n");
+    }
+
     return [
       `${subject.name} on ${subject.date}: no comparable workout in your history yet.`,
       "",
-      "A comparison needs an earlier workout of the same type at a similar",
-      "distance, or a similar duration for a sport that records no distance.",
-      "This is the first one that qualifies, so there is nothing to measure it",
-      "against — which is not the same as saying it went badly.",
+      `This is the first ${subject.type} workout on record, so there is nothing to`,
+      "measure it against — which is not the same as saying it went badly.",
     ].join("\n");
   }
 

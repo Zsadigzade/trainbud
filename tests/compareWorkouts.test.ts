@@ -214,3 +214,90 @@ describe("comparing a workout with the ones like it", () => {
     assert.doesNotMatch(text, /\d+ m\b/);
   });
 });
+
+describe("explaining why there is nothing to compare against", () => {
+  const subject = activity({
+    activityId: 100,
+    date: "2026-09-07",
+    type: "running",
+    distanceMeters: 1500,
+    durationSeconds: 500,
+  });
+
+  it("says it is the first of its kind when it truly is", () => {
+    const text = renderWorkoutComparison(
+      compareWorkouts(subject, [], { earlierSameType: 0, nearest: null })
+    );
+
+    assert.match(text, /first/i);
+    assert.doesNotMatch(text, /nearest/i);
+  });
+
+  it("does not claim a first when nine earlier runs exist at other distances", () => {
+    // Measured on real history: a 1.5 km run with nine earlier runs, the nearest
+    // 3.3 km. Telling that user "this is the first one that qualifies" is false
+    // in the way that matters -- they have plenty of runs, just not this one.
+    const nearest = activity({
+      activityId: 42,
+      date: "2026-07-01",
+      type: "running",
+      distanceMeters: 3349,
+    });
+
+    const text = renderWorkoutComparison(
+      compareWorkouts(subject, [], { earlierSameType: 9, nearest })
+    );
+
+    assert.doesNotMatch(text, /first/i);
+    assert.match(text, /9 earlier running/i);
+    assert.match(text, /3\.3 km|3349/);
+    assert.match(text, /2026-07-01/);
+  });
+
+  it("keeps the count and the nearest on the result for a caller that wants them", () => {
+    const nearest = activity({ activityId: 43, date: "2026-07-01", distanceMeters: 3349 });
+    const result = compareWorkouts(subject, [], { earlierSameType: 9, nearest });
+
+    assert.equal(result.earlierSameType, 9);
+    assert.equal(result.nearest?.activityId, 43);
+  });
+
+  it("still works when a caller passes no context at all", () => {
+    assert.doesNotThrow(() => renderWorkoutComparison(compareWorkouts(subject, [])));
+  });
+});
+
+describe("the numbers on screen add up", () => {
+  it("derives the shown difference from the shown endpoints", () => {
+    // Real output before this: "Elevation: 24 m vs 38 m — 15 m lower". Each
+    // endpoint is rounded for display and the delta was rounded separately, so
+    // the three numbers on one line disagreed. In a product whose whole claim is
+    // that the arithmetic is done in code, that is the worst kind of small bug.
+    const subject = activity({
+      activityId: 300,
+      date: "2026-09-07",
+      elevationGainMeters: 23.6,
+    });
+    const closest = activity({
+      activityId: 301,
+      date: "2026-09-01",
+      elevationGainMeters: 38.4,
+    });
+
+    const text = renderWorkoutComparison(compareWorkouts(subject, [closest]));
+    const line = text.split("\n").find((row) => row.includes("Elevation"));
+
+    assert.ok(line, "no elevation line rendered");
+    assert.match(line, /24 m vs 38 m/);
+    assert.match(line, /14 m lower/, `endpoints say 14, the line said: ${line}`);
+  });
+
+  it("keeps the unrounded delta on the payload for callers that want it", () => {
+    const subject = activity({ activityId: 302, date: "2026-09-07", avgHr: 150.4 });
+    const closest = activity({ activityId: 303, date: "2026-09-01", avgHr: 155.6 });
+
+    const result = compareWorkouts(subject, [closest]);
+
+    assert.equal(result.metrics.avgHr.delta, -5.2);
+  });
+});

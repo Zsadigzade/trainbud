@@ -31,6 +31,54 @@ export interface WorkoutComparisonPayload {
   metrics: WorkoutComparison["metrics"] | null;
 }
 
+function startedEarlier(candidate: StoredActivity, subject: StoredActivity): boolean {
+  if (candidate.date !== subject.date) {
+    return candidate.date < subject.date;
+  }
+  return candidate.startTimeLocal < subject.startTimeLocal;
+}
+
+function earlierOfSameType(subject: StoredActivity, pool: StoredActivity[]): StoredActivity[] {
+  return pool.filter(
+    (candidate) =>
+      candidate.activityId !== subject.activityId &&
+      candidate.type === subject.type &&
+      startedEarlier(candidate, subject)
+  );
+}
+
+function scaleValue(activity: StoredActivity): number | null {
+  if (typeof activity.distanceMeters === "number" && activity.distanceMeters > 0) {
+    return activity.distanceMeters;
+  }
+  if (typeof activity.durationSeconds === "number" && activity.durationSeconds > 0) {
+    return activity.durationSeconds;
+  }
+  return null;
+}
+
+/** The closest earlier effort by scale, however far away it turns out to be. */
+function nearestByScale(
+  subject: StoredActivity,
+  earlier: StoredActivity[]
+): StoredActivity | null {
+  const target = scaleValue(subject);
+  if (target === null) {
+    return earlier[0] ?? null;
+  }
+
+  const measured = earlier.filter((candidate) => scaleValue(candidate) !== null);
+  if (measured.length === 0) {
+    return null;
+  }
+
+  return measured.reduce((best, candidate) =>
+    Math.abs(scaleValue(candidate)! - target) < Math.abs(scaleValue(best)! - target)
+      ? candidate
+      : best
+  );
+}
+
 function mostRecent(activities: StoredActivity[]): StoredActivity | null {
   return (
     [...activities].sort((left, right) =>
@@ -63,7 +111,15 @@ export async function compareWorkoutsTool(
   }
 
   const comparables = findComparableWorkouts(subject, pool, args.limit);
-  const comparison = compareWorkouts(subject, comparables);
+
+  // Kept even when nothing is comparable: "you have nine earlier runs, none at
+  // this distance" is a different answer from "this is your first run", and the
+  // renderer cannot tell them apart without this.
+  const earlier = earlierOfSameType(subject, pool);
+  const comparison = compareWorkouts(subject, comparables, {
+    earlierSameType: earlier.length,
+    nearest: nearestByScale(subject, earlier),
+  });
 
   return {
     type: "text",
