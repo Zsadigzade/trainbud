@@ -123,7 +123,7 @@ am not planning one. AI features need your own Anthropic key and the dashboard
 meters every call with an optional monthly cap. MFA is not supported — the
 unofficial library it drives cannot do it.
 
-MIT, Node 22+, 573 tests. Unofficial community project, not affiliated with or
+MIT, Node 22+, 600+ tests. Unofficial community project, not affiliated with or
 endorsed by any device vendor.
 
 ---
