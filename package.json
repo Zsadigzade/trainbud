@@ -21,9 +21,8 @@
     "dev": "tsx src/index.ts start",
     "start": "node dist/index.js start",
     "test": "node scripts/run-tests.mjs",
-    "test:vitest": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:watch": "node scripts/run-tests.mjs --watch",
+    "test:coverage": "node scripts/run-tests.mjs --experimental-test-coverage",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run build"
@@ -60,12 +59,10 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/luxon": "^3.7.2",
     "@types/node": "^26.0.1",
-    "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.5.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0",
-    "vitest": "^4.1.9"
+    "typescript-eslint": "^8.62.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

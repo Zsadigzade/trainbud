@@ -26,9 +26,14 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// Anything passed through goes BEFORE the file list. Node ignores a flag that
+// arrives after the first file argument, which is how 
+// silently produced a full green run and no coverage report at all.
+const forwarded = process.argv.slice(2);
+
 const result = spawnSync(
   process.execPath,
-  ["--import", "tsx", "--test", ...files, ...process.argv.slice(2)],
+  [...forwarded, "--import", "tsx", "--test", ...files],
   { cwd: root, stdio: "inherit" }
 );
 

@@ -314,7 +314,7 @@ npm run lint
 npm run dev       # Start with auto-reload
 ```
 
-Use `.nvmrc` with nvm/fnm for Node 20. If your project path contains `#`, use `npm test` instead of `npm run test:vitest`.
+Use `.nvmrc` with nvm/fnm for Node 20. `npm run test:coverage` reports coverage through Node's own test runner, and `npm run test:watch` reruns on change.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/VAULT.md](./docs/VAULT.md) for architecture and design notes (Obsidian vault, outside this repo).
 
