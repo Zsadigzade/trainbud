@@ -7,10 +7,24 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The README promises Windows, macOS and Linux, and only Linux was ever
+    # checked. This project is developed on Windows, where the paths, the line
+    # endings and the native better-sqlite3 build all behave differently -- the
+    # exact places a cross-platform claim goes wrong without anyone noticing.
+    #
+    # The full matrix on every platform would be six jobs for little more
+    # signal, so the other two run the supported floor, Node 20.
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node-version: [20, 22]
+        include:
+          - os: windows-latest
+            node-version: 20
+          - os: macos-latest
+            node-version: 20
 
     steps:
       - uses: actions/checkout@v4
