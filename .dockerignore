@@ -1,0 +1,12 @@
+node_modules
+dist
+.trainbud
+.env
+*.log
+.git
+.github
+tests
+scripts
+ciq
+examples
+docs
