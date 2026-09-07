@@ -2,6 +2,81 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] — server 0.6.0 · watch 2.0.2 — 2026-09-08
+
+### Added — `compare_workouts`, the last item on the roadmap
+
+- **A workout against the ones like it.** A single activity summary cannot
+  answer the question people actually ask about a session: a 25 minute 5k means
+  nothing without the other times you ran 5k. `compare_workouts` picks your own
+  earlier efforts of the same sport within 20% on distance — or on duration, for
+  a sport that records none, so strength sessions compare against sessions — and
+  reports duration, pace, average and max heart rate, elevation and calories
+  against the closest one, with the median across the comparable set beside it.
+- **It withholds a "typical" value below three samples**, rather than calling one
+  previous workout typical.
+- **Absence stays a state.** A measurement missing on either side reads
+  `unknown` and produces no delta, and a workout with nothing comparable says so
+  instead of comparing against zero.
+- It reads the local store rather than Connect, like `get_findings`, so it still
+  answers with the connection down, and it renders in miles and feet when the
+  profile says imperial.
+
+### Fixed — the log stops drowning its own signal
+
+- **A client hanging up is no longer an error.** 712 of the 795 error-level
+  lines in this machine's own `mcp.log` were one event: a client abandoning a
+  streaming `/mcp` request, written with an `Error: aborted` stack. That is the
+  ordinary end of such a request — a watch losing Bluetooth, a tab closing, the
+  tunnel dropping — and it buried the 17 ingest failures, the rejected API key
+  and the 51 auth retries that were worth reading, in the file the
+  troubleshooting docs point users at. Client aborts log at debug now, and a 500
+  is no longer written into a socket the client already destroyed.
+- **A body the server cannot parse answers 400, not 500.** Malformed JSON to
+  `/mcp` returned HTTP 500 with JSON-RPC `-32603`, the code reserved for a fault
+  inside the server; JSON-RPC defines `-32700` for this, and an oversized body is
+  a client error too (`413`, `-32600`). `/mcp` is reachable through the tunnel
+  whenever the watch is paired, so every malformed probe was manufacturing
+  server errors indistinguishable from real ones.
+
+### Fixed — `trainbud check` was exercising nine of fourteen tools and saying "all"
+
+- It filtered its list down to tools that are registered, which catches a check
+  for a tool that no longer exists and does nothing about the reverse: a
+  registered tool nobody wrote a check for was never called, and the summary
+  still reported everything passing. `get_findings` and `get_week_review` — the
+  two the watch's Today screen is built from — were among the five it skipped.
+- Twelve tools are exercised now, the two that write to your history are
+  excluded on purpose and say why, and a tool that is neither covered nor
+  excused prints as an advisory instead of vanishing. A test fails if one is
+  added without either.
+
+### Fixed — a budget cap that could not be verified was treated as no cap
+
+- `aiSpendSince` caught any failure reading the usage table and returned zeros,
+  which every caller read as "$0.00 spent this month": the state reported
+  `exceeded: false`, the call went through, and the watch drew a healthy budget.
+  A locked or damaged `app.db` was indistinguishable from a month with no
+  spending in it, on the one feature whose promise is that it refuses rather
+  than spending past a limit you set, against your own API key.
+- The failure is carried now: `spendUnknown` says the total means nothing,
+  `incomplete` goes true so the dashboard and watch show the caveat, and a call
+  is refused with a distinct `BudgetUnverifiableError`.
+- **Behaviour change.** With a cap set and an unreadable store, Ask and the
+  daily insight now fail closed rather than running. With no cap set nothing
+  changes, because no limit was asked for.
+
+### Added — tests for two things that had none
+
+- **The security headers**, which 0.5.1 shipped without entirely while the
+  server was internet-reachable. Now pinned across a 200, a 401 and a 404, plus
+  the two documented decisions: no remote origin in the policy, and no HSTS over
+  plain http, which would make the loopback dashboard unreachable.
+- **The rate-limit identity**, which decides whether a forged `X-Forwarded-For`
+  buys a fresh 30-requests-a-minute budget against the pairing endpoint — the
+  one flow reachable with no credential, where guessing a six-digit code hands
+  over the API key. Verified by mutation, not by a green run.
+
 ## [0.5.2] — server 0.5.2 · watch 2.0.2 — 2026-09-06
 
 ### Added — a paired watch no longer holds the master key
