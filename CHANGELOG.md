@@ -2,7 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — watch 2.0.3
+## [0.7.1] — server 0.7.1 · watch 2.0.3 — 2026-09-08
+
+### Added — TrainBud is published where MCP clients actually look
+
+- **Listed on the official MCP Registry** as `io.github.zsadigzade/trainbud`.
+  Searching that registry for this kind of server returned seventeen results
+  and none of them was this one. `server.json` describes both install paths,
+  and the release workflow publishes it over OIDC — no stored token, no
+  interactive login.
+- The registry proves you own an npm package by reading **`mcpName` from the
+  published `package.json`**, not from the repository, so that field ships from
+  this release onward. The workflow waits until npm actually serves the field
+  for the exact version being released before it publishes the server — the
+  alternative is a race with replication whose error reads like a
+  misconfiguration rather than a timing problem.
+- **The Docker image is published**, to `ghcr.io/zsadigzade/trainbud`. It was
+  offered in the README and in a public post while nothing had ever pushed one:
+  CI built it on every commit and threw it away, so `docker pull` could not have
+  worked and only `docker build` could. The release now pushes the image, then
+  pulls it back and runs the binary inside it, because an image that exists is
+  not an image that runs.
+
+### Added — the things a stranger needs before they can report anything
+
+- **`SECURITY.md`**, with a private reporting route. This tool holds Connect
+  credentials and an optional model key on your machine and had no disclosure
+  channel at all. It names what is in scope, what is not, and a response time
+  that a one-maintainer project can actually honour.
+- **A bug-report template** that asks for `trainbud doctor` and `trainbud check`
+  first, since between them they answer most of what would otherwise take three
+  rounds — and warns not to paste raw config, which is the thing a helpful
+  reporter does by default.
+- **Dependabot**, grouped so routine updates arrive as one pull request and
+  majors arrive alone. The dependency sweep that found the native-binary trap
+  was run by hand; this puts the next one in front of CI automatically.
+- **An OpenSSF Scorecard workflow.** The npm release already publishes over OIDC
+  with no stored token and carries a SLSA provenance attestation; this makes
+  that legible instead of something you find by querying the registry.
+
 
 ### Fixed — the glance had been crashing on load since the day it was added
 

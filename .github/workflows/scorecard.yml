@@ -1,0 +1,50 @@
+# OpenSSF Scorecard — an automated read on this repository's supply chain.
+#
+# It is here because this project distributes a binary people run against their
+# own credentials, and "trust me" is not a supply-chain story. The npm release
+# is already published over OIDC with no stored token and carries a SLSA
+# provenance attestation; this makes that visible rather than something you
+# discover by querying the registry.
+#
+# Results are uploaded to the Scorecard API so the README badge can render, and
+# to GitHub's code-scanning view so a regression shows up as an alert.
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Weekly, Monday morning. Nothing here needs to run per-commit.
+    - cron: "27 6 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload the SARIF result
+      id-token: write # publish the result so the badge can read it
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

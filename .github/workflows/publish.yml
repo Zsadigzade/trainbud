@@ -18,13 +18,16 @@ on:
 # token path this workflow used before no longer works: granular tokens with
 # "bypass 2FA" lost sensitive package-management actions in August 2026, and
 # creating a package is one of them. See docs/RELEASING.md.
-permissions:
-  id-token: write # required for OIDC; without it npm falls back to a token and fails
-  contents: write # the release step writes a GitHub release
+# Declared per job rather than here. The container push needs packages:write and
+# the npm job does not, and a workflow that publishes to three places should not
+# hand all three permissions to every step in it.
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC; without it npm falls back to a token and fails
+      contents: write # the release step writes a GitHub release
 
     steps:
       - uses: actions/checkout@v4
@@ -68,3 +71,116 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+  # The README offered a Docker image for weeks and nothing had ever published
+  # one -- ci.yml built it on every push and threw it away, so `docker pull`
+  # could not work and only `docker build` could. This is the job that makes the
+  # README true.
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercased on purpose: GHCR rejects an uppercase path, and the owner of
+      # this repository is spelled with a capital Z.
+      - name: Work out the tags
+        id: meta
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          REPO=$(echo "${{ github.repository }}" | tr "[:upper:]" "[:lower:]")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$REPO" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:latest
+
+      # An image that exists is not an image that runs. Same rule the npm release
+      # follows: pull the published artifact back and execute it.
+      - name: Run the published image
+        run: |
+          docker pull ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          docker run --rm --entrypoint node \
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }} \
+            dist/index.js --version
+
+  # Publish the server to the official MCP Registry, which is what MCP clients
+  # read. Authenticated by OIDC for the io.github.* namespace, so there is no
+  # token to store and no interactive login to remember.
+  mcp-registry:
+    needs: [publish, container]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC against registry.modelcontextprotocol.io
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point server.json at the tag being released
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          jq --arg v "$VERSION" \
+            '.version = $v | .packages[].version = $v' \
+            server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+
+      # The registry proves we own the npm package by fetching package.json from
+      # the registry and reading mcpName out of it. Publishing here the instant
+      # after `npm publish` returns is a race against replication, and the failure
+      # is an ownership error that reads like a configuration mistake. Wait for
+      # the thing itself -- this exact version, carrying this exact field --
+      # rather than for a fixed number of seconds.
+      - name: Wait until npm actually serves mcpName for this version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          for attempt in $(seq 1 30); do
+            NAME=$(curl -fsS "https://registry.npmjs.org/trainbud/$VERSION" \
+              | jq -r '.mcpName // empty' || true)
+            if [ "$NAME" = "io.github.zsadigzade/trainbud" ]; then
+              echo "npm serves mcpName=$NAME for $VERSION after ${attempt} attempt(s)"
+              exit 0
+            fi
+            echo "attempt $attempt: not there yet (got \"$NAME\")"
+            sleep 10
+          done
+          echo "npm never served mcpName for $VERSION; refusing to publish a server the registry will reject" >&2
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Authenticate to the MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
+
+      # A publish that returned 0 is not a listing. Read it back.
+      - name: Verify the server is listed
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          FOUND=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=trainbud" \
+            | jq -r '[.servers[]?; .[]? ] | .. | objects | select(.name? == "io.github.zsadigzade/trainbud") | .version' \
+            | head -n 1)
+          echo "registry reports version: $FOUND (expected $VERSION)"
+          test -n "$FOUND"

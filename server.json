@@ -1,0 +1,72 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.zsadigzade/trainbud",
+  "title": "TrainBud",
+  "description": "Talk to your own fitness data. Activities, sleep, heart rate, recovery, stress and VO2 max, with findings computed in code against your own 28-day baselines rather than a population average. Runs locally; credentials stay on your machine.",
+  "version": "0.7.1",
+  "websiteUrl": "https://github.com/Zsadigzade/trainbud#readme",
+  "repository": {
+    "url": "https://github.com/Zsadigzade/trainbud",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "trainbud",
+      "version": "0.7.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "start"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "GARMIN_EMAIL",
+          "description": "The email address for your Connect account. Stored only in your local .env; `npx trainbud setup` writes it for you.",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "GARMIN_PASSWORD",
+          "description": "Your Connect password. Stored only in your local .env. Accounts with MFA enabled are not supported, because the unofficial library this drives cannot complete that flow.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Optional, and only for the watch app's Ask card and daily insight. The MCP tools themselves need no model key: every finding is computed in code, and the model only phrases it.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "zsadigzade/trainbud",
+      "version": "0.7.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GARMIN_EMAIL",
+          "description": "The email address for your Connect account.",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "GARMIN_PASSWORD",
+          "description": "Your Connect password.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

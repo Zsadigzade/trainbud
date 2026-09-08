@@ -1,0 +1,54 @@
+# Dependency updates as pull requests.
+#
+# This exists because the 2026-09-07 dependency sweep was done by hand, and the
+# thing it found could not have been found by reading a version number: the
+# native SQLite dependency publishes no prebuilt binary below Node 22, so the
+# advertised floor was one that no Windows user could install on. A weekly PR
+# would not have diagnosed that, but it would have put the upgrade in front of
+# CI -- which is where it was eventually caught, once CI ran on Windows.
+#
+# Grouped on purpose. Ten separate patch PRs a week is how a bot gets muted.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor bumps arrive as one PR. If CI is green on all four
+      # platforms, it is one review rather than ten.
+      routine:
+        update-types:
+          - minor
+          - patch
+      # Majors stay separate: each one deserves its own argument, and the two
+      # that mattered here (TypeScript 7, better-sqlite3 13) were both reverted
+      # after a real problem showed up that the version number did not.
+      major:
+        update-types:
+          - major
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: build

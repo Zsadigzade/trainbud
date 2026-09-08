@@ -14,6 +14,19 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-slim
+
+# image.source is what attaches the package to this repository on GHCR --
+# without it the container page is orphaned and carries no README.
+#
+# io.modelcontextprotocol.server.name is not decoration: the MCP Registry
+# verifies ownership of an OCI package by reading this exact label, the way it
+# reads mcpName out of package.json for npm. Change one and server.json has to
+# change with it, or publishing is rejected.
+LABEL org.opencontainers.image.source="https://github.com/Zsadigzade/trainbud" \
+      org.opencontainers.image.description="Talk to your own fitness data through Claude and other MCP clients" \
+      org.opencontainers.image.licenses="MIT" \
+      io.modelcontextprotocol.server.name="io.github.zsadigzade/trainbud"
+
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./

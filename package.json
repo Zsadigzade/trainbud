@@ -1,6 +1,7 @@
 {
   "name": "trainbud",
-  "version": "0.7.0",
+  "version": "0.7.1",
+  "mcpName": "io.github.zsadigzade/trainbud",
   "description": "TrainBud — talk to your Connect fitness data through Claude and other MCP clients",
   "type": "module",
   "main": "dist/index.js",

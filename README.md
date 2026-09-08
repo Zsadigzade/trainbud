@@ -306,8 +306,14 @@ repo root, or call the built entry point directly with `node dist/index.js docto
 
 ## Docker
 
-The image is built and exercised in CI on every push, so it is not a promise
-that quietly rots.
+A published image, built and exercised in CI on every push so it is not a
+promise that quietly rots:
+
+```bash
+docker pull ghcr.io/zsadigzade/trainbud:latest
+```
+
+Or build it yourself from this repository:
 
 ```bash
 docker build -t trainbud .
@@ -391,7 +397,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/VAULT.md](./docs/VAULT.md) fo
 - [x] Stress levels
 - [x] Training insights
 - [x] Workout comparison
-- [x] Docker image
+- [x] Docker image — published to `ghcr.io/zsadigzade/trainbud`
 
 ## License
 

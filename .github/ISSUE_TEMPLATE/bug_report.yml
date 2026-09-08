@@ -1,0 +1,84 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else, please run **`trainbud doctor`** and **`trainbud check`**
+        and paste what they say. Between them they answer most of what would
+        otherwise be three rounds of questions: whether the server is reachable
+        from outside, whether a key is configured, how much history is stored,
+        and which Node you are on.
+
+        **Never paste your `.env`, an API key, a password, or a pairing token.**
+        `trainbud check` is written to be safe to paste; raw config is not.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I asked Claude "how did I sleep this week" and it answered ...
+        I expected ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `trainbud doctor`
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `trainbud check`
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen
+      options:
+        - An MCP client (Claude Desktop, Cursor, …)
+        - The watch app
+        - The dashboard in a browser
+        - The command line
+        - Setup / installing
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: TrainBud version
+      description: "`npx trainbud --version`, and the watch app version if this is about the watch."
+      placeholder: "0.7.1, watch 2.0.3"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and Node version
+      description: "`node --version`, and which OS."
+      placeholder: "Windows 11, Node 22.12.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: |
+        From `.trainbud/mcp.log`. Please paste the lines around the failure rather
+        than the whole file — and check them for anything secret before posting.
+      render: text
+    validations:
+      required: false
