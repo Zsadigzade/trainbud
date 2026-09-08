@@ -48,7 +48,6 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/zsadigzade/trainbud:0.7.2",
-      "version": "0.7.2",
       "transport": {
         "type": "stdio"
       },

@@ -53,10 +53,9 @@ jobs:
           # reference, so the version is written in two places.
           jq --arg v "${{ steps.v.outputs.version }}" \
             '.version = $v
-             | .packages[].version = $v
              | .packages |= map(if .registryType == "oci"
                                 then .identifier = "ghcr.io/zsadigzade/trainbud:" + $v
-                                else . end)' \
+                                else .version = $v end)' \
             server.json > server.tmp && mv server.tmp server.json
           cat server.json
 
