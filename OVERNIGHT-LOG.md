@@ -220,3 +220,25 @@ path.
 
 **Method note for the next agent:** wait for the run whose head SHA is the
 commit you just pushed. Breaking on "a run completed" reads whatever ran last.
+
+## 2026-09-08 05:05 UTC — 0.7.0 published
+
+The owner was asked whether to ship the Node 22 floor and said to use judgement,
+so it shipped. It is a correction, not a restriction: Node 20 could not install
+this package without a C++ toolchain on any platform, could not install it at
+all on a normal Windows machine, and has been end of life since April.
+
+Verified the way `docs/RELEASING.md` asks, and against the tagged SHA this time:
+
+- publish workflow: success on `acca14e`, the exact commit tagged
+- `npm view trainbud version` → 0.7.0
+- `npm view trainbud engines` → `{ node: '>=22.12.0' }`
+- `npx --yes trainbud@0.7.0 --version` → 0.7.0
+- GitHub release `v0.7.0` exists, not a draft
+
+Also carries the `compare_workouts` corrections, the plugin skill fix, the
+working coverage script, the Docker build and docs, and the dependency sweep.
+
+The two live posts (r/mcp, and the r/selfhosted megathread comment) were edited
+to say Node 22+ and fifteen tools, so the public copy matches the published
+package.
