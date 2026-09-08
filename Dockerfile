@@ -5,7 +5,7 @@
 # python3, make and g++ and compile it -- in both stages, then purge the
 # toolchain again. On 22 the prebuilt linux-x64 binary is used and none of that
 # is needed, which is why this file no longer touches apt at all.
-FROM node:22-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -13,7 +13,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-slim
+FROM node:26-slim
 
 # image.source is what attaches the package to this repository on GHCR --
 # without it the container page is orphaned and carries no README.
