@@ -2,6 +2,91 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] — server 0.7.0 · watch 2.0.2 — 2026-09-08
+
+### Changed — Node 22.12 is the floor, because Node 20 never actually worked
+
+- **`better-sqlite3` publishes no prebuilt binary for Node 20 on any platform.**
+  Its earliest is ABI 127, which is Node 22. Every Node 20 install therefore
+  compiled it from source, which needs a C++ toolchain: build-essential on
+  Linux, the Xcode command line tools on macOS, and Visual Studio Build Tools on
+  Windows. The README promised "Works everywhere — Windows, macOS, Linux
+  (Node.js 20+)" and only Linux had ever been checked, on a CI runner that ships
+  a compiler.
+- Adding `windows-latest` to CI reproduced what an ordinary Windows user gets:
+  `gyp ERR! stack Error: Could not find any Visual Studio installation to use`.
+  For a product whose first instruction is `npx trainbud setup`, an install that
+  demands a compiler is not a supported platform.
+- Node 20 also reached end of life in April 2026. `engines`, `.nvmrc`, the
+  README badge, QUICKSTART and the Dockerfile all say 22 now, and QUICKSTART
+  says why. **If you are on Node 20, stay on 0.6.0 or upgrade Node** — 0.7.0
+  will refuse to install.
+- This also settles an inconsistency that was already there: `commander@15`
+  requires Node >= 22.12 while the package promised 20, so every Node 20 install
+  printed an EBADENGINE warning about a core dependency.
+
+### Fixed — the comparison told people it was their first when it was not
+
+- `compare_workouts` shipped in 0.6.0 saying "This is the first one that
+  qualifies" whenever nothing was comparable. Run across a real 28-activity
+  store, 14 workouts had no comparable effort — and 8 of those did have earlier
+  workouts of the same sport, one of them eleven, separated only by distance.
+  Those now get the true answer, naming the count and the nearest effort.
+- A line whose three numbers disagreed: elevation rendered as "24 m vs 38 m —
+  15 m lower", because both endpoints were rounded for display while the delta
+  was rounded separately. The shown difference now comes from the shown pair.
+- The tool's payload carries `earlierSameType` and `nearest`, so a client
+  reading the data can tell "nine earlier runs at other distances" from a
+  genuine first instead of only the rendered text knowing.
+
+### Fixed — the plugin hid six tools, including the one worth having
+
+- `plugin/skills/trainbud/SKILL.md` said "MCP tools (9)" and listed nine while
+  the server had fifteen. Anyone installing through the README's recommended
+  path got a skill that pointed Claude at the raw-metric tools and never
+  mentioned `get_findings`, `get_week_review`, `compare_workouts`, or the three
+  context tools. The intent table now routes "anything unusual / how am I
+  doing?" straight to findings.
+- Both copies of the tool list — the README table and the plugin skill, plus the
+  count in the skill's own heading — are pinned to the registry by tests.
+
+### Fixed — `trainbud check` says which Node it is running on
+
+- The command people run when nothing works had nothing to say about the
+  runtime underneath it, which is the failure they are most likely hitting. Too
+  old, and it now names the version, the floor, and the reason in one line.
+
+### Added — the Docker image is built, and documented
+
+- CI builds the image and runs the CLI inside it on every push. It had never
+  been built anywhere, while the README listed it as shipped.
+- The README now explains how to run it: mount a volume at `/app/.trainbud` or
+  every restart discards the history and re-authenticates; `-i` on the stdio
+  entrypoint or the MCP client sees a server that goes silent; and
+  `TRAINBUD_HOST=0.0.0.0` for `serve`, since binding 127.0.0.1 is right on a
+  laptop and unreachable from inside a container.
+- The Dockerfile no longer installs python3, make and g++ — on Node 22 the
+  prebuilt binary is used and the file does not touch apt at all.
+
+### Fixed — tooling that never worked
+
+- `npm run test:coverage` and `test:vitest` failed on all 67 test files with
+  "No test suite found": the suite is written against `node:test`, which vitest
+  cannot collect, so those scripts could never have run a single test here —
+  while the README told contributors to use one. Coverage runs through Node's
+  own runner now (93% lines), `test:watch` points at `node --watch`, and vitest
+  is gone along with 1,464 lines of lockfile.
+- `scripts/run-tests.mjs` appended forwarded flags after the file list, where
+  Node ignores them — so `--experimental-test-coverage` produced a green run and
+  no report, the same silent-success shape that script exists to prevent.
+
+### Changed — dependencies
+
+- `@anthropic-ai/sdk` 0.124, `@modelcontextprotocol/sdk` 1.30, `zod` 4.5.4, and
+  the type and lint packages. `better-sqlite3` stays on 12.x: 13.x bundles its
+  binaries but still falls through to node-gyp under `npm ci` on Windows.
+  TypeScript stays on 6: `typescript-eslint` does not support 7 yet.
+
 ## [0.6.0] — server 0.6.0 · watch 2.0.2 — 2026-09-08
 
 ### Added — `compare_workouts`, the last item on the roadmap
