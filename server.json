@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.zsadigzade/trainbud",
+  "name": "io.github.Zsadigzade/trainbud",
   "title": "TrainBud",
   "description": "Talk to your own fitness data. Findings computed in code against your own 28-day baselines.",
   "version": "0.7.1",

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] — server 0.7.2 · watch 2.0.3 — 2026-09-08
+
+### Fixed — the MCP server name was spelled in the wrong case
+
+- 0.7.1 registered itself as `io.github.zsadigzade/trainbud`. **The registry
+  namespace is case-sensitive**, and OIDC grants `io.github.Zsadigzade/*` —
+  matching the GitHub username, capital Z. The publish was refused with a 403
+  naming both strings, which is the most useful error in this whole exercise.
+- It needs a release rather than a commit for the same reason 0.7.1 did: the
+  registry reads `mcpName` out of the **published** `package.json`, and the
+  ownership label is baked into the **pushed** container image. Neither can be
+  corrected in place, so the identifier ships again, spelled correctly.
+- npm 0.7.1 and `ghcr.io/zsadigzade/trainbud:0.7.1` published fine and are
+  unaffected; only the registry entry was blocked. The image path stays
+  lowercase, which is a container-registry rule and a different identifier.
+
 ## [0.7.1] — server 0.7.1 · watch 2.0.3 — 2026-09-08
 
 ### Added — TrainBud is published where MCP clients actually look

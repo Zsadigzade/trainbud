@@ -25,7 +25,7 @@ FROM node:22-slim
 LABEL org.opencontainers.image.source="https://github.com/Zsadigzade/trainbud" \
       org.opencontainers.image.description="Talk to your own fitness data through Claude and other MCP clients" \
       org.opencontainers.image.licenses="MIT" \
-      io.modelcontextprotocol.server.name="io.github.zsadigzade/trainbud"
+      io.modelcontextprotocol.server.name="io.github.Zsadigzade/trainbud"
 
 WORKDIR /app
 ENV NODE_ENV=production

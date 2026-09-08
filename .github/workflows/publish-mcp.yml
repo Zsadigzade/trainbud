@@ -64,7 +64,7 @@ jobs:
           for attempt in $(seq 1 30); do
             NAME=$(curl -fsS "https://registry.npmjs.org/trainbud/$VERSION" \
               | jq -r '.mcpName // empty' || true)
-            if [ "$NAME" = "io.github.zsadigzade/trainbud" ]; then
+            if [ "$NAME" = "io.github.Zsadigzade/trainbud" ]; then
               echo "npm serves mcpName=$NAME for $VERSION after ${attempt} attempt(s)"
               exit 0
             fi
@@ -91,6 +91,6 @@ jobs:
       - name: Verify the server is listed
         run: |
           curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=trainbud" \
-            | jq -e '.. | objects | select(.name? == "io.github.zsadigzade/trainbud")' \
+            | jq -e '.. | objects | select(.name? == "io.github.Zsadigzade/trainbud")' \
             > /dev/null
-          echo "io.github.zsadigzade/trainbud is listed"
+          echo "io.github.Zsadigzade/trainbud is listed"
