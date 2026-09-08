@@ -60,8 +60,8 @@ It had not. Each line below was checked against the live platform:
 | **r/selfhosted** | ✅ **live 09-07**, in the megathread | Rule 6 forbids a standalone post for a project under 3 months old; posted in "New Project Megathread - Week of 03 Sep 2026" using their template |
 | **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> |
 | **r/Garmin** | ⚠️ **posted but malformed** | Wrong title format, AutoMod flagged it. See the r/Garmin section below — needs delete + Wednesday repost |
-| **Show HN** | ❌ **never posted** | HN Algolia search for "TrainBud" returns 0 results; the account is not logged in in this browser |
-| **r/ClaudeAI** | ❌ **cannot post** | Their rule 7: showcase posts need OP karma > 100. This account has 2 |
+| **Show HN** | ⏳ **ready, not posted** | Logged in as `zsadigzade` (verified 09-08 22:5x local). Held for 08:00 ET, which is 16:00 UTC+4 — an unattended Show HN is worse than none |
+| **r/ClaudeAI** | ⛔ **dropped as a launch channel** | Rule 7 needs OP karma > 100 against 2, and the only honest way to move that is months of genuine participation. Farming karma to clear a posting gate is what the rule exists to stop. It unlocks itself if you end up taking part; it is no longer a launch task |
 
 **Karma is the binding constraint.** `u/Cr1tsh0t` has 2 link karma and 0 comment
 karma, which locks r/ClaudeAI and makes low-karma spam filters a live risk
@@ -75,7 +75,7 @@ Attention is the scarce resource, not reach. Each channel gets a real window.
 | Time (UTC+4) | Channel | Note |
 | --- | --- | --- |
 | 15:45 | `trainbud doctor` | Last check. Tunnel, AI key, history depth |
-| 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min. **Still to do — needs an HN login in the browser** |
+| 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min. **Login done; copy final. One action: paste title + text at news.ycombinator.com/submit** |
 | 17:30 | r/mcp, r/selfhosted, r/ClaudeAI | r/mcp and r/selfhosted done 09-07; r/ClaudeAI gated on karma |
 | 19:00 | X thread | Done 09-07 |
 | a Wednesday | r/Garmin | Delete the malformed post first — one launch post per lifetime |
@@ -84,8 +84,16 @@ Discords dropped from the running order — see pre-flight notes above.
 
 ## Show HN
 
-> **Title:** Show HN: TrainBud – an MCP server for your Garmin data, and a watch
-> app that asks Claude
+> **Title (75 chars, under HN's 80):**
+> `Show HN: TrainBud – an MCP server for your own fitness data, and a watch app`
+>
+> **url:** leave blank. **text:** the body below.
+>
+> The vendor's name is deliberately out of the title — same choice the live r/mcp
+> title already makes. See [[Trap — vendor name in app name]]: §VIII.a reaches
+> "any other materials", and a title is the most marketing-shaped part of a post.
+> The descriptive mention plus disclaimer in the body is the line the README
+> already takes publicly.
 
 I got tired of my training data being something I look at instead of something I
 can ask about, so I built an MCP server for it.
