@@ -192,3 +192,31 @@ One operational note for anyone repairing dependencies on the dev machine:
 wholesale and Windows refuses, because the running process holds
 `better-sqlite3`'s native binary open. `npm install` repairs the tree without
 stopping the server.
+
+## 2026-09-08 04:52 UTC — correction: better-sqlite3 13 was reverted
+
+The entry above says 13.0.3 was adopted and verified. That was wrong, and the
+error is worth naming precisely because it is easy to repeat.
+
+**13.0.3 broke the Windows CI job**, and it was reported as green. The polling
+loop used to wait for CI broke on the first `completed` status it saw and then
+printed the jobs of `gh run list --limit 1` — which, before the new run had been
+created, was the *previous* commit's run. Five commits went out on top of a red
+main before anyone looked at the job list directly.
+
+The technical part: 13.x ships binaries inside the tarball, which is why a local
+`npm install` on Windows needed no compiler and looked like proof. Under
+`npm ci` in a clean checkout — the path CI, contributors and releases all take —
+it still goes to node-gyp and fails with `Could not find any Visual Studio
+installation to use`. A bundled prebuild is not the same thing as an install
+that works.
+
+Reverted to **12.11.1**, which fetches through `prebuild-install` and is green on
+ubuntu 22/24, windows 22, macos 22 and the Docker build. The deprecation warning
+it prints is the price of an install that works.
+
+The rest of the sweep stands and is unaffected — none of it touches the native
+path.
+
+**Method note for the next agent:** wait for the run whose head SHA is the
+commit you just pushed. Breaking on "a run completed" reads whatever ran last.
