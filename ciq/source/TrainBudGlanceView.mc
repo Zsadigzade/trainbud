@@ -35,6 +35,13 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
     private const LABEL_REC   = "Rec";
     private const LABEL_SLEEP = "Sleep";
 
+    // A margin, not a fix for anything. Text was drawn at x = 0, hard against
+    // the edge of the strip; four pixels costs nothing on the narrowest product
+    // in the manifest and keeps the line off the bezel. The clipped-looking T of
+    // TrainBud in simulator captures is the simulator glyph, not this -- it is
+    // identical at an inset of 10.
+    private const INSET_X = 4;
+
     function initialize() {
         GlanceView.initialize();
     }
@@ -46,9 +53,21 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         var width  = dc.getWidth();
         var height = dc.getHeight();
 
+        // The tallest face either line can use, so the bottom line can be placed
+        // by its own height rather than by a guess.
+        var lineHeight = dc.getFontHeight(Graphics.FONT_GLANCE);
+        var numberHeight = dc.getFontHeight(Graphics.FONT_GLANCE_NUMBER);
+        if (numberHeight > lineHeight) { lineHeight = numberHeight; }
+
+        // TEXT_JUSTIFY_VCENTER centres the line on the y it is given, so the
+        // old `height - 2` put half of every glyph below the strip -- the
+        // numbers rendered with their bottoms sheared off. Half a line up from
+        // the bottom edge is the lowest a centred line can sit and stay whole.
+        var baseline = height - (lineHeight / 2);
+
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
-            0, 0,
+            INSET_X, 0,
             Graphics.FONT_GLANCE,
             TITLE,
             Graphics.TEXT_JUSTIFY_LEFT
@@ -68,16 +87,16 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
             // one surface a user reads without deciding to.
             var dotRadius = 3;
             var dotGap    = 5;
-            var textX     = (dotRadius * 2) + dotGap;
+            var textX     = INSET_X + (dotRadius * 2) + dotGap;
 
             dc.setColor(flag.get(:color) as Number, Graphics.COLOR_TRANSPARENT);
-            dc.fillCircle(dotRadius, height - 2, dotRadius);
+            dc.fillCircle(INSET_X + dotRadius, baseline, dotRadius);
 
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                textX, height - 2,
+                textX, baseline,
                 Graphics.FONT_GLANCE,
-                fitToWidth(dc, flag.get(:text) as String, Graphics.FONT_GLANCE, width - textX),
+                fitToWidth(dc, flag.get(:text) as String, Graphics.FONT_GLANCE, width - textX - INSET_X),
                 Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
             );
             return;
@@ -87,7 +106,7 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         if (overview == null) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                0, height / 2,
+                INSET_X, height / 2,
                 Graphics.FONT_GLANCE,
                 NO_DATA,
                 Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
@@ -98,27 +117,22 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         var recovery = overview.get("recovery");
         var sleepH   = overview.get("sleep_h");
 
-        var baseline = height - 2;
+        var recText   = recovery == null ? "--" : metricText(recovery);
+        var sleepText = sleepH   == null ? "--" : metricText(sleepH) + "h";
 
-        // Recovery — left half, coloured by threshold.
-        drawMetric(
-            dc,
-            0,
-            baseline,
-            LABEL_REC,
-            recovery == null ? "--" : metricText(recovery),
-            recoveryColor(recovery)
-        );
+        // Recovery — left, coloured by threshold.
+        drawMetric(dc, INSET_X, baseline, LABEL_REC, recText, recoveryColor(recovery));
 
-        // Sleep — right half.
-        drawMetric(
-            dc,
-            width / 2,
-            baseline,
-            LABEL_SLEEP,
-            sleepH == null ? "--" : metricText(sleepH) + "h",
-            Graphics.COLOR_WHITE
-        );
+        // Sleep — right-aligned to the strip edge rather than started at the
+        // halfway mark. "Sleep 7.2h" is wider than half a glance on every
+        // product here, so the trailing h was drawn past the side of the screen;
+        // measuring it is the only way to know it fits. It never crosses the
+        // recovery pair: on a narrow display the two simply meet.
+        var sleepX = width - INSET_X - metricWidth(dc, LABEL_SLEEP, sleepText);
+        var recEnd = INSET_X + metricWidth(dc, LABEL_REC, recText) + INSET_X;
+        if (sleepX < recEnd) { sleepX = recEnd; }
+
+        drawMetric(dc, sleepX, baseline, LABEL_SLEEP, sleepText, Graphics.COLOR_WHITE);
     }
 
     // Float.toString() renders six decimals, so 6.3 hours of sleep drew as
@@ -157,10 +171,21 @@ class TrainBudGlanceView extends WatchUi.GlanceView {
         dc.setColor(valueColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             x + labelWidth, baseline,
-            isNumericText(value) ? Graphics.FONT_GLANCE_NUMBER : Graphics.FONT_GLANCE,
+            valueFont(value),
             value,
             Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
         );
+    }
+
+    /** How wide a label and value pair draws, in the faces it will actually
+        be drawn in. */
+    private function metricWidth(dc as Dc, label as String, value as String) as Number {
+        return dc.getTextWidthInPixels(label + " ", Graphics.FONT_GLANCE)
+             + dc.getTextWidthInPixels(value, valueFont(value));
+    }
+
+    private function valueFont(value as String) as Graphics.FontDefinition {
+        return isNumericText(value) ? Graphics.FONT_GLANCE_NUMBER : Graphics.FONT_GLANCE;
     }
 
     /** True when every character is one the FONT_GLANCE_NUMBER face actually

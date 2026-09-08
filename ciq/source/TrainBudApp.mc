@@ -27,7 +27,10 @@ class TrainBudApp extends Application.AppBase {
     // shipping order. See Cards.mc: a card is an id, not a position, because
     // the user can now hide and reorder them and a position renumbers itself
     // the moment one disappears.
-    private var _cardOrder as Array<String> = Cards.defaultOrder();
+    // Built on first use by cardOrder(), never here. A field initializer that
+    // reaches into another module runs in the glance build scope too, where
+    // Cards does not exist -- see cardOrder() for what that cost.
+    private var _cardOrder as Array<String> or Null = null;
 
     const FETCH_TIMEOUT_MS  = 10000;
     const PAIR_POLL_MS      = 5000;
@@ -40,7 +43,7 @@ class TrainBudApp extends Application.AppBase {
     // Stamped into pairing telemetry so the server log names the exact binary
     // that is running. Guessing which build the simulator had loaded wasted
     // several cycles.
-    const BUILD_ID = "2.0.0-states";
+    const BUILD_ID = "2.0.3";
 
     // Console tracing. The simulator's CIQ_LOG.YML records crashes only, but
     // System.println goes to the monkeydo console, which nobody had been
@@ -176,13 +179,35 @@ class TrainBudApp extends Application.AppBase {
     function getCardIndex() as Number           { return _cardIndex; }
     function getUpdatedAt() as String or Null   { return _updatedAt; }
     function getCachedAt()  as Number or Null   { return _cachedAt; }
-    function getCardCount() as Number           { return _cardOrder.size(); }
-    function getCardOrder() as Array<String>    { return _cardOrder; }
+    function getCardCount() as Number           { return cardOrder().size(); }
+    function getCardOrder() as Array<String>    { return cardOrder(); }
+
+    //
+    // The carousel order, built on first use.
+    //
+    // The system instantiates this class to ask it for getGlanceView(), so
+    // every field initializer on it runs inside the glance build scope -- and
+    // Cards is not in that scope. `= Cards.defaultOrder()` on the field killed
+    // the glance with "Illegal Access (Out of Bounds) - Failed invoking
+    // <symbol>" before onUpdate was ever reached, which on the watch is the
+    // app icon with an empty strip beside it. It shipped that way from the
+    // commit that added the glance, because nothing in the widget notices --
+    // the widget scope has Cards and draws fine.
+    //
+    // Nothing on the glance path calls this. Keep it that way.
+    //
+    private function cardOrder() as Array<String> {
+        if (_cardOrder == null) {
+            _cardOrder = Cards.defaultOrder();
+        }
+        return _cardOrder as Array<String>;
+    }
 
     /** The id of the card at a position, or the Today card if out of range. */
     function getCardId(index as Number) as String {
-        if (index < 0 || index >= _cardOrder.size()) { return Cards.TODAY; }
-        return _cardOrder[index] as String;
+        var order = cardOrder();
+        if (index < 0 || index >= order.size()) { return Cards.TODAY; }
+        return order[index] as String;
     }
 
     /** The id currently on screen. */
@@ -235,7 +260,7 @@ class TrainBudApp extends Application.AppBase {
         // The order can shrink -- the user hid a card while this watch was
         // showing it. Left alone the cursor points past the end and the next
         // draw is a blank screen.
-        if (_cardIndex >= _cardOrder.size()) {
+        if (_cardIndex >= cardOrder().size()) {
             _cardIndex = 0;
         }
     }
@@ -355,8 +380,9 @@ class TrainBudApp extends Application.AppBase {
      * from the current order leaves the position alone.
      */
     function setCardById(id as String) as Void {
-        for (var i = 0; i < _cardOrder.size(); i += 1) {
-            if ((_cardOrder[i] as String).equals(id)) {
+        var order = cardOrder();
+        for (var i = 0; i < order.size(); i += 1) {
+            if ((order[i] as String).equals(id)) {
                 _cardIndex = i;
                 return;
             }

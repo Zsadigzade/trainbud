@@ -23,7 +23,7 @@ Health & Fitness
 
 ## Version
 
-2.0.0
+2.0.3
 
 ## Short description
 
@@ -160,6 +160,15 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > .\ciq\build.ps1 -Device fr70 -Screens -NoLabel
 > .\scripts\capture-store-shots.ps1 -Device fr70
 > ```
+
+## What changed in 2.0.3
+
+- **Fixed: the glance was blank.** The strip beside the app icon in the glance list
+  showed nothing at all — no name, no recovery, no sleep, no finding. It had been
+  failing to load since the glance was first added. It now shows what it was always
+  meant to.
+- **Fixed: the numbers were cut off at the bottom of the strip**, and a long sleep
+  value ran off the right-hand edge.
 
 ## What changed in 2.0.0
 

@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — watch 2.0.3
+
+### Fixed — the glance had been crashing on load since the day it was added
+
+- **The strip beside the launcher icon was blank on every device, in every
+  release that has ever had a glance.** Connect IQ builds the app class into the
+  glance scope so it can ask it for `getGlanceView()`, and that runs every field
+  initializer on `TrainBudApp` inside a scope holding only `(:glance)` code.
+  `private var _cardOrder = Cards.defaultOrder()` was one of them and `Cards` is
+  not in that scope, so the glance died with `Illegal Access (Out of Bounds) -
+  Failed invoking <symbol>` before `onUpdate` drew a pixel. On the wrist that is
+  the app icon with nothing beside it: no name, no numbers, no finding. The
+  order is built on first use now.
+- Nothing caught it because nothing could. The build was green, the store
+  accepted the package, and the widget was never affected — the widget scope has
+  `Cards` and draws correctly. The only symptom was on a surface no automated
+  step looks at. `tests/watchGlanceScope.test.ts` fails now if anything that
+  runs while the app class is constructed calls into a module the glance lacks;
+  it was verified by putting the original line back and watching it fail.
+- **The numbers were drawn half outside the strip.** `Rec 94  Sleep 7.2h` sat on
+  a baseline of `height - 2` with `TEXT_JUSTIFY_VCENTER`, which centres the line
+  two pixels above the bottom edge and leaves the lower half of every glyph off
+  the screen. It is placed by the measured height of the tallest font it uses
+  now. The finding line shared the same baseline and the same fault.
+- **`Sleep 7.2h` ran off the right-hand edge.** The pair started at the halfway
+  mark and is wider than half a glance on every product in the manifest, so the
+  trailing `h` was drawn past the side of the screen. It is measured and
+  right-aligned to the strip.
+- The build id stamped into pairing telemetry read `2.0.0-states` on a 2.0.2
+  binary, so the server log named the wrong build. It follows the manifest now.
+
 ## [0.7.0] — server 0.7.0 · watch 2.0.2 — 2026-09-08
 
 ### Changed — Node 22.12 is the floor, because Node 20 never actually worked
