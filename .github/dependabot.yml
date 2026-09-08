@@ -30,6 +30,15 @@ updates:
       major:
         update-types:
           - major
+    ignore:
+      # TypeScript 7 was adopted and reverted on 2026-09-07: typescript-eslint
+      # has no TS 7 support, so taking it trades a working lint for a faster
+      # build. Dependabot cannot know that, and its first run failed twice
+      # resolving the peer dependency. This is the decision written down where
+      # the bot can read it. Remove the entry when typescript-eslint ships TS 7.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: build
 
