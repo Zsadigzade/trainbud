@@ -3,7 +3,7 @@
   "name": "io.github.Zsadigzade/trainbud",
   "title": "TrainBud",
   "description": "Talk to your own fitness data. Findings computed in code against your own 28-day baselines.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "websiteUrl": "https://github.com/Zsadigzade/trainbud#readme",
   "repository": {
     "url": "https://github.com/Zsadigzade/trainbud",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "trainbud",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "transport": {
         "type": "stdio"
       },
@@ -47,9 +47,8 @@
     },
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://ghcr.io",
-      "identifier": "zsadigzade/trainbud",
-      "version": "0.7.1",
+      "identifier": "ghcr.io/zsadigzade/trainbud:0.7.2",
+      "version": "0.7.2",
       "transport": {
         "type": "stdio"
       },

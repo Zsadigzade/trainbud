@@ -48,8 +48,15 @@ jobs:
 
       - name: Point server.json at that version
         run: |
+          # The OCI entry carries its tag inside the identifier: the registry
+          # rejects registryBaseUrl on an OCI package and wants a canonical
+          # reference, so the version is written in two places.
           jq --arg v "${{ steps.v.outputs.version }}" \
-            '.version = $v | .packages[].version = $v' \
+            '.version = $v
+             | .packages[].version = $v
+             | .packages |= map(if .registryType == "oci"
+                                then .identifier = "ghcr.io/zsadigzade/trainbud:" + $v
+                                else . end)' \
             server.json > server.tmp && mv server.tmp server.json
           cat server.json
 
