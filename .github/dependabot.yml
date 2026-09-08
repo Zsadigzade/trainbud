@@ -69,5 +69,14 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      # The image runs the Node this package says it supports, and a test pins
+      # both Dockerfile stages to engines.node. Bumping the base alone fails
+      # four jobs with "a Dockerfile stage is on a different Node" -- which is
+      # the guard working, not a problem to route around. Moving the image means
+      # moving the floor, which is a deliberate change with its own argument.
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: build
