@@ -31,7 +31,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A tag push carries the version in the ref; a manual run carries it in an
       # input. Resolve both to one place so nothing downstream has to care.
