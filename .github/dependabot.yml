@@ -39,6 +39,16 @@ updates:
       - dependency-name: typescript
         update-types:
           - version-update:semver-major
+      # better-sqlite3 13 was adopted and reverted on 2026-09-08. It ships
+      # binaries inside the tarball, so a local npm install on Windows needs no
+      # compiler and looks like proof -- but under `npm ci` in a clean checkout,
+      # the path CI, contributors and releases all take, it still falls through
+      # to node-gyp and fails with no Visual Studio installation. Dependabot
+      # opened exactly this PR on its first run. Remove when 13.x installs under
+      # npm ci on windows-latest.
+      - dependency-name: better-sqlite3
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: build
 
