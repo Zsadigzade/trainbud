@@ -1,0 +1,96 @@
+# Publish the server to the official MCP Registry.
+#
+# Deliberately its own workflow rather than a job inside publish.yml. The first
+# attempt failed there on a schema rule -- description is capped at 100
+# characters -- *after* npm and the container image had already published
+# successfully. With the step welded to a tag push, the only ways to retry were
+# to move a tag or to burn a version number on a text edit, neither of which is
+# a reasonable answer to "the description was too long".
+#
+# So this runs on a tag like the rest of the release, and can also be run by
+# hand against any published version. It takes no `needs:`; the wait below is
+# what orders it after npm, and that is a stronger guarantee than job ordering
+# because it checks the registry rather than trusting a previous step.
+name: Publish to MCP Registry
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published npm version to register, e.g. 0.7.1"
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC against registry.modelcontextprotocol.io
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # A tag push carries the version in the ref; a manual run carries it in an
+      # input. Resolve both to one place so nothing downstream has to care.
+      - name: Resolve the version
+        id: v
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "registering version $VERSION"
+
+      - name: Point server.json at that version
+        run: |
+          jq --arg v "${{ steps.v.outputs.version }}" \
+            '.version = $v | .packages[].version = $v' \
+            server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+
+      # The registry proves we own the npm package by fetching package.json from
+      # the registry and reading mcpName out of it. Publishing the instant after
+      # `npm publish` returns is a race against replication, and the failure is
+      # an ownership error that reads like a configuration mistake. Wait for the
+      # thing itself -- this exact version, carrying this exact field.
+      - name: Wait until npm serves mcpName for this version
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          for attempt in $(seq 1 30); do
+            NAME=$(curl -fsS "https://registry.npmjs.org/trainbud/$VERSION" \
+              | jq -r '.mcpName // empty' || true)
+            if [ "$NAME" = "io.github.zsadigzade/trainbud" ]; then
+              echo "npm serves mcpName=$NAME for $VERSION after ${attempt} attempt(s)"
+              exit 0
+            fi
+            echo "attempt $attempt: not there yet (got \"$NAME\")"
+            sleep 10
+          done
+          echo "npm never served mcpName for $VERSION; the registry would reject this" >&2
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Authenticate
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
+
+      # A publish that exited 0 is not a listing. Read it back out of the
+      # registry, which is the only thing that can confirm it.
+      - name: Verify the server is listed
+        run: |
+          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=trainbud" \
+            | jq -e '.. | objects | select(.name? == "io.github.zsadigzade/trainbud")' \
+            > /dev/null
+          echo "io.github.zsadigzade/trainbud is listed"
