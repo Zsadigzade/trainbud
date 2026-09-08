@@ -151,3 +151,44 @@ stops sending push notifications about the same blocker every hour.
 2. Re-enable the routine at <https://claude.ai/code/routines/trig_019MgHPoFBhziq33DBRiVyp7>
 3. Confirm it can push before trusting it with anything: the first fire should
    land a log entry here.
+
+## 2026-09-08 04:45 UTC — dependencies swept; TypeScript 7 deliberately not taken
+
+Everything `npm outdated` listed is now current except TypeScript, one at a time
+with verification beyond the suite each time:
+
+- **better-sqlite3 13.0.3.** 12.x fetches a binary at install time through the
+  deprecated `prebuild-install`; 13.x ships them inside the tarball
+  (`prebuilds/` covers darwin, linux, linuxmusl and win32, arm64 and x64), so
+  there is no download and no compiler in the path. Its `engines` is `>=22`,
+  which is exactly the floor this repo moved to. Checked against the real 22 MB
+  history database, not just the suite.
+- **@modelcontextprotocol/sdk 1.30** — verified over the protocol: a server
+  built from that commit listed all fifteen tools and answered a real
+  `compare_workouts` call.
+- **zod 4.5.4** — verified where it matters: a bad `nights` argument is still
+  rejected with an input validation error.
+- **@anthropic-ai/sdk 0.124** (eighteen minors) — verified with a real
+  `messages.create` against the live API in the exact shape `promptApi.ts`
+  sends. The call site uses no `thinking`, `budget_tokens`, prefill or
+  `output_format`, so nothing needed migrating.
+- **Types and lint tooling** — `@types/better-sqlite3` to 9.x to match the
+  driver, plus `@types/luxon`, `@types/node`, `eslint`, `tsx`,
+  `typescript-eslint`.
+
+**TypeScript 7 was tried and reverted. Do not take it yet.** It typechecks,
+builds (fast — it is the native port) and passes all 632 tests, but linting
+stops working entirely:
+
+    typescript-eslint does not support TS 7.0.
+    ... tracking: typescript-eslint#10940
+
+Trading a working lint for a faster build is not a trade worth making, and the
+side-by-side TS 6 workaround is more machinery than the speed is worth today.
+Revisit when typescript-eslint ships TS 7 support.
+
+One operational note for anyone repairing dependencies on the dev machine:
+**`npm ci` fails while the local server is running.** It deletes `node_modules`
+wholesale and Windows refuses, because the running process holds
+`better-sqlite3`'s native binary open. `npm install` repairs the tree without
+stopping the server.
