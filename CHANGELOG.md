@@ -33,6 +33,22 @@ All notable changes to this project will be documented in this file.
 - The build id stamped into pairing telemetry read `2.0.0-states` on a 2.0.2
   binary, so the server log named the wrong build. It follows the manifest now.
 
+### Fixed — the week review ran a number straight into its unit
+
+- `get_week_review` read **"Load up 106TRIMP"**, and its metric lines read
+  "Load: 106TRIMP vs 0TRIMP". Both the headline and the per-metric line
+  concatenate the unit onto the number, and the week metrics were the only
+  place in this codebase where a unit did not carry its own leading space — the
+  dashboard series have written `" bpm"` and `" h"` since they were added.
+  Resting HR and HRV had the same fault more quietly, as `2bpm` and `11ms`.
+- It never reached the watch, whose Week card renders `load_delta_pct` instead.
+  It reached the MCP tool whose text the model repeats back to you, and the
+  dashboard. Verified against the real store: the line now reads "Load up 106
+  TRIMP, Sleep up 1.2 h, Resting HR down 2 bpm, HRV up 11 ms, Stress down 6".
+- Two tests hold it — every non-empty unit must begin with a space, and the
+  headline must never run a digit into a letter — both verified by removing the
+  space again and watching them fail.
+
 ## [0.7.0] — server 0.7.0 · watch 2.0.2 — 2026-09-08
 
 ### Changed — Node 22.12 is the floor, because Node 20 never actually worked

@@ -39,6 +39,9 @@ export type Direction = "up" | "down" | "flat" | "unknown";
 export interface WeekMetric {
   key: string;
   label: string;
+  /** Carries its own leading space, the way the dashboard series do, because
+      the headline concatenates it straight onto the number. Without it the
+      week review read "Load up 106TRIMP". */
   unit: string;
   current: number | null;
   previous: number | null;
@@ -162,15 +165,15 @@ export function buildWeekReview(input: DetectorInput): WeekReview {
   const stress = weekHalves(input, "stress_avg");
 
   const metrics: WeekMetric[] = [
-    metricFrom("sleep", "Sleep", "h", sleep.current, sleep.previous, {
+    metricFrom("sleep", "Sleep", " h", sleep.current, sleep.previous, {
       scale: SECONDS_PER_HOUR,
       notableDelta: 0.5,
     }),
-    metricFrom("resting_hr", "Resting HR", "bpm", restingHr.current, restingHr.previous, {
+    metricFrom("resting_hr", "Resting HR", " bpm", restingHr.current, restingHr.previous, {
       places: 0,
       notableDelta: 2,
     }),
-    metricFrom("hrv", "HRV", "ms", hrv.current, hrv.previous, {
+    metricFrom("hrv", "HRV", " ms", hrv.current, hrv.previous, {
       places: 0,
       notableDelta: 5,
     }),
@@ -208,7 +211,7 @@ export function buildWeekReview(input: DetectorInput): WeekReview {
     metrics.unshift({
       key: "load",
       label: "Load",
-      unit: "TRIMP",
+      unit: " TRIMP",
       current: currentLoad,
       previous: previousLoad,
       delta,

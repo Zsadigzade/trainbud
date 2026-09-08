@@ -98,6 +98,34 @@ describe("a week is seven days on both sides", () => {
     assert.equal(load.delta, 0);
   });
 
+  //
+  // The headline concatenates a unit straight onto a number, so a unit without
+  // a leading space produced "Load up 106TRIMP" -- in `get_week_review`, which
+  // the model quotes back to the user, and on the dashboard. The rest of this
+  // codebase already writes units as " bpm" and " h" for exactly this reason.
+  //
+  it("writes every unit with its own separator", () => {
+    const review = buildWeekReview(input());
+
+    for (const metric of review.metrics) {
+      if (metric.unit === "") continue; // stress has no unit, and must not gain a space
+      assert.ok(
+        metric.unit.startsWith(" "),
+        `${metric.key} has unit "${metric.unit}", which will render as 106${metric.unit}`,
+      );
+    }
+  });
+
+  it("never runs a number straight into a word in the headline", () => {
+    const review = buildWeekReview(input());
+
+    assert.equal(
+      /d[A-Za-z]/.test(review.headline),
+      false,
+      `headline runs a number into a unit: ${review.headline}`,
+    );
+  });
+
   it("puts the start of the window seven days before the end", () => {
     const review = buildWeekReview(input());
 
