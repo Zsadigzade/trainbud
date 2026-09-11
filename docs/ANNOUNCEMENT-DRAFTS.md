@@ -61,7 +61,7 @@ given, not against this file.
 | **r/selfhosted** | ✅ **live 09-07**, in the megathread | Rule 6 forbids a standalone post for a project under 3 months old; posted in "New Project Megathread - Week of 03 Sep 2026" using their template |
 | **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> — one like |
 | **r/Garmin** | ⏳ **deleted 09-08, repost owed** | The malformed post is gone, in the correct order. Next Wednesday: **2026-09-16**, title exactly `[New App] - TrainBud` |
-| **r/GarminWatches** | 🆕 ✅ **cleared by modmail 09-11** | A moderator replied *"That's fine. Thanks for asking."* Rule 4 (self-promo) is settled by that; **rule 3 (store links) is not** — ask before linking. You write the copy, not an agent |
+| **r/GarminWatches** | ✅ **live 2026-09-12** | [post 1wdr5kg](https://www.reddit.com/r/GarminWatches/comments/1wdr5kg/i_built_a_widget_that_tells_you_what_changed/) — posted with **zero links**, which is what rule 3 requires. No AI-authorship rule exists there |
 | **Connect IQ dev forum** | 🆕 ⏳ **ready, never posted** | <https://forums.garmin.com/developer/connect-iq/> — no self-promo rule, no flair, no one-post limit, no Wednesday. The best Garmin venue and the only untouched one. Draft is final below |
 | **Show HN** | ⏳ **ready, not posted — stale since 09-08** | Logged in as `zsadigzade` (verified 09-08). Held for 08:00 ET = 16:00 UTC+4. Held for three days now: **either book a morning or drop it**, because a draft kept "ready" indefinitely is a decision nobody made |
 | **r/ClaudeAI** | ⛔ **dropped as a launch channel** | Rule 7 needs OP karma > 100 against 2, and the only honest way to move that is months of genuine participation. Farming karma to clear a posting gate is what the rule exists to stop. It unlocks itself if you end up taking part; it is no longer a launch task |
@@ -387,7 +387,7 @@ Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 
 ---
 
-## r/GarminWatches — CLEARED BY MODMAIL, and you have to write it
+## r/GarminWatches — ✅ POSTED 2026-09-12
 
 > **Status 2026-09-11.** Asked in modmail; a moderator replied
 > *"That's fine. Thanks for asking."* The subreddit is **open to this post**.
@@ -404,13 +404,20 @@ Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
   modmail line, versus a removal that burns the goodwill you just earned.
 - **Rule 4** covers self-promotion. That is the one the permission covers.
 
-> [!danger] You write this post, not the agent
-> r/Garmin's rule 11 bans AI-authored copy outright. Whether r/GarminWatches
-> carries the same rule is **not known** — it was never reached, because rule 3
-> stopped everything earlier. An AI-written post there is a coin flip on a
-> permission that took modmail to get and cannot be re-earned. A post in your
-> own words is safe in both subs. So the material below is a **fact sheet, not
-> prose to paste**.
+> [!success] Live: <https://www.reddit.com/r/GarminWatches/comments/1wdr5kg/i_built_a_widget_that_tells_you_what_changed/>
+> Auto-flaired *Mobile & Desktop Software*. Survived AutoMod.
+>
+> **There is no AI-authorship rule in this sub.** All five rules read in full on
+> the submit page: respect, stats bragging, no commercial links, no spam, and
+> watch-face posts on Wednesdays only. r/Garmin's rule 11 did **not** generalise.
+> Rule 5 is about watch faces, not apps, so it does not bind either.
+>
+> **Rule 3 is a hard ban and it is what actually governs this post:** *"No
+> selling, advertising, links to stores, et cetera. We have a hard rule for this
+> to keep the sub clear of link farming and marketing."* The published post
+> carries **zero links** — not the store, not GitHub — and says so in its first
+> paragraph. **Do not add a link in the comments either.** Let people search the
+> name or ask.
 
 ### Facts to write from — all verified, none to be embellished
 
@@ -448,6 +455,62 @@ Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 - Do not claim device support beyond fr55, fr70 and fenix 8.
 - Do not post it the same hour as the r/Garmin repost. Two near-identical posts
   in sibling subs within minutes reads as spam to both mod teams.
+
+### Ready to paste — written 2026-09-11 at the owner's explicit instruction
+
+> [!warning] Read the box above before using this
+> This copy was **written by an agent**. r/Garmin bans that outright (rule 11);
+> whether r/GarminWatches does is **unknown**. The owner asked for it anyway,
+> having been told twice. Rewriting it in your own words costs ten minutes and
+> removes the only real risk to a permission that took modmail to get.
+>
+> **The store link is deliberately absent** — rule 3 hard-bans store links and
+> the moderator was never asked about it. Add it only after asking.
+
+> **Title:** I built a Garmin widget that tells you what changed about you, not a score out of 100
+
+Before anything else: **this is not a standalone watch app.** It talks to a
+companion server you run yourself, on your own computer, with your own Connect
+credentials. If that's a dealbreaker, better to know now than after installing.
+
+I got tired of opening Connect and seeing a number out of 100 that meant nothing
+to me. What I actually wanted to know was what had *changed* — so I built a
+widget that opens on a Today screen naming what stands out in my recent data:
+"resting heart rate 4 bpm above your 28-day baseline, three days running", or
+"this week's load is 1.6x your four-week average". Overview, Recovery, Sleep,
+Activity and Stress are one swipe away if you want the raw numbers.
+
+The reason it compares you against **your own baseline** rather than a
+population average is that a population average has never met you. A resting
+heart rate of 48 is not news; 48 when you normally sit at 44 is. And when it
+doesn't have enough history to compare anything, it says so instead of showing a
+number that means nothing — a new watch has no baseline for a couple of weeks
+and it tells you that. A night you didn't wear the watch reads as unknown, not
+as a bad night.
+
+There's also an Ask card that answers questions about your own history. That
+part is optional, runs on your own API key, and is metered with a spending cap
+you set. Switch it off and everything else still works, because the findings are
+calculated in code rather than generated.
+
+**Disclosures, since I'm the developer here:** it's free — MIT licensed, no paid
+tier, no subscription, nothing gated. I designed, tested and reviewed it myself
+and used AI-assisted coding tools while writing it; the optional Ask feature
+calls a model at runtime with your own key, and every other number on the watch
+is computed by code. Tested on fr55, fr70 and fenix 8. No MFA support — the
+underlying Connect library can't do it, and that's the most common reason setup
+fails.
+
+I checked with the mods before posting; the reply was *"That's fine. Thanks for
+asking."*
+
+Unofficial community project — not affiliated with, endorsed by, or sponsored by
+Garmin Ltd.
+
+Genuine question for this sub, since you're the people who'd know: **does anyone
+else want their own baselines on the watch rather than Garmin's scores, or am I
+solving a problem only I have?** I'd rather hear it's the latter now than after
+building more of it.
 
 ---
 
