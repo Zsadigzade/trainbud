@@ -35,6 +35,26 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Get-TrainBudRoot
 $port = Get-TrainBudPort -Root $RepoRoot
+
+function Get-PortOwnerPid([int]$Port) {
+    <#
+        The PID currently listening, or $null.
+
+        This is the identity check the whole script turns on, and it is done by
+        PORT OWNERSHIP rather than by process start time on purpose. The obvious
+        version compared Get-Process StartTime against the script's own start --
+        and StartTime on a session-0 process is UNREADABLE from an unelevated
+        caller, so once the task moved to S4U the comparison silently matched
+        nothing and every successful restart was reported as a failure. netstat
+        needs no privilege and answers the question actually being asked: is a
+        DIFFERENT process serving now?
+    #>
+    $match = netstat -ano | Select-String ":$Port\s+.*LISTENING\s+(\d+)\s*$"
+    if (-not $match) { return $null }
+    return [int]$match.Matches[0].Groups[1].Value
+}
+
+$previousPid = Get-PortOwnerPid -Port $port
 $startedAt = Get-Date
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -52,13 +72,20 @@ while ((Get-Date) -lt $deadline -and (Get-ScheduledTask -TaskName $TaskName).Sta
     Start-Sleep -Milliseconds 500
 }
 
-$listeners = netstat -ano | Select-String ":$port\s+.*LISTENING\s+(\d+)\s*$"
-foreach ($match in $listeners) {
-    $stale = [int]$match.Matches[0].Groups[1].Value
-    Write-Host "  the task let go but PID $stale still holds port $port; stopping it"
+$stale = Get-PortOwnerPid -Port $port
+if ($stale) {
+    # Best effort, and it OFTEN FAILS now -- by design. Under S4U the server runs
+    # in session 0, and an unelevated caller cannot Stop-Process it ("Access is
+    # denied"). That is a feature: the thing nobody can close by accident is also
+    # the thing this script cannot casually kill.
+    #
+    # It does not matter, because run-server.ps1 frees the port from INSIDE the
+    # task, where it has rights over its own session. Measured: a stale session-0
+    # listener was replaced cleanly on the next start.
+    Write-Host "  PID $stale still holds port $port; the incoming instance will clear it"
     Stop-Process -Id $stale -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
 }
-if ($listeners) { Start-Sleep -Seconds 2 }
 
 Write-Host "Starting $TaskName..."
 Start-ScheduledTask -TaskName $TaskName
@@ -67,19 +94,18 @@ $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 2
     if (Test-TrainBudLocalHealth -Port $port) {
-        # A live /health is necessary and not sufficient: it would also be true
-        # if an old process had never died. The process has to be NEWER than
-        # this script.
-        $fresh = Get-Process node -ErrorAction SilentlyContinue |
-            Where-Object { $_.StartTime -gt $startedAt }
+        # A live /health is necessary and not sufficient: it would be equally
+        # true if the old process had never died. What proves a restart is that
+        # a DIFFERENT process owns the port now.
+        $currentPid = Get-PortOwnerPid -Port $port
 
-        if ($fresh) {
+        if ($currentPid -and $currentPid -ne $previousPid) {
             $seconds = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
-            Write-Host "Running the current build. /health OK after $seconds s (PID $($fresh[0].Id))." -ForegroundColor Green
+            Write-Host "Running the current build. /health OK after $seconds s (PID $currentPid, was $previousPid)." -ForegroundColor Green
             exit 0
         }
 
-        Write-Host "  /health answers, but from a process older than this restart. Still waiting..."
+        Write-Host "  /health answers, but PID $currentPid still owns the port. Still waiting..."
     }
 }
 

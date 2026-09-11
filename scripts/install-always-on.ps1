@@ -107,6 +107,32 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 $port = Get-TrainBudPort -Root $RepoRoot
 Write-Host "Server port: $port"
 
+# S4U registration needs elevation -- it grants a batch-logon right, and the
+# scheduler refuses it from a limited token with a bare "Access is denied" that
+# says nothing about which part was denied. Check it here, where the message can
+# explain itself, rather than letting Register-ScheduledTask fail opaquely.
+if (-not (Test-Elevated)) {
+    Write-Host ""
+    Write-Host "This needs an elevated prompt." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "The server task runs under S4U ("whether user is logged on or not"), which is"
+    Write-Host "what keeps it out of your desktop session and therefore off your screen. An"
+    Write-Host "Interactive task allocates a console, and on Windows 11 that console is a blank"
+    Write-Host "tab in Windows Terminal -- one that closing kills the server."
+    Write-Host ""
+    Write-Host "Registering an S4U task requires administrator rights. It does NOT require a"
+    Write-Host "stored password; this script never asks for one."
+    Write-Host ""
+    Write-Host "  Start -> type powershell -> right-click -> Run as administrator, then:"
+    Write-Host "      cd $RepoRoot"
+    if ($Hostname) {
+        Write-Host "      .\scripts\install-always-on.ps1 -Hostname $Hostname"
+    } else {
+        Write-Host "      .\scripts\install-always-on.ps1 -SkipTunnel"
+    }
+    exit 1
+}
+
 if (-not $SkipTunnel -and -not $Hostname) {
     Write-Host ""
     Write-Host "No -Hostname given, and this script will not guess one." -ForegroundColor Red
@@ -130,17 +156,22 @@ if (-not $SkipTunnel -and -not $Hostname) {
 
 # --- the server task -------------------------------------------------------
 #
-# Triggers: at logon, and on unlock. Not "at startup with stored credentials" --
-# that would need this script to hold a Windows password, and the machine this
-# was written for is a laptop that is switched off at night anyway. The honest
-# promise is "up whenever you are logged in", not "up 24/7", and a script that
-# promises the second while delivering the first is worse than one that says so.
+# Triggers at logon. The honest promise is "up whenever you are logged in", not
+# "up 24/7" -- the machine this was written for is a laptop that is switched off
+# at night, and a script that promises the second while delivering the first is
+# worse than one that says so.
+#
+# The task runs under S4U so it has no desktop and therefore no window; see the
+# principal below, which is the part that actually makes it invisible.
 
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
     -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $RepoRoot 'scripts\run-server.ps1')`"" `
     -WorkingDirectory $RepoRoot
 
+# At logon still, not at startup: the machine is a laptop that is switched off at
+# night, so "up whenever you are logged in" is the honest promise either way.
+# S4U changes where the task runs, not when.
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -156,7 +187,24 @@ $settings = New-ScheduledTaskSettingsSet `
 # which Task Scheduler kills a perfectly healthy server and the watchdog has to
 # notice. A long-running service should not have a deadline.
 
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+# S4U, not Interactive. This is the whole reason the server runs invisibly.
+#
+# An Interactive task runs inside the logged-on desktop session, so any console
+# it allocates gets a window -- and on Windows 11, where Windows Terminal is the
+# default console host, that window is a TAB in the terminal the user already
+# has open. `-WindowStyle Hidden` and CreateNoWindow are both advisory and lose
+# to the terminal host: they hid the process's own window while the host still
+# showed a blank tab, which somebody then closed, taking the server with it.
+#
+# S4U ("run whether user is logged on or not") runs in a session with no desktop,
+# so there is nothing for a console to attach to and no window can appear at all.
+# Unlike the Password logon type it needs NO stored credential, which matters:
+# this script will not ask for a Windows password.
+#
+# The trade is that an S4U task has no network credentials for REMOTE resources.
+# TrainBud reads local files and makes outbound HTTPS calls, neither of which
+# needs them.
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Limited
 
 if (Get-ScheduledTask -TaskName $ServerTaskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $ServerTaskName -Confirm:$false

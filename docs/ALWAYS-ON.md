@@ -122,17 +122,52 @@ That registers two Scheduled Tasks:
 
 | Task | What it does |
 |---|---|
-| **TrainBud Server** | Runs `trainbud serve` at logon. Restarts up to 5 times on failure, one minute apart. No execution time limit — the default is three days, after which Windows would kill a perfectly healthy server. |
+| **TrainBud Server** | Runs `trainbud serve` at logon, **under S4U so it has no desktop and cannot show a window**. Restarts up to 5 times on failure, one minute apart. No execution time limit — the default is three days, after which Windows would kill a perfectly healthy server. |
 | **TrainBud Watchdog** | Every 5 minutes, checks the server locally **and** the tunnel from outside. Restarts whichever half is down. |
 
 It also writes the public URL to `.trainbud/watch-setup.json`, which is where
 the server looks for it.
 
-**What it deliberately does not do:** run before you log in. That needs your
-Windows password stored in Task Scheduler, and this script will not ask for one.
-The promise is *"up whenever you are logged in"*, not *"up 24/7"* — if the
-machine is a laptop that is switched off at night, the watch is offline at night
-and no scheduling trick changes that. For genuine 24/7 see
+> [!IMPORTANT]
+> **Run the installer from an elevated prompt.** The server task uses the **S4U**
+> logon type, and registering one needs administrator rights. It does **not**
+> need a stored password, and the script never asks for one.
+
+### Why S4U, and why the window would not go away without it
+
+An **Interactive** task runs inside your logged-on desktop session, so any
+console it allocates gets a window. On Windows 11, where Windows Terminal is the
+default console host, **that window is a blank tab in the terminal you already
+have open** — and closing what looks like a stray tab kills the server.
+
+`-WindowStyle Hidden` and `CreateNoWindow` are both advisory and lose to the
+terminal host. They hid the process's own window while the host kept showing the
+tab. The only reliable fix is to run where no desktop exists:
+
+| Logon type | Session | Window | Password |
+|---|---|---|---|
+| Interactive | yours | **a terminal tab** | none |
+| **S4U** | **0, no desktop** | **impossible** | **none** |
+| Password | 0, no desktop | impossible | stored |
+
+Confirm it took:
+
+```powershell
+(Get-ScheduledTask -TaskName "TrainBud Server").Principal | Format-List LogonType
+Get-Process node | Select-Object Id, SessionId   # SessionId must be 0
+```
+
+An S4U task has no network credentials for **remote** resources. TrainBud reads
+local files and makes outbound HTTPS calls, so this costs nothing here.
+
+**A side effect worth knowing:** once the server is in session 0, an unelevated
+prompt can no longer `Stop-Process` it. Restarts still work, because
+`run-server.ps1` frees the port from *inside* the task where it has rights.
+
+**What it deliberately does not do:** start before you log in. The promise is
+*"up whenever you are logged in"*, not *"up 24/7"* — if the machine is a laptop
+switched off at night, the watch is offline at night and no scheduling trick
+changes that. For genuine 24/7 see
 [Section 5](#5-genuinely-24-7-run-it-somewhere-that-never-sleeps).
 
 Undo it all with:
@@ -252,7 +287,9 @@ commit to it:
 | `doctor` was green, now it is red, nothing changed | The session that started the stack was closed, and jobs die with their session | This is what `install-always-on.ps1` ends. Before it existed, `start-watch-stack.ps1` used `Start-Job` |
 | Tunnel URL loads in a browser, watch says `-400` | Tunnel up, server down; you are reading the tunnel's own error page | `trainbud doctor`, never a browser. The watchdog catches this within 5 minutes |
 | `Setup required` on a fresh watch install | The store build ships an empty `ServerUrl` on purpose | Enter the hostname in Garmin Connect → widget settings |
-| Task shows `0x1` in Last Run Result | The server exited | `.trainbud/logs/server.err.log` |
+| Task shows `0x1` in Last Run Result | The server exited | `.trainbud/logs/server.log` |
+| A blank terminal tab appears | The task is **Interactive**, not S4U | Re-run the installer elevated; check `LogonType` and that `node` is in `SessionId 0` |
+| `0xC000013A` in Last Run Result | `STATUS_CONTROL_C_EXIT` — a console was closed under it, not a crash | Should be impossible under S4U; if you see it, the task reverted to Interactive |
 | Watchdog logs `no tunnel service installed` | The tunnel is running in a terminal, not as a service | Install it as a service (Section 1), or run the watchdog with `-SkipPublic` |
 | Everything green, watch still shows nothing | Widget URL points at the old hostname | Garmin Connect → widget settings. A sideloaded build has the host **baked in** at `ciq/resources-dev/settings/properties.xml` and needs a rebuild |
 
