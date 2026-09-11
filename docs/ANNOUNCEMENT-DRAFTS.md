@@ -82,7 +82,7 @@ Attention is the scarce resource, not reach. Each channel gets a real window.
 | When | Channel | Note |
 | --- | --- | --- |
 | before each post | `trainbud doctor` | Must read 4/4. A post whose link is dead is worse than no post. See docs/ALWAYS-ON.md |
-| **now** | **Connect IQ dev forum** | No rule gates it and it needs no scheduling. Do it first — it is the cheapest and the best-targeted |
+| ✅ done 09-11 | **Connect IQ App Showcase** | Posted. ⚠ it had to be the **Showcase** board specifically — the general dev board forbids self-promotion |
 | **now, separate day from r/Garmin** | **r/GarminWatches** | Permission granted. You write the copy. Not within the same hour as the r/Garmin repost |
 | **Wed 2026-09-16** | **r/Garmin** | Flair is Wednesday-locked by AutoMod. Title exactly `[New App] - TrainBud`. Rewrite the body in your own words — rule 11 |
 | a booked 08:00 ET | Show HN | One paste at news.ycombinator.com/submit, url blank, then 90 minutes of attention. If you will not book the morning, delete the section |
@@ -451,19 +451,40 @@ Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
 
 ---
 
-## Connect IQ developer forum — the best Garmin venue, and never used
+## Connect IQ App Showcase — ✅ POSTED 2026-09-11
 
-<https://forums.garmin.com/developer/connect-iq/>
+**Live:** <https://forums.garmin.com/developer/connect-iq/f/showcase/443991/trainbud-your-own-baselines-on-the-wrist-with-a-companion-server-you-run-widget>
 
-**Why this is the highest-value untouched channel:** app authors announce there
-as a matter of course. There is no self-promotion rule to trip, no flair format,
-no one-post-per-lifetime limit, no AI-authorship rule, no Wednesday. The
-audience is people who already own a Garmin watch *and* already understand what
-sideloading and a companion server are — which is precisely the population for
-whom TrainBud's setup cost is not a dealbreaker.
+> [!danger] This section previously claimed "no self-promotion rule to trip". That was WRONG.
+> The Connect IQ forum rules say plainly:
+>
+> > *"Advertising, spamming, solicitation, and commercial self-promotion are not
+> > allowed per Garmin's Terms of Use"* — and then the exception:
+> > *"Developers are allowed to promote their Connect IQ apps **in the Connect IQ
+> > Showcase** and may link to their app store listings in posts and in their
+> > signatures."*
+>
+> So the permission is **venue-specific**. Posting an app announcement to the
+> general *Connect IQ App Development Discussion* board would have been
+> self-promotion in a place that forbids it. The **Connect IQ App Showcase**
+> (`/f/showcase`) is the one board where it is explicitly allowed.
+>
+> This is the third time on this project that a venue's real rules were only
+> visible at the venue, after copy had been written assuming otherwise. **Read
+> the rules page of the board you are posting to, not the forum you think it is
+> part of.**
 
-It is also the only Garmin venue where the honest answer to "why do I need to
-run a server" lands as a design decision rather than as an excuse.
+**What is true about it:** no flair format, no one-post-per-lifetime limit, no
+AI-authorship rule, no Wednesday. Store-listing links are *explicitly* permitted.
+The audience already owns a Garmin watch and already understands sideloading and
+companion servers — precisely the population for whom the setup cost is not a
+dealbreaker. It is also the only Garmin venue where "why do I need to run a
+server" lands as a design decision rather than an excuse.
+
+**Posted as** title `TrainBud — your own baselines on the wrist, with a companion
+server you run (Widget)` — the `(Widget)` suffix matches the board's convention
+(`RidePanel — ... (Data Field)`, `Smart Bike Lights (Data Field)`). Tags:
+`widget, glance, health, open-source`.
 
 > **Title:** TrainBud — your own Garmin baselines on the wrist, with a companion server you run
 
