@@ -31,7 +31,22 @@ import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
 import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
 import { requestPairing, checkPairStatus, approvePairing } from "./pairApi.js";
-import { submitPrompt, getPromptStatus, isAiConfigured, clearDailyInsight } from "./promptApi.js";
+import {
+  submitPrompt,
+  getPromptStatus,
+  isAiConfigured,
+  clearDailyInsight,
+  getCachedDailyInsight,
+} from "./promptApi.js";
+import { renderVoicePage } from "./voicePage.js";
+import { composeSpokenDay, speakable } from "./speakDay.js";
+import {
+  isTranscriptionConfigured,
+  transcribeAudio,
+  MAX_AUDIO_BYTES,
+  TranscriptionError,
+  TranscriptionNotConfiguredError,
+} from "./transcribe.js";
 import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
 import { runSelfTest } from "./selfTest.js";
 import { addContextEntry, closeContextEntry } from "./history/context.js";
@@ -361,6 +376,32 @@ async function getCachedWatchSummary(): Promise<WatchSummary> {
     expiresAt: now + WATCH_API_CACHE_TTL_MS,
   };
   return summary;
+}
+
+/**
+ * Drain the request body once, as bytes.
+ *
+ * Separate from readRawBody because that one decodes as UTF-8, and decoding
+ * audio as UTF-8 replaces every invalid sequence with U+FFFD -- so the bytes
+ * that reach the transcription service are not the bytes the phone recorded,
+ * and the failure looks like a bad microphone rather than a bad decode.
+ */
+async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+
+    if (total > MAX_AUDIO_BYTES) {
+      throw new Error("Request body too large");
+    }
+
+    chunks.push(buffer);
+  }
+
+  return Buffer.concat(chunks);
 }
 
 /** Drain the request body once, as text. */
@@ -927,6 +968,121 @@ export function createHttpMcpServer(): HttpMcpServer {
 
         const queryToken = url.searchParams.get("token") ?? undefined;
 
+        // --- Voice ---
+        //
+        // A sibling of /dashboard rather than a page inside it: this one is held
+        // at arm's length with a thumb on one button, and everything that is
+        // useful on a settings page is in the way there.
+
+        if (pathname === "/voice") {
+          if (!isAuthorized(req, queryToken)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            res.writeHead(401, { "Content-Type": "text/html" });
+            res.end(
+              "<h1>401 Unauthorized</h1><p>Open <code>/voice?token=YOUR_API_KEY</code> once; it sets a cookie.</p>"
+            );
+            return;
+          }
+
+          // Same trade as the dashboard: swap a key in the URL for a cookie and
+          // bounce to a clean path, so the address bar never keeps the key.
+          if (queryToken && !hasValidSession(req)) {
+            res.writeHead(302, {
+              "Set-Cookie": sessionCookieHeader(req, createDashboardSession()),
+              Location: "/voice",
+            });
+            res.end();
+            return;
+          }
+
+          recordFeature("voice.open");
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(
+            renderVoicePage({
+              transcriptionConfigured: isTranscriptionConfigured(),
+              aiConfigured: isAiConfigured(),
+              name: getProfile().displayName ?? "",
+            })
+          );
+          return;
+        }
+
+        if (pathname === "/api/transcribe" && req.method === "POST") {
+          if (!isAuthorized(req, queryToken)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          recordFeature("voice.transcribe");
+
+          let audio: Buffer;
+          try {
+            audio = await readRawBodyBuffer(req);
+          } catch {
+            sendJson(res, 413, { error: "Audio too large." });
+            return;
+          }
+
+          try {
+            const result = await transcribeAudio(
+              audio,
+              (req.headers["content-type"] ?? "audio/webm").toString()
+            );
+            sendJson(res, 200, result);
+          } catch (error) {
+            if (error instanceof TranscriptionNotConfiguredError) {
+              sendJson(res, 501, { error: error.message });
+              return;
+            }
+            if (error instanceof TranscriptionError) {
+              sendJson(res, error.statusCode, { error: error.message });
+              return;
+            }
+            logger.error({ error }, "transcription failed");
+            sendJson(res, 500, { error: "Transcription failed." });
+          }
+          return;
+        }
+
+        // Spoken summaries are composed from data already on hand and cost
+        // nothing, so they work with no AI key and cannot be refused by a
+        // spending cap. That is the whole reason they are separate endpoints
+        // rather than prompts.
+        if (pathname === "/api/speak/day" && req.method === "GET") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          recordFeature("voice.speak_day");
+
+          try {
+            const summary = await getCachedWatchSummary();
+            sendJson(res, 200, composeSpokenDay(summary, getProfile().displayName ?? ""));
+          } catch (error) {
+            logger.error({ error }, "could not compose the spoken day");
+            sendJson(res, 500, { error: "Could not read your day." });
+          }
+          return;
+        }
+
+        if (pathname === "/api/speak/insight" && req.method === "GET") {
+          if (!isAuthorized(req, queryToken)) {
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          recordFeature("voice.speak_insight");
+
+          // Deliberately the CACHED insight and never a fresh generation: a
+          // button labelled "read today's insight" that quietly spends money
+          // every time it is pressed is a button nobody can trust.
+          const insight = getCachedDailyInsight();
+          sendJson(res, 200, { text: insight ? speakable(insight) : null });
+          return;
+        }
+
         if (pathname === "/dashboard") {
           if (!isAuthorized(req, queryToken)) {
             res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
@@ -1009,7 +1165,18 @@ export function createHttpMcpServer(): HttpMcpServer {
 
           // Unbounded before: the body was read with no size cap, unlike every
           // other endpoint. readRawBody enforces MAX_BODY_BYTES.
-          const key = readFormOrJsonField(await readRawBody(req), "anthropic_api_key")?.trim();
+          const settingsBody = await readRawBody(req);
+          const key = readFormOrJsonField(settingsBody, "anthropic_api_key")?.trim();
+
+          // The speech-to-text key rides the same endpoint rather than getting
+          // one of its own: it is the same kind of secret, saved from the same
+          // panel, and a second endpoint would be a second place to forget the
+          // auth check.
+          const speechKey = readFormOrJsonField(settingsBody, "groq_api_key")?.trim();
+          if (speechKey && speechKey.length > 0) {
+            setSetting("groq_api_key", speechKey);
+            process.env["GROQ_API_KEY"] = speechKey;
+          }
 
           if (key && key.length > 0) {
             setSetting("anthropic_api_key", key);

@@ -22,7 +22,10 @@ import { logger } from "./utils/logger.js";
 // aggregate carries the count of calls it could not price, and every surface
 // that shows a total has to show that count beside it.
 
-export type AiUsageKind = "ask" | "insight";
+// "transcribe" is billed by audio duration rather than tokens, so its rows
+// carry zero tokens and a cost that priceOf() cannot compute. That is what
+// `costUsdOverride` is for -- see src/transcribe.ts.
+export type AiUsageKind = "ask" | "insight" | "transcribe";
 export type UsageSource = "watch" | "dashboard" | "cli" | "mcp" | "server";
 
 export interface TokenCounts {
@@ -38,6 +41,16 @@ export interface AiUsageInput extends TokenCounts {
   source: UsageSource;
   /** Unix seconds. Defaults to now; present so tests can place a call in time. */
   at?: number;
+  /**
+   * A cost this caller already knows, for work the token table cannot price.
+   *
+   * Transcription is charged per second of audio, so there is no per-token rate
+   * to look up and putting seconds in `inputTokens` would corrupt every future
+   * reading of that column. `null` means genuinely unpriced and is recorded as
+   * unknown, exactly like a model with no published rate -- never as zero,
+   * because a zero-cost call makes a spending cap that can never trip.
+   */
+  costUsdOverride?: number | null;
 }
 
 export interface AiUsageRow extends AiUsageInput {
@@ -101,7 +114,8 @@ export function priceOf(model: string, tokens: TokenCounts): number | null {
 
 export function recordAiUsage(input: AiUsageInput): AiUsageRow {
   const at = input.at ?? Math.floor(Date.now() / 1000);
-  const costUsd = priceOf(input.model, input);
+  const costUsd =
+    input.costUsdOverride !== undefined ? input.costUsdOverride : priceOf(input.model, input);
 
   const row: AiUsageRow = { ...input, at, costUsd };
 

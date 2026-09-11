@@ -510,6 +510,18 @@ export function renderDashboard(publicUrl?: string): string {
             </div>
           </form>
 
+          <form id="stt-form" autocomplete="off" style="margin-top:18px">
+            <label class="field"><span>Groq API key — speech to text on iPhone</span>
+              <input type="password" name="groq_api_key" placeholder="gsk_..." autocomplete="off"></label>
+            <p class="muted">Only iPhones need this. Chrome on Android recognises speech in the
+              browser for free. Groq's whisper-large-v3-turbo charges about $0.04 per hour of
+              audio, so a spoken question costs a fraction of a cent.
+              <a href="/voice">Open the voice page</a>.</p>
+            <div class="actions">
+              <button type="submit">Save speech key</button>
+            </div>
+          </form>
+
           <form id="ai-form" style="margin-top:18px">
             <div class="grid2">
               <label class="field"><span>Model</span>
@@ -984,6 +996,22 @@ export function renderDashboard(publicUrl?: string): string {
         if (!r.ok) { throw new Error('Save failed (' + r.status + ')'); }
         input.value = '';
         toast('API key saved');
+        refresh();
+      }).catch(function (e) { toast(e.message, true); });
+    });
+
+    document.getElementById('stt-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = e.target.elements['groq_api_key'];
+      if (!input.value.trim()) { toast('Enter a key first', true); return; }
+      fetch('/dashboard/settings', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' }),
+        body: 'groq_api_key=' + encodeURIComponent(input.value.trim())
+      }).then(function (r) {
+        if (!r.ok) { throw new Error('Save failed (' + r.status + ')'); }
+        input.value = '';
+        toast('Speech key saved');
         refresh();
       }).catch(function (e) { toast(e.message, true); });
     });

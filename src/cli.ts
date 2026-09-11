@@ -594,6 +594,84 @@ export function createCliProgram(): Command {
       }
     });
 
+  // SECTION: Secret rotation
+  //
+  // Before this existed, the only supported way to change the API key was to
+  // re-run `trainbud setup` -- which rebuilds .env from a template and demands
+  // the Connect password on the way through, so rotating one secret meant
+  // re-authenticating another account. People hand-edited .env instead, and the
+  // AI key ended up different in .env and in app.db with the stale one winning.
+  const rotateCommand = program
+    .command("rotate")
+    .description("Replace a secret — in every place it is stored");
+
+  rotateCommand
+    .command("status", { isDefault: true })
+    .description("Show which secrets are set, and whether their two homes agree")
+    .action(async () => {
+      const { describeSecretState } = await import("./rotate.js");
+      const outcome = describeSecretState();
+      console.log("");
+      for (const line of outcome.lines) {
+        console.log(line);
+      }
+      console.log("");
+      if (!outcome.ok) {
+        process.exitCode = 1;
+      }
+    });
+
+  rotateCommand
+    .command("api-key")
+    .description("Replace TRAINBUD_API_KEY — the bearer token for /mcp and the dashboard")
+    .option("--key <value>", "Use this key instead of generating one")
+    .action(async (options: { key?: string }) => {
+      const { rotateApiKey } = await import("./rotate.js");
+      const outcome = rotateApiKey(options.key);
+      console.log("");
+      for (const line of outcome.lines) {
+        console.log(line);
+      }
+      console.log("");
+      if (!outcome.ok) {
+        process.exitCode = 1;
+      }
+    });
+
+  rotateCommand
+    .command("ai-key")
+    .description("Replace the AI provider key in BOTH .env and app.db, which drift apart otherwise")
+    .option("--key <value>", "Use this key instead of prompting. Pass an empty string to remove it")
+    .action(async (options: { key?: string }) => {
+      const { promptAndRotateAiKey, rotateAiKey } = await import("./rotate.js");
+      const outcome =
+        options.key === undefined ? await promptAndRotateAiKey() : rotateAiKey(options.key);
+      console.log("");
+      for (const line of outcome.lines) {
+        console.log(line);
+      }
+      console.log("");
+      if (!outcome.ok) {
+        process.exitCode = 1;
+      }
+    });
+
+  rotateCommand
+    .command("env-names")
+    .description("Rewrite pre-0.3.0 variable names in .env to their current spellings")
+    .action(async () => {
+      const { upgradeEnvNames } = await import("./rotate.js");
+      const outcome = upgradeEnvNames();
+      console.log("");
+      for (const line of outcome.lines) {
+        console.log(line);
+      }
+      console.log("");
+      if (!outcome.ok) {
+        process.exitCode = 1;
+      }
+    });
+
   program
     .command("status")
     .description("Show session and cache status")

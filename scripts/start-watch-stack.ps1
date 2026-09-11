@@ -7,6 +7,17 @@
 #
 # Get a free static domain at: https://dashboard.ngrok.com/domains
 # Alternatively use Cloudflare Tunnel (see README).
+#
+# THIS IS THE DEVELOPMENT PATH. For a stack that survives a reboot and a closed
+# terminal, use `.\scripts\install-always-on.ps1` -- see docs/ALWAYS-ON.md.
+#
+# Until 2026-09-11 both halves were started with Start-Job, and a PowerShell job
+# is owned by the session that created it. Every time this terminal closed, the
+# server and the tunnel went with it -- and the failure was the quiet kind: the
+# tunnel host kept answering, with its own HTML error page, at 200. From outside
+# the domain looked alive while the product was gone. They are detached
+# processes now, so closing this window leaves them running; `-Stop` is how you
+# take them down on purpose.
 
 param(
     # The static domain the sideloaded Connect IQ app is pointed at. A sideload has
@@ -18,7 +29,12 @@ param(
     # anyone who cloned the repo and ran the script published a tunnel pointed at
     # someone else's address. It comes from the environment now, and the script
     # says what to set rather than guessing.
-    [string]$NgrokDomain = $env:TRAINBUD_NGROK_DOMAIN
+    [string]$NgrokDomain = $env:TRAINBUD_NGROK_DOMAIN,
+
+    # Stop the detached server and tunnel this script started. Without it there
+    # is no way to take them down short of hunting PIDs, which is the price of
+    # them no longer dying with the shell.
+    [switch]$Stop
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +42,24 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
 
 $ServerPort = 3847
+
+function Stop-PortListener([int]$Port) {
+    $connections = netstat -ano | Select-String ":$Port\s"
+    foreach ($line in $connections) {
+        if ($line -match "\sLISTENING\s+(\d+)\s*$") {
+            $processId = [int]$Matches[1]
+            Write-Host "Stopping process on port $Port (PID $processId)..."
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+if ($Stop) {
+    Stop-PortListener -Port $ServerPort
+    Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
+    Write-Host "Stopped the server on port $ServerPort and any ngrok process."
+    exit 0
+}
 
 if (-not $NgrokDomain) {
     Write-Host "ERROR: no ngrok domain. This script will not guess one." -ForegroundColor Red
@@ -38,17 +72,6 @@ if (-not $NgrokDomain) {
     Write-Host "Free static domain: https://dashboard.ngrok.com/domains"
     Write-Host "Or use Cloudflare Tunnel: cloudflared tunnel --url http://127.0.0.1:$ServerPort"
     exit 1
-}
-
-function Stop-PortListener([int]$Port) {
-    $connections = netstat -ano | Select-String ":$Port\s"
-    foreach ($line in $connections) {
-        if ($line -match "\sLISTENING\s+(\d+)\s*$") {
-            $processId = [int]$Matches[1]
-            Write-Host "Stopping process on port $Port (PID $processId)..."
-            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-        }
-    }
 }
 
 Write-Host "TrainBud watch stack startup"
@@ -70,19 +93,32 @@ Write-Host "Starting trainbud serve..."
 # working tree you just built, and npx would fetch the published release instead
 # -- which is the opposite of what you want while developing. Same entry point
 # the bin field points at, with no resolution step in between.
-$serveJob = Start-Job -ScriptBlock {
-    Set-Location $using:RepoRoot
-    node dist/index.js serve 2>&1
-}
+#
+# Start-Process, not Start-Job: a job dies with the session that owns it, and
+# that is how this stack kept going down between sessions. A detached process
+# outlives this window. Output goes to files rather than to a job buffer,
+# because a job buffer is unreadable once the job's owner is gone.
+$LogDir = Join-Path $RepoRoot ".trainbud\logs"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$ServerOut = Join-Path $LogDir "server.out.log"
+$ServerErr = Join-Path $LogDir "server.err.log"
+
+$serveProcess = Start-Process -FilePath "node" `
+    -ArgumentList "dist/index.js", "serve" `
+    -WorkingDirectory $RepoRoot `
+    -WindowStyle Hidden `
+    -PassThru `
+    -RedirectStandardOutput $ServerOut `
+    -RedirectStandardError $ServerErr
 
 Start-Sleep -Seconds 3
 
 try {
     $health = Invoke-RestMethod -Uri "http://127.0.0.1:$ServerPort/health" -TimeoutSec 10
-    Write-Host "Server OK: $($health.status)"
+    Write-Host "Server OK: $($health.status)  (PID $($serveProcess.Id))"
 } catch {
-    Write-Host "Server failed to start. Job output:"
-    Receive-Job $serveJob
+    Write-Host "Server failed to start. Last lines of $ServerErr :"
+    if (Test-Path $ServerErr) { Get-Content -LiteralPath $ServerErr -Tail 20 }
     throw
 }
 
@@ -95,9 +131,15 @@ if (-not (Get-Command ngrok -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Starting ngrok tunnel ($NgrokDomain)..."
-$tunnelJob = Start-Job -ScriptBlock {
-    ngrok http --url=$using:NgrokDomain $using:ServerPort 2>&1
-}
+$TunnelOut = Join-Path $LogDir "tunnel.out.log"
+$TunnelErr = Join-Path $LogDir "tunnel.err.log"
+$tunnelProcess = Start-Process -FilePath "ngrok" `
+    -ArgumentList "http", "--url=$NgrokDomain", "$ServerPort" `
+    -WorkingDirectory $RepoRoot `
+    -WindowStyle Hidden `
+    -PassThru `
+    -RedirectStandardOutput $TunnelOut `
+    -RedirectStandardError $TunnelErr
 
 # Static domain is known immediately — no need to parse output
 Start-Sleep -Seconds 3
@@ -140,22 +182,20 @@ if ($apiKey) {
 Write-Host ""
 Write-Host "Saved to: $setupPath"
 Write-Host ""
-Write-Host "Server and tunnel are running in background jobs."
-Write-Host "Stop with: Get-Job | Stop-Job; Get-Job | Remove-Job"
-Write-Host "Or close this PowerShell session."
+Write-Host "Server (PID $($serveProcess.Id)) and tunnel (PID $($tunnelProcess.Id)) are detached."
+Write-Host "They KEEP RUNNING when you close this window. That is the point."
+Write-Host ""
+Write-Host "Stop them:   .\scripts\start-watch-stack.ps1 -Stop"
+Write-Host "Logs:        $LogDir"
+Write-Host "Check:       trainbud doctor"
+Write-Host ""
+Write-Host "For a stack that comes back by itself after a reboot, install it once:"
+Write-Host "    .\scripts\install-always-on.ps1 -Hostname $NgrokDomain"
+Write-Host "    (docs/ALWAYS-ON.md)"
 
-# Keep script alive so jobs stay attached to session
-while ($true) {
-    Start-Sleep -Seconds 60
-    if ($serveJob.State -eq "Failed") {
-        Write-Host "Server job failed:"
-        Receive-Job $serveJob
-        break
-    }
-    if ($tunnelJob.State -eq "Failed") {
-        Write-Host "Tunnel job failed. Restarting..."
-        $tunnelJob = Start-Job -ScriptBlock {
-            ngrok http --url=$using:NgrokDomain $using:ServerPort 2>&1
-        }
-    }
-}
+# No babysitting loop. There used to be one here, whose only job was to hold the
+# session open so the jobs it owned stayed alive; with detached processes there
+# is nothing to hold open. Restart-on-failure belongs to scripts/watchdog.ps1,
+# which runs on a schedule and therefore still works when nobody is logged into
+# a terminal -- which was always when this was needed.
+exit 0

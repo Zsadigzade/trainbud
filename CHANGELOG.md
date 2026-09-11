@@ -2,6 +2,98 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — 2026-09-11
+
+### Added — ask out loud, and hear the answer
+
+- **`/voice`** — a phone-first page: hold a button, ask a question, hear the
+  answer read back. It reuses the dashboard's session cookie and the existing
+  `POST /api/prompt` queue, so there is no new auth path and no new AI path.
+  Not a watch feature and it cannot become one: Connect IQ exposes no microphone
+  or speaker to a widget, and no way for the watch to trigger the paired phone.
+- **Android and iPhone take different routes, because they genuinely differ.**
+  Chrome on Android uses the Web Speech API — in the browser, free, no key.
+  iOS Safari exposes `webkitSpeechRecognition` and then fails silently and
+  inconsistently across versions, so iPhones record audio and post it to a new
+  **`POST /api/transcribe`**, which calls Groq's `whisper-large-v3-turbo`. Text
+  to speech needs no such split; `speechSynthesis` works on both.
+- **`GET /api/speak/day` and `GET /api/speak/insight`** — spoken summaries that
+  cost nothing. The day is composed in code from the same payload the watch
+  draws, so the wrist and the ear cannot disagree about what today was; the
+  insight speaks the one already cached rather than generating a new one,
+  because a button that quietly spends money each press is a button nobody can
+  trust. Both work with no AI key at all.
+- Spoken text is written for an ear: `1.6x` becomes "1.6 times", `+4 bpm`
+  becomes "up 4 beats per minute", and a metric with no measurement is left out
+  rather than announced. An eye skips a dash on a screen; an ear cannot skip,
+  and "sleep, unknown" mid-sentence sounds like a fault.
+- Transcription is billed by **audio duration, not tokens**, so those usage rows
+  carry zero tokens and a cost computed from seconds. A call whose duration the
+  provider did not report is recorded as unpriced rather than as zero — a
+  zero-cost call would make a spending cap that can never trip.
+
+### Added — the server comes back by itself
+
+- **`scripts/install-always-on.ps1`** registers a scheduled task for the server
+  and a five-minute watchdog, so the stack survives a reboot, a logoff and every
+  closed terminal. **`docs/ALWAYS-ON.md`** covers Cloudflare named tunnels,
+  ngrok static domains, systemd, launchd and Docker Compose.
+- **`scripts/watchdog.ps1`** grades the two halves by different evidence,
+  because a tunnel that answers is not a server that answers: a tunnel with
+  nothing behind it serves its own error page under a 200, which is why the
+  watch once reported `HTTP -400` while the domain loaded fine in a browser.
+  A green local and a red public restarts only the tunnel.
+- **`scripts/restart-server.ps1`** — there is no `Restart-ScheduledTask` cmdlet,
+  stopping the task does not always stop a nested `node`, and `Start-ScheduledTask`
+  reports success for an action that exits a millisecond later. This one waits
+  for the port to be free and then for a `/health` answered by a process newer
+  than itself. Without that check a rebuilt server answered `/health` perfectly
+  while every newly added route returned 404, because the process answering was
+  the previous build.
+
+### Added — rotating a secret no longer means re-running setup
+
+- **`trainbud rotate api-key`**, **`rotate ai-key`**, **`rotate status`** and
+  **`rotate env-names`**. The only supported way to change the API key used to
+  be `trainbud setup`, which rebuilds `.env` from a template and demands the
+  Connect password on the way through — so rotating one secret meant
+  re-authenticating a different account. People hand-edited `.env` instead, and
+  that is how the AI key came to differ between `.env` and `app.db` with the
+  stale one winning.
+- `rotate ai-key` writes **both** stores or neither, and `rotate status` reports
+  when they disagree and says which one is actually read.
+- `rotate api-key` prints what it just invalidated: the running process, every
+  remote MCP connector, the dashboard bookmark, and any watch paired before
+  0.5.2 that still holds the master key.
+
+### Fixed — a failed Garmin sign-in now costs something
+
+- A rejected `client.login()` recorded nothing, so every call that needed data
+  tried again immediately. With a wrong password in `.env` that is an unbounded
+  loop of sign-in attempts against Connect's auth endpoint, and the account it
+  eventually locks out is the user's own. On a laptop somebody was watching that
+  was a bad minute; from a scheduled task that runs unattended it is a bad week.
+- Failures now back off 30s, 1m, 2m, 4m, 8m, then 15m. **The backoff is keyed to
+  the credentials that failed**, so correcting the password clears it on the
+  spot — a safety feature whose fix is "now wait fifteen minutes" is one people
+  disable. Only a SHA-256 of the credentials is stored.
+
+### Fixed — `npm test` no longer hangs when a server is running
+
+- `app.db` resolves beside `appConfig.cachePath`, which defaults into the
+  project's own `.trainbud/`, so the suite opened the same SQLite file a live
+  `trainbud serve` had open and better-sqlite3 blocked — synchronously, forever,
+  with no timeout and no message. The runner now gives the suite a temporary
+  data directory of its own. This mattered more after the server moved to a
+  scheduled task and became always-on.
+
+### Fixed — `.env` stops printing a deprecation warning on every start
+
+- `trainbud rotate env-names` rewrites the pre-0.3.0 `GARMIN_MCP_*` spellings to
+  their current names, values untouched. The old names still work, which is why
+  this was never urgent — but the warning fired on every single run, and a
+  warning that always fires is one people stop reading.
+
 ## [0.7.2] — server 0.7.2 · watch 2.0.3 — 2026-09-08
 
 ### Fixed — the MCP server name was spelled in the wrong case

@@ -49,18 +49,21 @@ Links: <https://www.npmjs.com/package/trainbud> ·
       pattern of fake Anthropic Discord invites — did not paste an unverified
       one. Not part of the running order below anymore.
 
-## What is actually live — verified 2026-09-07, not assumed
+## What is actually live — verified 2026-09-11, not assumed
 
 An earlier version of this file read as though a full launch had run on 09-07.
-It had not. Each line below was checked against the live platform:
+It had not. Each line below was checked against the live platform on the date
+given, not against this file.
 
 | Channel | State | Evidence |
 | --- | --- | --- |
-| **r/mcp** | ✅ **live 09-07** | <https://old.reddit.com/r/mcp/comments/1wa3is9/trainbud_an_mcp_server_for_your_own_fitness_data/> — `showcase` flair, author disclosed |
+| **r/mcp** | ✅ **live 09-07** | <https://old.reddit.com/r/mcp/comments/1wa3is9/trainbud_an_mcp_server_for_your_own_fitness_data/> — `showcase` flair, author disclosed. 2 points, no comments as of 09-08 |
 | **r/selfhosted** | ✅ **live 09-07**, in the megathread | Rule 6 forbids a standalone post for a project under 3 months old; posted in "New Project Megathread - Week of 03 Sep 2026" using their template |
-| **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> |
-| **r/Garmin** | ⚠️ **posted but malformed** | Wrong title format, AutoMod flagged it. See the r/Garmin section below — needs delete + Wednesday repost |
-| **Show HN** | ⏳ **ready, not posted** | Logged in as `zsadigzade` (verified 09-08 22:5x local). Held for 08:00 ET, which is 16:00 UTC+4 — an unattended Show HN is worse than none |
+| **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> — one like |
+| **r/Garmin** | ⏳ **deleted 09-08, repost owed** | The malformed post is gone, in the correct order. Next Wednesday: **2026-09-16**, title exactly `[New App] - TrainBud` |
+| **r/GarminWatches** | 🆕 ✅ **cleared by modmail 09-11** | A moderator replied *"That's fine. Thanks for asking."* Rule 4 (self-promo) is settled by that; **rule 3 (store links) is not** — ask before linking. You write the copy, not an agent |
+| **Connect IQ dev forum** | 🆕 ⏳ **ready, never posted** | <https://forums.garmin.com/developer/connect-iq/> — no self-promo rule, no flair, no one-post limit, no Wednesday. The best Garmin venue and the only untouched one. Draft is final below |
+| **Show HN** | ⏳ **ready, not posted — stale since 09-08** | Logged in as `zsadigzade` (verified 09-08). Held for 08:00 ET = 16:00 UTC+4. Held for three days now: **either book a morning or drop it**, because a draft kept "ready" indefinitely is a decision nobody made |
 | **r/ClaudeAI** | ⛔ **dropped as a launch channel** | Rule 7 needs OP karma > 100 against 2, and the only honest way to move that is months of genuine participation. Farming karma to clear a posting gate is what the rule exists to stop. It unlocks itself if you end up taking part; it is no longer a launch task |
 
 **Karma is the binding constraint.** `u/Cr1tsh0t` has 2 link karma and 0 comment
@@ -68,19 +71,25 @@ karma, which locks r/ClaudeAI and makes low-karma spam filters a live risk
 elsewhere. Answering questions in the threads that exist is the only thing that
 fixes it; nothing else here should be posted in a burst.
 
+**Adoption is the honest number: npm shows 420 downloads, all on 2026-09-06 and
+zero either side.** That is the publish-day mirror spike, not users. Every
+channel below is worth more than any feature until that changes.
+
 ## Running order — one day, sequential, not parallel
 
 Attention is the scarce resource, not reach. Each channel gets a real window.
 
-| Time (UTC+4) | Channel | Note |
+| When | Channel | Note |
 | --- | --- | --- |
-| 15:45 | `trainbud doctor` | Last check. Tunnel, AI key, history depth |
-| 16:00 | **Show HN** | 08:00 ET, the only slot that matters. Full attention, 90 min. **Login done; copy final. One action: paste title + text at news.ycombinator.com/submit** |
-| 17:30 | r/mcp, r/selfhosted, r/ClaudeAI | r/mcp and r/selfhosted done 09-07; r/ClaudeAI gated on karma |
-| 19:00 | X thread | Done 09-07 |
-| a Wednesday | r/Garmin | Delete the malformed post first — one launch post per lifetime |
+| before each post | `trainbud doctor` | Must read 4/4. A post whose link is dead is worse than no post. See docs/ALWAYS-ON.md |
+| **now** | **Connect IQ dev forum** | No rule gates it and it needs no scheduling. Do it first — it is the cheapest and the best-targeted |
+| **now, separate day from r/Garmin** | **r/GarminWatches** | Permission granted. You write the copy. Not within the same hour as the r/Garmin repost |
+| **Wed 2026-09-16** | **r/Garmin** | Flair is Wednesday-locked by AutoMod. Title exactly `[New App] - TrainBud`. Rewrite the body in your own words — rule 11 |
+| a booked 08:00 ET | Show HN | One paste at news.ycombinator.com/submit, url blank, then 90 minutes of attention. If you will not book the morning, delete the section |
+| done | r/mcp, r/selfhosted, X | Live since 09-07. Nothing waiting on a reply |
 
 Discords dropped from the running order — see pre-flight notes above.
+r/ClaudeAI is not on this table on purpose.
 
 ## Show HN
 
@@ -291,11 +300,23 @@ MIT.
 
 ---
 
-## r/Garmin — BLOCKED, and the current post is malformed
+## r/Garmin — deleted, and owed a Wednesday repost
 
-> **Status 2026-09-07 (checked live, not assumed).** A post already went up
-> ~14h before this check and it does **not** satisfy the subreddit's rules:
-> <https://old.reddit.com/r/Garmin/comments/1w9jyuc/zsadigzadenew_app_trainbud/>
+> **Status 2026-09-11.** The malformed post was **deleted on 09-08**, which was
+> the right order: Reddit cannot edit a title, and reposting before deleting
+> risked spending the one-per-lifetime launch on the broken copy. AutoModerator's
+> own reply said *"update your title and repost on a Wednesday"*, which is the
+> subreddit's own sanction for doing exactly this.
+>
+> **Next Wednesday is 2026-09-16.** Nothing else is blocking it. The copy below
+> is final; the title and flair are not negotiable.
+
+<details>
+<summary>What the original post got wrong (kept, because the rules are not on the submit form)</summary>
+
+A post went up ~14h before the 09-07 check and did not satisfy the rules:
+`https://old.reddit.com/r/Garmin/comments/1w9jyuc/zsadigzadenew_app_trainbud/`
+</details>
 
 **What AutoModerator said**, verbatim in the requirements it enforces:
 
@@ -309,16 +330,17 @@ MIT.
   free/trial offering must be stated, and *"external sales, download, or
   promotional links are not permitted"*.
 
-**Why this needs you.** Reddit does not allow editing a post title, so the only
-fix is delete-and-repost, and deleting is the one thing the agent was blocked
-from doing. Because of the one-launch-per-lifetime rule, reposting **before**
-deleting risks spending the single allowed launch on the broken copy.
+**Order of operations, on Wednesday 2026-09-16:**
 
-**Order of operations, on a Wednesday:**
-
-1. Delete <https://old.reddit.com/r/Garmin/comments/1w9jyuc/zsadigzadenew_app_trainbud/>
+1. Confirm the old post is gone (it was deleted 09-08)
 2. Post the copy below with the title exactly: `[New App] - TrainBud`
 3. Flair: `Developer - New App / Watch Face (Wednesday ONLY)`
+
+> **Rule 11 applies to this sub and not to the copy below.** r/Garmin bans
+> *"the use of AI to comment, create post for you"*. The text below was drafted
+> by an agent. **Rewrite it in your own words before posting**, or the post is
+> in breach of a rule that has nothing to do with the app being AI-powered. Keep
+> the facts, the title, the flair and the disclosures exactly; change the prose.
 
 > **Title (exact, do not alter):** [New App] - TrainBud
 
@@ -362,6 +384,146 @@ route. If a mod is fine with the repo link, it can be added on request.)
 
 Unofficial community project — not affiliated with, endorsed by, or sponsored by
 Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
+
+---
+
+## r/GarminWatches — CLEARED BY MODMAIL, and you have to write it
+
+> **Status 2026-09-11.** Asked in modmail; a moderator replied
+> *"That's fine. Thanks for asking."* The subreddit is **open to this post**.
+>
+> This reverses the standing note that r/GarminWatches was effectively closed.
+> It was closed **by the rules**; it is open **by permission**, which is a
+> different thing and does not survive being forgotten — put the moderator's
+> reply in the post body so the next mod to see it does not have to guess.
+
+**Two rules were the original blocker and permission only settles one of them.**
+
+- **Rule 3** hard-bans store links. The moderator said the *post* is fine. They
+  did not say the Connect IQ link is. **Ask before including it** — one more
+  modmail line, versus a removal that burns the goodwill you just earned.
+- **Rule 4** covers self-promotion. That is the one the permission covers.
+
+> [!danger] You write this post, not the agent
+> r/Garmin's rule 11 bans AI-authored copy outright. Whether r/GarminWatches
+> carries the same rule is **not known** — it was never reached, because rule 3
+> stopped everything earlier. An AI-written post there is a coin flip on a
+> permission that took modmail to get and cannot be re-earned. A post in your
+> own words is safe in both subs. So the material below is a **fact sheet, not
+> prose to paste**.
+
+### Facts to write from — all verified, none to be embellished
+
+| Claim | Status |
+|---|---|
+| Free, MIT, no paid tier, no subscription | true |
+| Tested on fr55, fr70, fenix 8 | true — those three, do not widen it |
+| Needs a companion server you run yourself | true, and it is the single most important sentence |
+| No MFA support | true, and it is the most common setup failure |
+| Findings computed in code against your own 28-day baseline | true — the numbers are not model output |
+| The Ask card uses your own API key, with a spending cap you set | true, and it is optional |
+| Not affiliated with Garmin | true, and must be stated |
+| Built with AI-assisted coding tools; not generated by AI | true — disclose it, the same way you did on r/Garmin |
+
+### Shape that works
+
+1. **Lead with the constraint, not the pitch.** "This needs a server you run on
+   your own computer" belongs in the first two sentences. Everyone who installs
+   without reading that leaves a one-star review.
+2. **One paragraph on what it shows on the wrist.** Today screen naming what
+   stands out, then Overview / Recovery / Sleep / Activity / Stress.
+3. **Why baselines rather than population averages**, in one sentence.
+4. **The disclosures**: you are the developer, it is free, AI-assisted not
+   AI-generated, not affiliated with Garmin.
+5. **The moderator permission**, quoted, one line.
+6. **A question at the end.** A post that asks something gets replies; a post
+   that announces gets scrolled past. "Does anyone else want their own baselines
+   on the watch rather than Garmin's scores?" works.
+
+### Do not
+
+- Do not paste the r/Garmin body here. It is written for a different rule set
+  and it is agent-written.
+- Do not include the GitHub link until you know whether rule 3 covers it.
+- Do not claim device support beyond fr55, fr70 and fenix 8.
+- Do not post it the same hour as the r/Garmin repost. Two near-identical posts
+  in sibling subs within minutes reads as spam to both mod teams.
+
+---
+
+## Connect IQ developer forum — the best Garmin venue, and never used
+
+<https://forums.garmin.com/developer/connect-iq/>
+
+**Why this is the highest-value untouched channel:** app authors announce there
+as a matter of course. There is no self-promotion rule to trip, no flair format,
+no one-post-per-lifetime limit, no AI-authorship rule, no Wednesday. The
+audience is people who already own a Garmin watch *and* already understand what
+sideloading and a companion server are — which is precisely the population for
+whom TrainBud's setup cost is not a dealbreaker.
+
+It is also the only Garmin venue where the honest answer to "why do I need to
+run a server" lands as a design decision rather than as an excuse.
+
+> **Title:** TrainBud — your own Garmin baselines on the wrist, with a companion server you run
+
+TrainBud is a Connect IQ widget backed by an open-source server you run
+yourself. I built it because I wanted the watch to tell me what had *changed*
+about me, rather than give me a score out of 100.
+
+**How it is put together, since that is the interesting part here:**
+
+The widget holds no credentials and talks to nothing but one host you configure.
+The companion server runs on your own machine, signs into Connect with your own
+credentials, keeps a local SQLite history, and serves the widget a single
+summary payload from `GET /api/watch`. The same server is also an MCP server, so
+the same data answers questions in Claude or Cursor on the desktop.
+
+Findings are computed by detectors in code against your own 28-day baselines —
+"resting heart rate 4 bpm above baseline, three days running", "this week's load
+is 1.6x your four-week average". When there is not enough history to compare
+against, it says so rather than printing a number that means nothing. A night
+you did not wear the watch reads as unknown, not as a zero.
+
+**Three things I got wrong that may save somebody else the time:**
+
+1. **A baked-in default `ServerUrl` is a security bug, not a convenience.**
+   Early versions shipped my own tunnel hostname as the property default. Every
+   store install therefore found a non-empty URL, skipped the setup screen, and
+   POSTed a pairing request at a host that was usually offline — so nobody who
+   installed from the store could ever pair. Worse when it *was* online: a
+   stranger's watch could mint a pairing code against my health server. The
+   default is empty now, and an empty value is what routes a fresh install to
+   the "Setup required" screen. Sideloads get the URL from a `resources-dev`
+   layer instead.
+
+2. **The glance never drew anything, on any device, from the commit that added
+   it.** Connect IQ builds the app class into the glance scope in order to ask
+   it for `getGlanceView()`, so **every field initializer on the app class runs
+   in that scope** — and mine called a helper that only existed in the widget
+   scope. Illegal Access (Out of Bounds) before `onUpdate` drew a pixel. A
+   module-level `const` folds at compile time and is safe in that position; a
+   call does not. Nothing caught it: the build was green, the store approved the
+   package, and the widget was unaffected.
+
+3. **A tunnel that answers is not a server that answers.** When the server died
+   and the tunnel did not, the tunnel served its own HTML error page under a
+   200. Connect IQ asked for JSON, got HTML, and reported `HTTP -400` — which
+   sent me looking at the AI integration for two days. Connect IQ also sends
+   `Mozilla/5.0` and will not let you override it, so ngrok's free-tier browser
+   interstitial hits the watch and never your `curl`.
+
+**Store listing:** https://apps.garmin.com/apps/303bda81-2851-44b3-8550-a6fa5923f427
+**Source (MIT):** https://github.com/Zsadigzade/trainbud
+
+Tested on fr55, fr70 and fenix 8. No MFA support — the underlying Connect
+library cannot do it, and that is the most common reason setup fails.
+
+Unofficial community project; not affiliated with, endorsed by, or sponsored by
+Garmin Ltd.
+
+Happy to answer anything about the glance-scope trap in particular — it cost me
+a release and I have not seen it written down anywhere.
 
 ---
 

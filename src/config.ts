@@ -51,6 +51,12 @@ export function deprecatedEnvNames(): string[] {
     .map(([, legacyName]) => legacyName);
 }
 
+/** The current spelling of a pre-0.3.0 variable name, or null if it is not one. */
+export function currentEnvNameFor(legacyName: string): string | null {
+  const match = Object.entries(RENAMED_ENV).find(([, legacy]) => legacy === legacyName);
+  return match ? (match[0] as string) : null;
+}
+
 function readNumber(name: string, fallback: number): number {
   const value = readEnv(name);
   if (!value) {
@@ -188,6 +194,57 @@ export function writeEnvFile(credentials: { email: string; password: string; api
   ];
 
   writeSecretFile(envPath, lines.join("\n"));
+  loadEnv({ path: envPath, override: true, quiet: true });
+  return envPath;
+}
+
+/**
+ * Change one assignment in `.env`, leaving every other line exactly as it was.
+ *
+ * `writeEnvFile` is the wrong tool for rotating a secret: it rebuilds the whole
+ * file from a template and it demands the Connect credentials, so the only
+ * supported way to replace an API key was to re-run the entire setup wizard --
+ * re-typing a Garmin password and re-authenticating in order to change a
+ * different key altogether. People edited the file by hand instead, which is
+ * how `.env` and the copy in `app.db` drifted apart and a rotation that
+ * "worked" left the old key live.
+ *
+ * Deprecated spellings of the same setting are rewritten rather than left
+ * behind: two lines naming one secret is the same drift in a smaller box.
+ */
+export function setEnvValue(key: string, value: string): string {
+  const envPath = getEnvFilePath();
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+  const legacyName = RENAMED_ENV[key];
+  const targets = new Set(legacyName ? [key, legacyName] : [key]);
+
+  const lines = existing.split(/\r?\n/);
+  let replaced = false;
+
+  const rewritten = lines.map((line) => {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+    if (!match || !targets.has(match[1] as string)) {
+      return line;
+    }
+    if (replaced) {
+      // A second line naming the same secret is removed, not updated. Leaving it
+      // is how a rotation silently half-applies.
+      return null;
+    }
+    replaced = true;
+    return `${key}=${quoteEnvValue(value)}`;
+  });
+
+  const kept = rewritten.filter((line): line is string => line !== null);
+
+  if (!replaced) {
+    while (kept.length > 0 && kept[kept.length - 1] === "") {
+      kept.pop();
+    }
+    kept.push(`${key}=${quoteEnvValue(value)}`, "");
+  }
+
+  writeSecretFile(envPath, kept.join("\n"));
   loadEnv({ path: envPath, override: true, quiet: true });
   return envPath;
 }

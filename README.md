@@ -158,6 +158,40 @@ The glance shows recovery and sleep from the last cached summary, so it renders 
 waiting on the network. Open it and tap or swipe to cycle through the cards you left switched on in the dashboard. The watch
 calls `GET /api/watch` — a compact JSON summary, not the full MCP protocol.
 
+## Voice (`/voice`)
+
+Hold a button on your phone, ask a question out loud, hear the answer read back.
+Open `https://YOUR-HOST/voice?token=YOUR_API_KEY` once; it trades the key for a cookie
+and redirects to a clean URL.
+
+- **Android / Chrome** — speech recognition happens in the browser. Free, no key.
+- **iPhone / Safari** — records audio and transcribes it server-side via Groq
+  (`whisper-large-v3-turbo`, about $0.04 per hour of audio). Add the key on the dashboard.
+- **Both** — answers are spoken back, and **Read me my day** / **Read today's insight**
+  cost nothing at all: they are composed in code from data already on hand, not generated.
+
+Not a watch feature and it cannot be one: Connect IQ exposes no microphone or speaker to
+a widget. Not hands-free either — mobile browsers suspend the microphone when the tab is
+backgrounded, so the phone has to be awake with the page in front of you.
+
+Full detail: [docs/VOICE.md](./docs/VOICE.md)
+
+## Always on (`/voice` and the watch, without babysitting a terminal)
+
+`trainbud serve` in a terminal lasts until the terminal closes. To have the server and the
+tunnel come back by themselves after a reboot:
+
+```powershell
+.\scripts\install-always-on.ps1 -Hostname trainbud.example.com
+```
+
+That registers a scheduled task for the server and a watchdog that checks both halves every
+five minutes — because **a tunnel that answers is not a server that answers**: a tunnel with
+nothing behind it serves its own error page under a 200, so the link looks alive while the
+watch reports `HTTP -400`. systemd, launchd and Docker Compose recipes are in the guide.
+
+Full detail, including Cloudflare named tunnels: [docs/ALWAYS-ON.md](./docs/ALWAYS-ON.md)
+
 ## Connect to Claude Desktop
 
 Edit `claude_desktop_config.json`:
@@ -230,9 +264,16 @@ trainbud auth           # Force re-authentication
 trainbud cache clear    # Clear cached data
 trainbud devices        # List paired watches
 trainbud devices revoke <id>   # Take one watch's access away
+trainbud rotate status  # Which secrets are set, and whether their two homes agree
+trainbud rotate api-key # Replace TRAINBUD_API_KEY, and say what that invalidates
+trainbud rotate ai-key  # Replace the AI key in BOTH .env and app.db
 trainbud status         # Show session and cache status
 trainbud --version      # Print version
 ```
+
+`rotate ai-key` writes both stores on purpose. The AI key lives in `.env` *and* in
+`app.db`, the database copy is the one actually read, and hand-editing only the file
+leaves a rotated key that never took effect.
 
 Every one of these also works as `npx trainbud <command>` without installing anything.
 
