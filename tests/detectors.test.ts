@@ -37,6 +37,7 @@ function input(
       return series(values).slice(-days);
     },
     activities: () => activities,
+    context: () => [],
   };
 }
 
@@ -122,6 +123,7 @@ describe("a gap in the store is not a run of days", () => {
       now: NOW,
       series: () => [...stale, ...baseline, ...elevated],
       activities: () => [],
+      context: () => [],
     });
 
     assert.equal(finding, null, "a two-month-old run was reported as current");

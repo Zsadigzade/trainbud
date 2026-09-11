@@ -67,6 +67,7 @@ function input(): DetectorInput {
     series: (kind: MetricKind, days: number) => everyDay(days, () => VALUE[kind] ?? 1),
     activities: (days: number) =>
       Array.from({ length: days + 1 }, (_, daysAgo) => session(daysAgo)),
+    context: () => [],
   };
 }
 

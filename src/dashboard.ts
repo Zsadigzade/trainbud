@@ -1,5 +1,6 @@
 import { CARD_IDS } from "./profile.js";
 import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptSuggestions.js";
+import { FINDING_KINDS, type FindingKind } from "./detect/findings.js";
 import { CONTEXT_KINDS } from "./history/schema.js";
 import { appConfig } from "./config.js";
 import { columnChart, dumbbellChart, lineChart } from "./dashboardCharts.js";
@@ -93,6 +94,15 @@ function renderTile(tile: DashboardTile): string {
   </div>`;
 }
 
+/** Finding kinds in the words a person would use about their own watch. */
+const MUTE_LABELS: Record<FindingKind, string> = {
+  rhr_elevated: "resting heart rate being up",
+  sleep_debt: "being short on sleep",
+  hrv_trend_break: "HRV dropping",
+  load_ratio_high: "training load being high",
+  load_ratio_low: "training load being low",
+};
+
 function severityWord(severity: string): string {
   return severity === "warn" ? "hard" : severity === "notice" ? "caution" : "good";
 }
@@ -105,19 +115,54 @@ function renderToday(data: DashboardData): string {
     return `<p class="note">${escapeHtml(data.coverageNote)}</p>`;
   }
 
-  if (data.findings.length === 0) {
+  if (data.findings.length === 0 && data.mutedFindings.length === 0) {
     return `<p class="hero-line">Nothing stands out today.</p>
       <p class="muted">Measured against your own baselines over ${data.coverageDays} days.</p>`;
   }
 
-  return data.findings
-    .map(
-      (finding) => `<div class="finding">
+  const live =
+    data.findings.length === 0
+      ? `<p class="hero-line">Nothing stands out that you have not explained.</p>
+      <p class="muted">Measured against your own baselines over ${data.coverageDays} days.</p>`
+      : data.findings
+          .map(
+            (finding) => `<div class="finding">
         <div class="finding-head"><span class="dot dot-${severityWord(finding.severity)}"></span>${escapeHtml(finding.headline)}</div>
         <p class="muted">${escapeHtml(finding.detail)}</p>
       </div>`
+          )
+          .join("");
+
+  return live + renderMutedFindings(data);
+}
+
+/**
+ * Shown, but never as an alert: no severity dot, no colour, struck through.
+ *
+ * Hiding these outright was the other option and it is the worse one. The
+ * measurement is still true; what changed is that the user accounted for it. A
+ * page that erased them would be unable to answer the only question that
+ * matters afterwards -- "what is it not telling me, and why" -- and the way to
+ * bring one back is right there: end the entry that is doing the muting.
+ */
+function renderMutedFindings(data: DashboardData): string {
+  if (data.mutedFindings.length === 0) {
+    return "";
+  }
+
+  const rows = data.mutedFindings
+    .map(
+      (finding) => `<div class="finding finding-muted">
+        <div class="finding-head"><span class="dot dot-off"></span><s>${escapeHtml(finding.headline)}</s></div>
+        <p class="muted">You logged: ${escapeHtml(finding.reason)}</p>
+      </div>`
     )
     .join("");
+
+  return `<div class="muted-block">
+      <p class="muted muted-label">Muted by you (${data.mutedFindings.length}) — end the entry below to hear these again.</p>
+      ${rows}
+    </div>`;
 }
 
 function renderCardRows(order: string[], hidden: string[]): string {
@@ -248,6 +293,10 @@ export function renderDashboard(publicUrl?: string): string {
     .note { color: var(--ink); font-size: 0.9rem; background: var(--raised);
             border-left: 2px solid var(--caution); border-radius: 0 8px 8px 0; padding: 10px 12px; }
 
+    .muted-block { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
+    .muted-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .finding-muted { opacity: 0.55; }
+    .dot-off { background: var(--line); }
     .finding { padding: 10px 0; border-bottom: 1px solid var(--line); }
     .finding:last-child { border-bottom: none; padding-bottom: 0; }
     .finding-head { font-weight: 550; font-size: 0.95rem; display: flex; gap: 8px; align-items: baseline; }
@@ -452,6 +501,12 @@ export function renderDashboard(publicUrl?: string): string {
             </div>
             <label class="field"><span>What is it</span>
               <input type="text" name="text" placeholder="Half marathon, Oct 12" maxlength="200" required></label>
+            <label class="field"><span>Stop telling me about (optional)</span>
+              <select name="mutes" multiple size="3">
+                <option value="*">everything</option>
+                ${FINDING_KINDS.map((kind) => `<option value="${kind}">${MUTE_LABELS[kind]}</option>`).join("")}
+              </select></label>
+            <p class="muted" style="margin:-4px 0 10px">Only while this entry holds. Leave it empty to record something without silencing anything; with no end date a mute expires by itself after two weeks.</p>
             <div class="actions"><button type="submit" class="btn-primary">Add</button></div>
           </form>
         </div>
@@ -1034,7 +1089,8 @@ export function renderDashboard(publicUrl?: string): string {
         body: JSON.stringify({
           kind: form.kind.value,
           text: form.text.value,
-          effective_to: form.effective_to.value || undefined
+          effective_to: form.effective_to.value || undefined,
+          mutes: Array.prototype.map.call(form.mutes.selectedOptions, function (o) { return o.value; }).join(',')
         })
       }).then(function (r) {
         return r.json().then(function (body) {
@@ -1042,6 +1098,7 @@ export function renderDashboard(publicUrl?: string): string {
           toast('Saved');
           form.text.value = '';
           form.effective_to.value = '';
+          form.mutes.selectedIndex = -1;
           refresh();
         });
       }).catch(function (e) { toast(e.message, true); });

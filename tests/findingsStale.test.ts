@@ -41,14 +41,14 @@ const EMPTY = {
 
 describe("a stale store is not a cold start", () => {
   it("never claims 74 days are fewer than the 14 needed", () => {
-    const text = renderFindingsText({ findings: [], coverage: STALE });
+    const text = renderFindingsText({ findings: [], muted: [], coverage: STALE });
 
     assert.doesNotMatch(text, /Still gathering/i);
     assert.doesNotMatch(text, /74 of the 14/);
   });
 
   it("names the date the record stops and how old that is", () => {
-    const text = renderFindingsText({ findings: [], coverage: STALE });
+    const text = renderFindingsText({ findings: [], muted: [], coverage: STALE });
 
     assert.match(text, /74 days/);
     assert.match(text, /2026-08-21/);
@@ -56,7 +56,7 @@ describe("a stale store is not a cold start", () => {
   });
 
   it("tells the reader the history is real and worth reasoning about", () => {
-    const text = renderFindingsText({ findings: [], coverage: STALE });
+    const text = renderFindingsText({ findings: [], muted: [], coverage: STALE });
 
     // The whole point. A model handed this must not conclude it has no data.
     assert.doesNotMatch(text, /no data/i);
@@ -64,14 +64,14 @@ describe("a stale store is not a cold start", () => {
   });
 
   it("still says it is gathering when the store really is short", () => {
-    const text = renderFindingsText({ findings: [], coverage: COLD });
+    const text = renderFindingsText({ findings: [], muted: [], coverage: COLD });
 
     assert.match(text, /Still gathering/i);
     assert.match(text, /4 of the 14/);
   });
 
   it("treats an empty store as a cold start, not as a stale one", () => {
-    const text = renderFindingsText({ findings: [], coverage: EMPTY });
+    const text = renderFindingsText({ findings: [], muted: [], coverage: EMPTY });
 
     assert.match(text, /Still gathering/i);
     assert.doesNotMatch(text, /stops/);

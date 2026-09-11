@@ -221,15 +221,30 @@ async function runFindings(): Promise<void> {
   console.log(`TrainBud findings — ${result.coverage.days} days of history`);
   console.log("");
 
-  if (result.findings.length === 0) {
+  if (result.findings.length === 0 && result.muted.length === 0) {
     console.log("Nothing stands out against your own baselines.");
     closeHistoryDb();
     return;
   }
 
+  if (result.findings.length === 0) {
+    // Never the bare "nothing stands out" while something is being held back.
+    console.log("Nothing stands out that you have not already explained.");
+    console.log("");
+  }
+
   for (const finding of result.findings) {
     console.log(`[${finding.severity}] ${finding.headline}`);
     console.log(`  ${finding.detail}`);
+    console.log("");
+  }
+
+  if (result.muted.length > 0) {
+    console.log(`Muted (${result.muted.length}):`);
+    for (const finding of result.muted) {
+      console.log(`  ${finding.headline}`);
+      console.log(`    you logged: ${finding.mutedBy.text}`);
+    }
     console.log("");
   }
 

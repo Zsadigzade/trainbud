@@ -81,6 +81,13 @@ export interface DashboardFinding {
   detail: string;
 }
 
+export interface DashboardMutedFinding extends DashboardFinding {
+  /** What the user said, in their own words. */
+  reason: string;
+  /** The context entry doing the muting, so the page can point at what to end. */
+  entryId: number;
+}
+
 export interface DashboardStatus {
   pending: { code: string; expires_in: number }[];
   ai_configured: boolean;
@@ -93,6 +100,13 @@ export interface DashboardData extends DashboardStatus {
   profile: TrainBudProfile;
   tiles: DashboardTile[];
   findings: DashboardFinding[];
+  /**
+   * Findings the user has already explained away with a context entry. Rendered
+   * quietly and separately -- never as an alert, never deleted, because a page
+   * that simply dropped them would say "nothing stands out" on a day when
+   * something did.
+   */
+  mutedFindings: DashboardMutedFinding[];
   /** The one sentence that explains an empty findings list. Null when it is genuinely empty. */
   coverageNote: string | null;
   coverageDays: number;
@@ -299,6 +313,13 @@ export function getDashboardData(publicUrl?: string): DashboardData {
       severity: finding.severity,
       headline: finding.headline,
       detail: finding.detail,
+    })),
+    mutedFindings: detection.muted.map((finding) => ({
+      severity: finding.severity,
+      headline: finding.headline,
+      detail: finding.detail,
+      reason: finding.mutedBy.text,
+      entryId: finding.mutedBy.id,
     })),
     // An empty findings list means two opposite things, and the page has to say
     // which. "Nothing stands out" is a clean bill of health; "the record stops

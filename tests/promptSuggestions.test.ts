@@ -20,7 +20,11 @@ function finding(kind: FindingKind): Finding {
 }
 
 function ready(findings: Finding[]): DetectionResult {
-  return { findings, coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } };
+  return {
+    findings,
+    muted: [],
+    coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 },
+  };
 }
 
 function entry(kind: ContextEntry["kind"], text: string): ContextEntry {
@@ -30,6 +34,7 @@ function entry(kind: ContextEntry["kind"], text: string): ContextEntry {
     text,
     effectiveFrom: "2026-08-01",
     effectiveTo: null,
+    mutes: [],
     createdAt: 0,
   };
 }
@@ -132,7 +137,7 @@ describe("prompt suggestions", () => {
     const cases: DetectionResult[] = [
       ready([]),
       ready([finding("rhr_elevated"), finding("load_ratio_high")]),
-      { findings: [], coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 } },
+      { findings: [], muted: [], coverage: { days: 3, ready: false, throughDate: null, staleDays: 0 } },
     ];
 
     for (const result of cases) {

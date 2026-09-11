@@ -2,7 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 2026-09-11
+## [Unreleased] — 2026-09-12
+
+### Added — feedback you can justify, and the watch cannot
+
+The first substantive reply this project ever received found a design fault
+before the author did: you could tell TrainBud you were travelling, injured or
+deliberately deloading, the AI answers would use it, and the Today screen would
+go on reporting a raised resting heart rate for three days as though nothing had
+been said. The context layer existed and **no detector read it**.
+
+- **A context entry can now silence a finding while it holds.** `remember_context`
+  takes a `mutes` list, the dashboard form has a matching field, and the entry
+  must name what it silences — `rhr_elevated`, `sleep_debt`, `hrv_trend_break`,
+  `load_ratio_high`, `load_ratio_low`, or `*` for all of them.
+- **Nothing is muted unless you said so.** Inferring it from the entry's kind —
+  an injury quietens heart rate, a race quietens load — is one line of code and a
+  guess about causation the data cannot support, and it would hand mute powers to
+  a goal typed in March.
+- **A mute expires by itself after 14 days** when no end date is given. An
+  open-ended mute is how a person turns the app off without deciding to; making
+  it lapse means forgetting is the safe outcome. Recording a goal or an injury is
+  still open-ended, because that is history rather than an instruction.
+- **Nothing is deleted.** A muted finding moves to `muted` rather than vanishing,
+  keeping its severity and its numbers. The watch's alert badge is derived from
+  the live list, so it stops lighting for something you explained — and every
+  surface can still tell a quiet day from a silenced one. "Nothing stands out"
+  and "nothing stands out that you have not already explained" are different
+  sentences, and the second one is now printed by the CLI, the dashboard, the
+  `get_findings` tool and the Ask prompt.
+- The model is handed the muted findings **with your reason attached** and told
+  not to raise them — the one surface where prose can carry both halves.
+- A finding dated yesterday is muted by an entry you write today. Garmin
+  finalises a sleep score hours after waking, so the alarm someone reaches to
+  silence is routinely dated the day before; matching only the finding's own date
+  would accept the mute and leave it ringing.
+- **`context_entry` gained a `mutes` column**, added to existing databases by a
+  guarded `ALTER TABLE` on open. `CREATE TABLE IF NOT EXISTS` skips the whole
+  statement for a table that already exists, so a column added to the schema
+  reaches a fresh install and never reaches the database that has been collecting
+  your history for months — the only one that matters.
 
 ### Added — ask out loud, and hear the answer
 

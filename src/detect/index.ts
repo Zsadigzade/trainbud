@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { allContext } from "../history/context.js";
 import type { MetricKind } from "../history/schema.js";
 import { getActivitiesBetween, getMetricSeries } from "../history/store.js";
 import {
@@ -7,7 +8,8 @@ import {
   detectRestingHrElevation,
   detectSleepDebt,
 } from "./detectors.js";
-import type { DetectorInput, Finding, FindingSeverity } from "./findings.js";
+import type { DetectorInput, Finding, FindingSeverity, MutedFinding } from "./findings.js";
+import { applyMutes } from "./mute.js";
 
 // SECTION: Running the detectors
 
@@ -39,6 +41,11 @@ const SEVERITY_ORDER: Record<FindingSeverity, number> = {
   info: 2,
 };
 
+function byRank(left: Finding, right: Finding): number {
+  const bySeverity = SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity];
+  return bySeverity !== 0 ? bySeverity : left.kind.localeCompare(right.kind);
+}
+
 export interface Coverage {
   days: number;
   ready: boolean;
@@ -49,7 +56,16 @@ export interface Coverage {
 }
 
 export interface DetectionResult {
+  /**
+   * What stands out and has not been accounted for. Every surface reads this
+   * one, which is why muting had to remove findings from it rather than tag
+   * them: the watch's alert badge is derived from this array's contents, and a
+   * badge that still lights for a finding the user has explained would make the
+   * whole feature cosmetic.
+   */
   findings: Finding[];
+  /** What stands out and the user has already explained. Never rendered as an alert. */
+  muted: MutedFinding[];
   coverage: Coverage;
 }
 
@@ -121,6 +137,7 @@ export function buildDetectorInput(now: DateTime = DateTime.local()): DetectorIn
       const end = startOfDay.toISODate() ?? "";
       return getActivitiesBetween(start, end);
     },
+    context: () => allContext(),
   };
 }
 
@@ -152,23 +169,27 @@ export function runDetectors(input: DetectorInput = buildDetectorInput()): Detec
       ? Number.MAX_SAFE_INTEGER
       : Math.max(0, Math.round(today.diff(DateTime.fromISO(throughDate).startOf("day"), "days").days));
 
-  const findings = [
+  const raised = [
     detectRestingHrElevation(input),
     detectHrvTrendBreak(input),
     detectLoadRatio(input),
     detectSleepDebt(input),
   ].filter((finding): finding is Finding => finding !== null);
 
+  // Everything the user has told the app, applied where they actually look.
+  // Detectors stay pure functions of the numbers; whether a finding is worth
+  // saying out loud is a separate question from whether it is true.
+  const { findings, muted } = applyMutes(raised, input.context(), input.now);
+
   // Severity first, then a fixed detector order via the kind. The watch shows
   // the first couple, and findings that shuffled between syncs would read as
   // the data having changed when it has not.
-  findings.sort((left, right) => {
-    const bySeverity = SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity];
-    return bySeverity !== 0 ? bySeverity : left.kind.localeCompare(right.kind);
-  });
+  findings.sort(byRank);
+  muted.sort(byRank);
 
   return {
     findings,
+    muted,
     coverage: {
       days,
       ready: days >= READY_DAYS && staleDays <= MAX_STALE_DAYS,

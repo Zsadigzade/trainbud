@@ -1,7 +1,7 @@
 import type { DailyStressSummary, Vo2MaxEntry } from "../garmin/rawApi.js";
 import type { ContextEntry, SubjectivePoint } from "../history/context.js";
 import type { SubjectiveKind } from "../history/schema.js";
-import type { Finding } from "../detect/findings.js";
+import type { Finding, MutedFinding } from "../detect/findings.js";
 import type { Coverage } from "../detect/index.js";
 import type {
   ActivitySummary,
@@ -171,5 +171,11 @@ export interface SubjectivePayload {
  */
 export interface FindingsPayload {
   findings: Finding[];
+  /**
+   * Raised, then accounted for by something the user recorded. Reported rather
+   * than dropped: a model handed a silently shorter array cannot tell a quiet
+   * day from a silenced one, and will reassure the user about the second.
+   */
+  muted: MutedFinding[];
   coverage: Coverage;
 }

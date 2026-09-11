@@ -25,6 +25,7 @@ function entry(overrides: Partial<ContextEntry> = {}): ContextEntry {
     effectiveFrom: "2026-08-01",
     effectiveTo: "2026-10-12",
     createdAt: 0,
+    mutes: [],
     ...overrides,
   };
 }
@@ -106,7 +107,11 @@ describe("findings on the watch payload", () => {
 describe("the context the model is given", () => {
   it("names every finding and every active context entry", () => {
     const text = formatFindingsContext(
-      { findings: [finding()], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
+      {
+        findings: [finding()],
+        muted: [],
+        coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 },
+      },
       [entry(), entry({ id: 2, kind: "injury", text: "Left achilles", effectiveTo: null })]
     );
 
@@ -117,7 +122,7 @@ describe("the context the model is given", () => {
 
   it("says nothing stands out when the store is ready and quiet", () => {
     const text = formatFindingsContext(
-      { findings: [], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
+      { findings: [], muted: [], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
       []
     );
 
@@ -128,7 +133,7 @@ describe("the context the model is given", () => {
   // Otherwise the model writes a confident daily sentence out of no data.
   it("says it is still gathering when coverage is not ready", () => {
     const text = formatFindingsContext(
-      { findings: [], coverage: { days: 4, ready: false, throughDate: null, staleDays: 0 } },
+      { findings: [], muted: [], coverage: { days: 4, ready: false, throughDate: null, staleDays: 0 } },
       []
     );
 
@@ -138,7 +143,7 @@ describe("the context the model is given", () => {
 
   it("mentions when there is no context on record at all", () => {
     const text = formatFindingsContext(
-      { findings: [finding()], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
+      { findings: [finding()], muted: [], coverage: { days: 73, ready: true, throughDate: null, staleDays: 0 } },
       []
     );
 

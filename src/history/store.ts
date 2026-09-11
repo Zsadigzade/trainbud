@@ -69,7 +69,37 @@ export function openHistoryDb(databasePath = defaultHistoryPath()): Database.Dat
   // the machine. It is the most personal file the app writes.
   restrictExistingFile(databasePath);
   db.exec(HISTORY_SCHEMA);
+  addMissingColumns(db);
   return db;
+}
+
+/**
+ * The columns that `CREATE TABLE IF NOT EXISTS` cannot deliver.
+ *
+ * There is no migration framework here and this is the first thing that needed
+ * one. `IF NOT EXISTS` skips the whole statement for a table that already
+ * exists, so a column added to the schema above reaches a fresh install and
+ * never reaches the database that has been collecting this user's history for
+ * months -- which is the only one that matters.
+ *
+ * `PRAGMA table_info` then `ALTER TABLE ADD COLUMN` is idempotent, does not
+ * rewrite the table, and costs nothing on every open after the first. Adding
+ * the next one means adding a line here, not writing a framework.
+ */
+function addMissingColumns(database: Database.Database): void {
+  const wanted: Array<{ table: string; column: string; definition: string }> = [
+    { table: "context_entry", column: "mutes", definition: "TEXT" },
+  ];
+
+  for (const { table, column, definition } of wanted) {
+    const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+    }>;
+
+    if (columns.length > 0 && !columns.some((existing) => existing.name === column)) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  }
 }
 
 function getDb(): Database.Database {

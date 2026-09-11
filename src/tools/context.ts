@@ -13,6 +13,8 @@ import {
   type ContextKind,
   type SubjectiveKind,
 } from "../history/schema.js";
+import { FINDING_KINDS, MUTE_ALL } from "../detect/findings.js";
+import { parseMuteTargets } from "../detect/mute.js";
 import type { ToolResult } from "../garmin/types.js";
 import type {
   ContextListPayload,
@@ -50,7 +52,11 @@ function optionalDate(value: unknown, label: string): string | undefined {
 
 function describeEntry(entry: ContextEntry): string {
   const until = entry.effectiveTo ? ` until ${entry.effectiveTo}` : "";
-  return `${entry.kind}: ${entry.text} (from ${entry.effectiveFrom}${until})`;
+  const muting =
+    entry.mutes.length > 0
+      ? `, muting ${entry.mutes.includes(MUTE_ALL) ? "every finding" : entry.mutes.join(" and ")}`
+      : "";
+  return `${entry.kind}: ${entry.text} (from ${entry.effectiveFrom}${until}${muting})`;
 }
 
 export async function rememberContext(
@@ -62,6 +68,7 @@ export async function rememberContext(
   const entry = addContextEntry(kind, text, {
     effectiveFrom: optionalDate(input.effective_from, "effective_from"),
     effectiveTo: optionalDate(input.effective_to, "effective_to"),
+    mutes: parseMuteTargets(input.mutes),
   });
 
   const payload: RememberContextPayload = { entry };
@@ -135,7 +142,7 @@ export const contextToolDefinitions: ToolDefinition[] = [
   {
     name: "remember_context",
     description:
-      "Records something about the user that Garmin does not know: a goal, a race and its date, an injury, or a free-form note. Use this whenever the user mentions one in passing.",
+      "Records something about the user that Garmin does not know: a goal, a race and its date, an injury, or a free-form note. Use this whenever the user mentions one in passing. It can also silence a finding the user has already accounted for — see `mutes`.",
     inputSchema: {
       kind: {
         type: "string",
@@ -151,7 +158,12 @@ export const contextToolDefinitions: ToolDefinition[] = [
       },
       effective_to: {
         type: "string",
-        description: "ISO date this stops being true, for a race date or a healed injury.",
+        description:
+          "ISO date this stops being true, for a race date or a healed injury. When `mutes` is set and this is left out, the mute expires on its own after two weeks.",
+      },
+      mutes: {
+        type: "array",
+        description: `Finding kinds this entry should silence while it holds, for when the user can explain something the watch cannot — "I was travelling, stop telling me my resting heart rate is up". One or more of: ${FINDING_KINDS.join(", ")}, or "${MUTE_ALL}" for all of them. Set this ONLY when the user asks to stop being told something; recording a goal, race or injury must not silence anything by itself.`,
       },
     },
     handler: rememberContext,

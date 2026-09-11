@@ -32,6 +32,7 @@ function input(
       return series(values).slice(-days);
     },
     activities: () => activities,
+    context: () => [],
   };
 }
 
@@ -202,6 +203,7 @@ describe("race countdown", () => {
     effectiveFrom,
     effectiveTo: null,
     createdAt: 0,
+    mutes: [],
   });
 
   it("returns null when nothing is on the calendar", () => {

@@ -44,6 +44,7 @@ function input(points: MetricPoint[]): DetectorInput {
       return points.filter((point) => point.date >= from);
     },
     activities: () => [],
+    context: () => [],
   };
 }
 

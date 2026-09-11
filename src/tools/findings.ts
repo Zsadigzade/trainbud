@@ -23,16 +23,31 @@ export function renderFindingsText(payload: FindingsPayload): string {
     return [coverage.detail, coverage.fix].filter(Boolean).join("\n");
   }
 
-  if (payload.findings.length === 0) {
+  // A muted finding is still a finding. Saying "nothing stands out" while
+  // holding one is the same failure as the cold-start line: an absence reported
+  // as a clean bill of health, which a model repeats back to the user as
+  // reassurance.
+  if (payload.findings.length === 0 && payload.muted.length === 0) {
     return `Nothing stands out against the user's own baselines, across ${payload.coverage.days} days of history.`;
   }
 
   return [
-    `${payload.findings.length} finding(s) across ${payload.coverage.days} days of history:`,
-    "",
+    payload.findings.length === 0
+      ? `Nothing stands out that the user has not already explained, across ${payload.coverage.days} days of history.`
+      : `${payload.findings.length} finding(s) across ${payload.coverage.days} days of history:`,
+    ...(payload.findings.length > 0 ? [""] : []),
     ...payload.findings.map((finding) =>
       [`[${finding.severity}] ${finding.headline}`, `  ${finding.detail}`].join("\n")
     ),
+    ...(payload.muted.length > 0
+      ? [
+          "",
+          `Muted by the user (${payload.muted.length}). Do not raise these as concerns; mention one only if asked, or if it contradicts what the user is saying:`,
+          ...payload.muted.map(
+            (finding) => `  ${finding.headline} — they logged: ${finding.mutedBy.text}`
+          ),
+        ]
+      : []),
     "",
     "These describe measurements against the user's own baseline. They are not diagnoses.",
   ].join("\n");
@@ -42,6 +57,7 @@ export async function getFindings(): Promise<ToolResult<FindingsPayload>> {
   const result = runDetectors();
   const payload: FindingsPayload = {
     findings: result.findings,
+    muted: result.muted,
     coverage: result.coverage,
   };
 

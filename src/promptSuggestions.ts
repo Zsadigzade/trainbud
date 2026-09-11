@@ -127,7 +127,10 @@ function fill(seed: string[], pool: string[]): string[] {
  * leave it rendering stale entries from its cache.
  */
 export function buildPromptSuggestions(
-  result: DetectionResult,
+  // Narrowed on purpose: these are questions to ask about what still stands
+  // out, so a caller assembling a partial view has no business being made to
+  // carry the muted list it will not read.
+  result: Pick<DetectionResult, "findings" | "coverage">,
   context: ContextEntry[] = [],
   custom: readonly string[] = []
 ): string[] {

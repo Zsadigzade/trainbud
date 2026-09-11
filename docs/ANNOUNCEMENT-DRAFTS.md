@@ -62,7 +62,7 @@ given, not against this file.
 | **X / Twitter** | ✅ **live 09-07**, 5-post thread | <https://x.com/ZSadigzade> — one like |
 | **r/Garmin** | ⏳ **deleted 09-08, repost owed** | The malformed post is gone, in the correct order. Next Wednesday: **2026-09-16**, title exactly `[New App] - TrainBud` |
 | **r/GarminWatches** | ✅ **live 2026-09-12** | [post 1wdr5kg](https://www.reddit.com/r/GarminWatches/comments/1wdr5kg/i_built_a_widget_that_tells_you_what_changed/) — posted with **zero links**, which is what rule 3 requires. No AI-authorship rule exists there |
-| **Connect IQ dev forum** | 🆕 ⏳ **ready, never posted** | <https://forums.garmin.com/developer/connect-iq/> — no self-promo rule, no flair, no one-post limit, no Wednesday. The best Garmin venue and the only untouched one. Draft is final below |
+| **Connect IQ dev forum** | ✅ **live 2026-09-11** | <https://forums.garmin.com/developer/connect-iq/f/showcase/443991/trainbud-your-own-baselines-on-the-wrist-with-a-companion-server-you-run-widget> — **Showcase board specifically**; the general dev board forbids self-promotion. This row said "never posted" until 09-12 while the section below said POSTED — the table is the thing that gets read |
 | **Show HN** | ⏳ **ready, not posted — stale since 09-08** | Logged in as `zsadigzade` (verified 09-08). Held for 08:00 ET = 16:00 UTC+4. Held for three days now: **either book a morning or drop it**, because a draft kept "ready" indefinitely is a decision nobody made |
 | **r/ClaudeAI** | ⛔ **dropped as a launch channel** | Rule 7 needs OP karma > 100 against 2, and the only honest way to move that is months of genuine participation. Farming karma to clear a posting gate is what the rule exists to stop. It unlocks itself if you end up taking part; it is no longer a launch task |
 
@@ -342,6 +342,14 @@ A post went up ~14h before the 09-07 check and did not satisfy the rules:
 > in breach of a rule that has nothing to do with the app being AI-powered. Keep
 > the facts, the title, the flair and the disclosures exactly; change the prose.
 
+> [!danger] The "your own baseline vs a population average" hook is dead — do not restore it
+> u/Ok-Distribution326 took it apart on r/GarminWatches on 2026-09-12 and was
+> **right**: Connect already compares HR, HRV, stress and much of sleep against the
+> individual. `src/detect/detectors.ts` is a 28-day robust median/MAD comparison —
+> the same *class* of thing. The honest claim is **locality and inspectability**,
+> not better statistics. r/Garmin allows **one launch post in the subreddit's
+> lifetime**, so this is the only shot: shipping the broken framing here spends it.
+
 > **Title (exact, do not alter):** [New App] - TrainBud
 
 I am the developer of this app, and it is free — MIT licensed, no paid tier, no
@@ -357,11 +365,16 @@ above your 28-day baseline, 3 days running", or "this week's load is 1.6x your
 four-week average". Then Overview, Recovery, Sleep, Activity and Stress are one
 swipe on if you want the raw numbers.
 
-It compares you against your own baseline rather than a population average, and
-when it does not have enough history to compare anything it says so instead of
-showing a number that means nothing. A new watch has no baseline for the first
-couple of weeks and it tells you that. A night you did not wear the watch reads
-as unknown, not as a bad night.
+Your watch already measures most of this against you rather than against a
+population, so that is not what is different here. What is different is that the
+rule is readable and the history is yours. "Three days running, each at least 3
+bpm and two deviations above your 28-day median" is a line of code you can open
+and change if you think the threshold is wrong, and the history it reads sits in
+a file on your own machine — including Garmin's later restatements of a day,
+since a sleep score finalises hours after you wake. When there is not enough
+history to compare anything it says so instead of showing a number that means
+nothing: a new watch has no baseline for the first couple of weeks and it tells
+you that, and a night you did not wear the watch reads as unknown.
 
 There is also an Ask card that answers questions about your own history. That
 part is optional, runs on your own API key, and is metered with a spending cap
@@ -511,6 +524,136 @@ Genuine question for this sub, since you're the people who'd know: **does anyone
 else want their own baselines on the watch rather than Garmin's scores, or am I
 solving a problem only I have?** I'd rather hear it's the latter now than after
 building more of it.
+
+---
+
+## r/GarminWatches — reply draft for u/davegotfayded (NOT POSTED)
+
+**His comment, 2026-09-12:**
+
+> Definitely interested in anything that gets closer to raw data, knowing why my
+> sleep score dropped, or went up, would make it easier to pinpoint causes. Or
+> being able to ignore feedback that I can justify but the watch can't.
+
+**Two separate asks, and they land very differently against what exists.**
+Checked against the code before drafting, so the reply does not overclaim:
+
+| His ask | Reality |
+|---|---|
+| Closer to raw data | ✅ `raw_payload` is written append-only — Garmin's *revisions* are kept, not overwritten. ⚠ Bounded: `RAW_RETENTION_DAYS = 180`, `RAW_REVISIONS_KEPT = 3`, so write "the last few revisions", never "every payload forever" |
+| Why the sleep **score** moved | ⚠️ Not answered. TrainBud sidesteps the score rather than explaining it |
+| Ignore feedback he can justify | ❌ **Genuine gap.** Context exists (`goal`, `race`, `injury`, `note`) and reaches the AI answers and the dashboard — but `src/detect/` never reads it, so a finding cannot currently be muted |
+
+> [!warning] Do not promise the third one as though it exists
+> `activeContext` is consumed by `promptApi.ts`, `dashboardData.ts` and the race
+> countdown. **No detector imports it.** Saying "you can already dismiss
+> findings" would be false, and he would find out in ten minutes.
+
+### Draft reply
+
+That second one is the more interesting request and it's the thing I don't have
+yet, so let me be straight about where each stands.
+
+On raw data: the local store keeps the last few revisions of each day rather
+than overwriting the previous one, which turned out to matter more than I expected — Garmin *restates*
+things. A sleep score finalises hours after you wake, VO2 max gets recomputed
+after a qualifying activity. So the archive holds the revisions, not just the
+final answer, and you can go back and see that a number changed underneath you.
+
+On *why* a score moved — I'll be honest, I don't explain Garmin's score, and I
+deliberately went around it instead. The score is a black box I can't see inside,
+so rather than guess at its inputs I compute different numbers from your own
+history: how far the last seven nights sit under **your** habitual night (your
+own median, not eight hours), and how much your nights vary — measured as median
+absolute deviation over a fortnight, so one long recovery sleep after a hard
+weekend doesn't make a metronomic sleeper look erratic. That answers "you're
+three hours down on your usual 7.2 and your bedtime is swinging by 50 minutes",
+which is closer to a cause than a score is, but it is not the same thing as
+attributing a score change. Genuinely useful direction though, and I hadn't
+framed it that way.
+
+On ignoring feedback you can justify: **that doesn't work yet and it should.**
+There's a context layer — you can record an injury, a race, a goal, a note —
+and it reaches the AI answers and the dashboard. But the detectors that raise
+findings never read it, so if you tell it you were travelling, it still tells you
+your resting heart rate is up for three days like it's news. You've put your
+finger on something I got half-right: the system can be *told* things, and then
+doesn't act on them where it matters most. Suppressing or annotating a finding
+against an active context entry is the obvious fix and I'd not seen it clearly
+until you said it this way.
+
+The "feedback I can justify but the watch can't" framing is the part I'll keep.
+Thanks — that's the most useful reply I could have got.
+
+### Notes on the draft
+
+- **No links.** He didn't ask for one and the sub's rule 3 is a hard ban.
+- Concedes two of three asks rather than selling. The one thing claimed is
+  checkable and true.
+- Ends by crediting his framing, which is the honest reason to reply at all.
+- If this becomes a feature, "suppress a finding while a context entry is
+  active" is the smallest version worth building.
+
+---
+
+## r/GarminWatches — reply draft for u/Ok-Distribution326 (NOT POSTED)
+
+**His comment, 2026-09-12:** "a solution in search of a problem." He already sees
+average and individual RHR, knows his own normal range, points out that HR, HRV,
+stress and much of sleep are *already* compared against a personal baseline, and
+that a missing night already shows as a blank.
+
+**He is right about the differentiator, and that is the finding.** Checked before
+drafting:
+
+| His point | Verdict |
+|---|---|
+| HR/HRV/stress already personal, not population | ✅ **Correct.** The post's "your own baseline rather than a population average" line is a weak claim and he broke it |
+| A missing night is already a blank | ✅ Correct. TrainBud is not worse than Connect here; it was never better |
+| He does not need a number explained to him | ✅ Correct — he is not the user |
+| Nothing is added | ⚠️ One thing is: the data is on **his disk**, and the rule is **readable code** he can change. Not better arithmetic |
+
+> [!warning] Do not defend the baseline framing
+> `src/detect/detectors.ts` is a 28-day robust median/MAD comparison. That is the
+> same *class* of thing Garmin already does on-watch. The honest difference is
+> locality and inspectability, not statistics. Arguing maths here loses, publicly,
+> to someone who is correct.
+
+> [!danger] This kills a line in the r/Garmin repost owed 2026-09-16
+> That body (above) still says *"It compares you against your own baseline rather
+> than a population average"*. Rewrite that paragraph before Wednesday or the same
+> comment arrives in a bigger sub.
+
+### Draft reply
+
+That's a fair hit and you're right on the main point — I framed it badly. Garmin
+does compare HR and HRV against you rather than a population, and I shouldn't
+have implied otherwise. What I was actually reacting to is the composite *score*,
+where I can't see what moved it — not the individual metrics, which are fine.
+
+So what's actually left that's different? Honestly, one thing: where the data
+lives and whether you can see the rule. It keeps a local copy of your own history
+on your own machine — including Garmin's later restatements of a day, since a
+sleep score finalises hours after you wake — and the rules are ordinary code you
+can read. "Three days running, each at least 3 bpm and two deviations above your
+28-day median" is a line in a file, and you can change the threshold if you think
+it's wrong. That's not better maths than Garmin's. It's just yours, on your disk,
+and inspectable.
+
+And on whether you need it — you probably don't. If you already know your normal
+range and what a warning sign looks like, you're doing in your head the thing it
+does, and there's nothing here for you. The people I built it for want their data
+out of the app, to query in plain English or hand to something else, or won't
+open Connect daily but will glance at a wrist. "Solution in search of a problem"
+is exactly the answer I asked the sub for, so thanks for actually giving it.
+
+### Notes on the draft
+
+- **No links**, same as every other comment in this thread — rule 3 is a hard ban.
+- Concedes the framing outright. He is right and the thread can see it.
+- Claims exactly one thing, and it is checkable: local store, readable thresholds.
+- Does not try to recruit him. Telling a correct sceptic he is not the user reads
+  better to everyone else in the thread than a rebuttal does.
 
 ---
 

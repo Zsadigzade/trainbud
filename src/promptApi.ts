@@ -88,14 +88,35 @@ export function formatFindingsContext(
     lines.push(
       `Still gathering data: only ${result.coverage.days} days of history are stored, which is not yet enough to compare anything against a baseline. Say so rather than reassuring the user.`
     );
-  } else if (result.findings.length === 0) {
+  } else if (result.findings.length === 0 && result.muted.length === 0) {
     lines.push(
       `Across ${result.coverage.days} days of history, nothing stands out against this user's own baselines.`
+    );
+  } else if (result.findings.length === 0) {
+    // Everything that stood out was accounted for. "Nothing stands out" would be
+    // false here in the way that costs the most: the model repeats it as
+    // reassurance, and the user is told a clean day by a system they themselves
+    // told to stay quiet.
+    lines.push(
+      `Across ${result.coverage.days} days of history, nothing stands out that this user has not already explained.`
     );
   } else {
     lines.push(`What stands out, from ${result.coverage.days} days of history:`);
     for (const finding of result.findings) {
       lines.push(`- [${finding.severity}] ${finding.headline}`);
+    }
+  }
+
+  // The one surface where a muted finding is still worth showing. A badge has to
+  // be silent or not; prose can hold both halves -- the measurement and the
+  // reason the user gave for it -- which is the whole thing they asked for:
+  // feedback they can justify, acknowledged rather than repeated.
+  if (result.muted.length > 0) {
+    lines.push(
+      "Muted by the user, with their own reason. Do not raise these as concerns; refer to one only if asked, or if it contradicts what they are saying:"
+    );
+    for (const finding of result.muted) {
+      lines.push(`- ${finding.headline} — they logged: ${finding.mutedBy.text}`);
     }
   }
 

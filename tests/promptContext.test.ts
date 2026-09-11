@@ -29,6 +29,7 @@ function inputWithSeriesEnding(lastDate: string, count: number): DetectorInput {
     now: NOW,
     series: (_kind: MetricKind, days: number) => points.slice(-days),
     activities: () => [],
+    context: () => [],
   };
 }
 

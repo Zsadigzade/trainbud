@@ -122,7 +122,8 @@ export const HISTORY_SCHEMA = `
     text           TEXT    NOT NULL,
     effective_from TEXT    NOT NULL,
     effective_to   TEXT,
-    created_at     INTEGER NOT NULL
+    created_at     INTEGER NOT NULL,
+    mutes          TEXT
   );
 
   CREATE INDEX IF NOT EXISTS context_entry_range

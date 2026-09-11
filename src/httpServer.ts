@@ -50,6 +50,7 @@ import {
 import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
 import { runSelfTest } from "./selfTest.js";
 import { addContextEntry, closeContextEntry } from "./history/context.js";
+import { parseMuteTargets } from "./detect/mute.js";
 import { CONTEXT_KINDS, type ContextKind } from "./history/schema.js";
 
 // SECTION: HTTP MCP Server
@@ -1213,6 +1214,9 @@ export function createHttpMcpServer(): HttpMcpServer {
           const kind = readFormOrJsonField(body, "kind")?.trim() ?? "";
           const text = readFormOrJsonField(body, "text")?.trim() ?? "";
           const effectiveTo = readFormOrJsonField(body, "effective_to")?.trim();
+          // Comma-joined rather than a JSON array, so one reader serves both the
+          // page's fetch and a plain form post.
+          const mutes = readFormOrJsonField(body, "mutes")?.trim();
 
           if (!CONTEXT_KINDS.includes(kind as ContextKind)) {
             sendJson(res, 400, {
@@ -1229,6 +1233,7 @@ export function createHttpMcpServer(): HttpMcpServer {
           try {
             const entry = addContextEntry(kind as ContextKind, text, {
               effectiveTo: effectiveTo && effectiveTo.length > 0 ? effectiveTo : undefined,
+              mutes: parseMuteTargets(mutes),
             });
             sendJson(res, 200, { ok: true, id: entry.id });
           } catch (error) {
