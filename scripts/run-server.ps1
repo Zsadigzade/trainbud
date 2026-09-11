@@ -81,7 +81,36 @@ try {
     Write-Host "Could not write to $log ($($_.Exception.Message)); starting anyway."
 }
 
+# Launch with NO CONSOLE WINDOW, as a direct child.
+#
+# The call operator (`& cmd.exe /c ...`) gave the server a visible, empty
+# console window. `-WindowStyle Hidden` on the task's own powershell.exe does
+# not reach it: cmd.exe allocates its own console, and a scheduled task running
+# as a logged-on interactive user shows it. Someone then closes what looks like
+# a stray blank terminal and takes the server down with it -- which is precisely
+# what happened on 2026-09-11.
+#
+# CreateNoWindow with UseShellExecute=$false is what actually suppresses it
+# (CREATE_NO_WINDOW at the Win32 layer). Two details make this the right shape:
+#
+#   STILL A DIRECT CHILD. Not Start-Process, which detaches and leaves an orphan
+#   holding port 3847 after the task is stopped. This process stays inside the
+#   task's tree, so Task Scheduler ending the task ends the server.
+#
+#   CMD DOES ITS OWN FILE REDIRECTION, and this script redirects NOTHING. If the
+#   output were piped back here it would have to be drained continuously, and a
+#   pino-chatty server would deadlock the moment the pipe buffer filled. Writing
+#   straight to a file has no buffer to fill.
+$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+$startInfo.FileName = "$env:ComSpec"
+$startInfo.Arguments = "/c node `"$distEntry`" serve >> `"$log`" 2>&1"
+$startInfo.WorkingDirectory = $RepoRoot
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+
+$process = [System.Diagnostics.Process]::Start($startInfo)
+
 # Blocks here for the lifetime of the server, which is the lifetime Task
 # Scheduler watches and restarts.
-& cmd.exe /c "node `"$distEntry`" serve >> `"$log`" 2>&1"
-exit $LASTEXITCODE
+$process.WaitForExit()
+exit $process.ExitCode

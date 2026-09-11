@@ -32,6 +32,45 @@ All notable changes to this project will be documented in this file.
   provider did not report is recorded as unpriced rather than as zero — a
   zero-cost call would make a spending cap that can never trip.
 
+### Fixed — a blank console window that killed the server when closed
+
+- The scheduled task launched the server through `cmd.exe`, and **`-WindowStyle
+  Hidden` does not propagate**: the task's `powershell.exe` was hidden while the
+  `cmd.exe` it started allocated its own console. A blank terminal appeared,
+  looked like junk, was closed, and took the server with it.
+- Fixed with `CreateNoWindow` + `UseShellExecute=$false` (`CREATE_NO_WINDOW`).
+  It stays a **direct child** on purpose — `Start-Process` also hides the window
+  and detaches, which is what left an orphan holding port 3847 earlier. And
+  `cmd` keeps doing its own file redirection, because piping a pino-chatty
+  server back through PowerShell deadlocks when the pipe buffer fills.
+
+### Added — `scripts/fix-cloudflared-service.ps1`
+
+- `cloudflared service install` (without a token) registers the Windows service
+  with **no arguments**, running as LocalSystem. It then looks for its config in
+  *LocalSystem's* profile rather than the user's, finds none, and reports
+  **Running while tunnelling nothing**. The hostname answers **Cloudflare Error
+  1033**, which reads like a DNS or tunnel fault and is neither.
+- The signature is the pair: `Get-Service` says **Running**, and `cloudflared
+  tunnel info <name>` says **"does not have any active connection"**.
+- The script puts the config and credentials where the service account looks and
+  sets an explicit service command line naming both, so nothing depends on a
+  search path. It also handles a service wedged in `StopPending`, and uses
+  `sc.exe config` because `Set-Service` cannot change a binary path on Windows
+  PowerShell 5.1.
+
+### Fixed — `docs/WEB-MCP.md` documented a claude.ai flow that no longer exists
+
+- Connectors moved from **Settings** to **Customize**, and adding one is now two
+  steps. Rewritten against the live UI.
+- **The authentication page steers you wrong.** Claude probes the server, sees
+  TrainBud's `401` carrying `WWW-Authenticate: Bearer`, and tags OAuth as
+  *Detected* — a false positive, because TrainBud has no OAuth endpoints at all.
+  The correct choice is **No sign-in** plus a request header
+  `authorization: Bearer <key>`, with the scheme **inside the value**.
+- Verification now points at the server's own log rather than the connector page:
+  a page saying "Connected" is a claim about claude.ai's state, not TrainBud's.
+
 ### Added — the server comes back by itself
 
 - **`scripts/install-always-on.ps1`** registers a scheduled task for the server

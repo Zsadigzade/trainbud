@@ -60,30 +60,88 @@ Use `https://YOUR-NGROK-URL/mcp` as the connector endpoint.
 
 ## 3. Connect claude.ai (best first target)
 
-1. Open [claude.ai](https://claude.ai) → **Settings** → **Connectors**
-2. **Add custom connector**
-3. **URL:** `https://YOUR-TUNNEL-URL/mcp`
-4. **Authentication:** Bearer token → paste `TRAINBUD_API_KEY` from `.env`
-5. Save and enable the connector in chat
+Verified against the live UI on 2026-09-11. Adding a connector is **two steps**,
+and the authentication page will steer you wrong if you let it.
 
-Claude.ai supports Streamable HTTP MCP — this is the most reliable web target.
+1. Open **[claude.ai/customize/connectors](https://claude.ai/customize/connectors)**
+   → **Add**.
 
-Test with: *"What was my last Garmin workout?"*
+   > `claude.ai/settings/connectors` now only says *"Connectors have moved to
+   > Customize"*. Older guides — including earlier versions of this file — send
+   > you to a page that no longer does anything.
+
+2. **Step 1 of 2** — fill in:
+
+   | Field | Value |
+   |---|---|
+   | Name | `TrainBud` |
+   | MCP server URL | `https://YOUR-TUNNEL-URL/mcp` |
+
+3. **Step 2 of 2 — choose `No sign-in`.**
+
+   > [!WARNING]
+   > The *Sign in now* option will be tagged **Detected**. **It is wrong.**
+   > Claude probes the server, sees TrainBud's `401` carrying
+   > `WWW-Authenticate: Bearer realm="trainbud"`, and reads that as an OAuth
+   > flow. TrainBud has **no OAuth endpoints at all** — it compares one static
+   > bearer string. Picking the detected option produces a connector that can
+   > never sign in.
+   >
+   > Claude's own note under *No sign-in* says the right thing: *"If the server
+   > uses an API key instead of OAuth, add it under Request headers below."*
+
+4. Under **Request headers**, click **Add header**:
+
+   | Field | Value |
+   |---|---|
+   | Header name | `authorization` (pick it from the dropdown) |
+   | Value | `Bearer YOUR_TRAINBUD_API_KEY` |
+   | Required | ✅ |
+
+   > [!IMPORTANT]
+   > **The `Bearer ` prefix goes in the value.** The page states it: *"Include
+   > the auth scheme in the value... The value is sent exactly as entered."*
+   > Without it, the whole header is compared against your raw key and every
+   > request returns 401.
+   >
+   > Your key is the `TRAINBUD_API_KEY=` line in `.env`. The surrounding single
+   > quotes are **not** part of the key.
+
+5. **Add**, then **Connect** on the connector's page.
+
+### Check the server, not the tick
+
+A connector page saying *Connected* is a claim about claude.ai's state. The
+evidence is in your own log:
+
+```bash
+# Windows
+Get-Content .trainbud\logs\server.log -Tail 40 | Select-String '"path":"/mcp"'
+```
+
+A working connection shows several `POST /mcp` with `"ua":"Claude-User"` and
+**no 401s**. Then enable TrainBud in a chat and ask *"What did I do today?"*
 
 ## 4. Connect ChatGPT (Developer Mode)
 
-ChatGPT MCP support varies by plan and region. After Claude.ai works:
+ChatGPT MCP support varies by plan and region. Do this only after claude.ai works.
 
 1. Open ChatGPT → **Settings** → **Connectors** (or Developer Mode)
 2. Create MCP connector
 3. **Server URL:** `https://YOUR-TUNNEL-URL/mcp`
-4. **Auth:** Bearer token with `TRAINBUD_API_KEY`
+4. **Auth:** an `Authorization: Bearer YOUR_TRAINBUD_API_KEY` header
 
-**Known quirk:** ChatGPT may handle auth headers differently than Claude.ai. If connection fails:
+**Known quirk:** ChatGPT may handle auth headers differently from claude.ai. If
+the connection fails, work outward from the server:
 
-- Verify the tunnel URL responds: `curl https://YOUR-TUNNEL-URL/health`
-- Test MCP with auth: `curl -H "Authorization: Bearer YOUR_KEY" -X POST https://YOUR-TUNNEL-URL/mcp`
-- Try regenerating `TRAINBUD_API_KEY` in `.env` and restarting `trainbud serve`
+```bash
+curl https://YOUR-TUNNEL-URL/health
+curl -H "Authorization: Bearer YOUR_KEY" -X POST https://YOUR-TUNNEL-URL/mcp
+```
+
+If `/health` answers but `/mcp` 401s, the key is wrong or the scheme is missing.
+If `/health` returns HTML rather than JSON, the tunnel is up and the server is
+not — see [ALWAYS-ON.md](./ALWAYS-ON.md).
 
 ## 5. Gemini and Perplexity
 
@@ -105,9 +163,9 @@ ChatGPT MCP support varies by plan and region. After Claude.ai works:
 | Issue | Fix |
 |-------|-----|
 | `Missing TRAINBUD_API_KEY` | Run `trainbud setup` or add key to `.env` |
-| 401 Unauthorized | Check Bearer token matches `.env` exactly |
+| 401 Unauthorized | Check the header value is `Bearer <key>` — the scheme is part of the value, and the quotes in `.env` are not part of the key |
 | 429 Too Many Requests | Wait 60 seconds (rate limit: 60 req/min per IP) |
-| Connector timeout | Ensure tunnel is running and `trainbud serve` is active |
+| Connector timeout | `trainbud doctor` — it checks the tunnel from outside, which a browser cannot. See [ALWAYS-ON.md](./ALWAYS-ON.md) |
 | No Garmin data | Run `trainbud check` to verify Garmin API access |
 
 ## Desktop vs web summary
