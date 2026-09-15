@@ -48,6 +48,14 @@ export interface Finding {
   date: string;
   /** The measurement, in plain language. Never a cause. */
   headline: string;
+  /**
+   * The same measurement in at most 14 characters, for the watch glance.
+   *
+   * The glance is a handful of characters wide and elided the headline to
+   * "This week's traini..." -- the part that said what changed was the part
+   * that got cut. Written here, by the code that knows which number matters.
+   */
+  short: string;
   /** What it means for training. Never medical. */
   detail: string;
   /** The numbers behind the headline, for a surface that wants to render them. */

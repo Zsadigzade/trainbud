@@ -43,7 +43,7 @@ class TrainBudApp extends Application.AppBase {
     // Stamped into pairing telemetry so the server log names the exact binary
     // that is running. Guessing which build the simulator had loaded wasted
     // several cycles.
-    const BUILD_ID = "2.0.3";
+    const BUILD_ID = "2.0.4";
 
     // Console tracing. The simulator's CIQ_LOG.YML records crashes only, but
     // System.println goes to the monkeydo console, which nobody had been
@@ -488,6 +488,14 @@ class TrainBudApp extends Application.AppBase {
         setSummary(cached as Dictionary);
         setUpdatedAt(cachedUpdAt != null ? cachedUpdAt as String : null);
         setCachedAt(cachedAt != null ? cachedAt as Number : null);
+
+        // A watch updated from 2.0.3 holds the full summary and no glance
+        // record, so its glance says "Open to sync" until something writes one.
+        // Only when missing: this path runs on every failed fetch, and a flash
+        // write each time buys nothing.
+        if (Storage.getValue(GlanceData.KEY) == null) {
+            GlanceData.write(cached as Dictionary, cachedAt instanceof Number ? cachedAt as Number : null);
+        }
         setStatus("stale");
         WatchUi.requestUpdate();
         return true;
@@ -499,6 +507,9 @@ class TrainBudApp extends Application.AppBase {
         Storage.setValue(STORAGE_SUMMARY_KEY, data);
         Storage.setValue(STORAGE_CACHED_AT_KEY, now);
         setCachedAt(now);
+        // The glance reads this small record, never the summary itself -- see
+        // GlanceData for the out-of-memory that reading the summary risked.
+        GlanceData.write(data, now);
         if (updatedAt != null) {
             Storage.setValue(STORAGE_UPDATED_AT_KEY, updatedAt as String);
         }

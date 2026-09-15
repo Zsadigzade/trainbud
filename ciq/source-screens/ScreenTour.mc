@@ -1,3 +1,4 @@
+import Toybox.Application;
 import Toybox.Communications;
 import Toybox.Lang;
 import Toybox.Time;
@@ -77,8 +78,29 @@ module ScreenTour {
     function index() as Number { return _index; }
 
     function enter(app as TrainBudApp) as Void {
+        seedGlance();
         apply(app, _index);
     }
+
+    //
+    // Leave a realistic cached summary behind for the glance.
+    //
+    // The glance draws only what an earlier widget session persisted, and the
+    // simulator keeps Application.Storage between runs of the same app id. So a
+    // tour run followed by a normal build is the one way to put the glance in
+    // front of real-shaped data without a server: this writes exactly what
+    // persistSummary() would have written after a successful fetch.
+    //
+    function seedGlance() as Void {
+        var summary = sampleSummary(true);
+        Application.Storage.setValue("summary", summary);
+        Application.Storage.setValue("cached_at", Time.now().value());
+        GlanceData.write(summary, Time.now().value() - _glanceAgeS);
+    }
+
+    // How old the seeded glance record claims to be. Zero draws a fresh strip;
+    // set it to hours or days to photograph the age the title reports.
+    var _glanceAgeS as Number = 0;
 
     function step(app as TrainBudApp, forward as Boolean) as Void {
         _index = forward
@@ -310,7 +332,8 @@ module ScreenTour {
             "coverage" => { "days" => 86, "ready" => true },
             "findings" => [
                 { "kind" => "resting_hr", "severity" => "warn",
-                  "headline" => "Resting HR 4 bpm above your 30-day median for 3 days" },
+                  "headline" => "Resting HR 4 bpm above your 30-day median for 3 days",
+                  "short" => "RHR +4 bpm" },
                 { "kind" => "sleep_debt", "severity" => "notice",
                   "headline" => "Sleep 1.2h below your average across the last week" }
             ],

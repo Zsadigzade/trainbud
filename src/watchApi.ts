@@ -100,6 +100,8 @@ export interface WatchFinding {
   kind: string;
   severity: string;
   headline: string;
+  /** At most 14 characters, for the glance strip. Watches before 2.0.4 ignore it. */
+  short: string;
 }
 
 export interface WatchCoverage {
@@ -382,6 +384,7 @@ export function toWatchFindings(findings: Finding[]): WatchFinding[] {
     kind: finding.kind,
     severity: finding.severity,
     headline: finding.headline,
+    short: finding.short,
   }));
 }
 

@@ -23,7 +23,7 @@ Health & Fitness
 
 ## Version
 
-2.0.3
+2.0.4
 
 ## Short description
 
@@ -161,6 +161,21 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > .\scripts\capture-store-shots.ps1 -Device fr70
 > ```
 
+## What changed in 2.0.4
+
+- **Fixed: the glance could go blank on the Forerunner 55, 745 and Instinct 3.** It read
+  the whole cached summary into the 32 KB a glance is allowed and ran out of memory, so
+  the strip beside the icon showed nothing. It now reads a small record of its own.
+- **Fixed: the finding in the glance was cut off.** It wraps onto a second line where
+  the strip has room, and a companion server from 0.8.0 on sends a short version
+  written for the glance ("Load 2.3x avg").
+- **Fixed: text ran under the bezel** at the top of round screens, and under the small
+  round display on the Instinct 3 Solar.
+- **Fixed: a black box over the glance card** on the Forerunner 70/265, Venu 3 and
+  fenix 8, which draw a coloured card behind the selected glance.
+- **The glance says how old its numbers are.** It shows what the widget last fetched, so
+  once that is more than two hours old the title reads "TrainBud 3h ago".
+- **Recovery in the glance is coloured by your own thresholds**, the same as the cards.
 ## What changed in 2.0.3
 
 - **Fixed: the glance was blank.** The strip beside the app icon in the glance list

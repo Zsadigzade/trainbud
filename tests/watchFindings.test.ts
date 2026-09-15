@@ -11,6 +11,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     severity: "warn",
     date: "2026-08-19",
     headline: "Resting heart rate 5 bpm above your 28-day baseline, 3 days running",
+    short: "RHR +5 bpm",
     detail: "Easy training or a rest day is the low-risk call until it settles.",
     values: { deltaBpm: 5 },
     ...overrides,
@@ -53,6 +54,15 @@ describe("findings on the watch payload", () => {
     assert.equal(mapped[0]?.kind, "rhr_elevated");
     assert.equal(mapped[0]?.severity, "warn");
     assert.match(mapped[0]?.headline ?? "", /Resting heart rate/);
+  });
+
+  // The glance draws `short` when it is there and falls back to the headline,
+  // so a watch older than 2.0.4 ignores it and a newer watch on an older server
+  // still has something to draw.
+  it("carries the glance-length line beside the headline", () => {
+    const mapped = toWatchFindings([finding()]);
+
+    assert.equal(mapped[0]?.short, "RHR +5 bpm");
   });
 
   // The watch cannot wrap arbitrary text well -- a fixed-font activity name

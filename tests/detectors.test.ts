@@ -339,3 +339,37 @@ describe("acute:chronic load ratio", () => {
     assert.equal(withHr?.values.ratio, plusUnscorable?.values.ratio);
   });
 });
+
+// The watch glance is a handful of characters wide, and a headline is a
+// sentence: on a Forerunner 70 "This week's training load is 2.31x your
+// four-week average" drew as "This week's traini...", and on an Instinct 3
+// "Restin...". The strip needs its own line, written by the code that knows
+// which number matters, not cut from the sentence by a device that does not.
+describe("the glance-length line on every finding", () => {
+  const MAX_SHORT = 14;
+
+  const fired = [
+    detectRestingHrElevation(input({ resting_hr: [...steadyResting(28), 56, 57, 56] })),
+    detectSleepDebt(input({ sleep_seconds: [...repeat(7.5 * 3600, 28), ...repeat(6 * 3600, 7)] })),
+    detectHrvTrendBreak(input({ hrv_overnight: [...steadyResting(28).map((v) => v - 5), 30, 29, 31] })),
+    detectLoadRatio(input(HR_PROFILE_DATA, sessions([...repeat(130, 21), ...repeat(175, 7)], 90))),
+    detectLoadRatio(input(HR_PROFILE_DATA, sessions([...repeat(150, 21), ...repeat(null, 7)]))),
+  ];
+
+  it("fires every detector, so the checks below are not vacuous", () => {
+    assert.deepEqual(
+      fired.map((finding) => finding?.kind),
+      ["rhr_elevated", "sleep_debt", "hrv_trend_break", "load_ratio_high", "load_ratio_low"]
+    );
+  });
+
+  for (const finding of fired) {
+    it(`${finding?.kind ?? "?"}: fits a glance and keeps the number`, () => {
+      const short = finding?.short ?? "";
+      assert.ok(short.length > 0, "no short line");
+      assert.ok(short.length <= MAX_SHORT, `"${short}" is ${short.length} characters`);
+      assert.match(short, /\d/, `"${short}" dropped the measurement`);
+      assert.doesNotMatch(short, /ill|sick|infection|overtrain/i);
+    });
+  }
+});

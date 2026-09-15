@@ -14,6 +14,7 @@ function finding(kind: FindingKind): Finding {
     severity: "notice",
     date: "2026-08-19",
     headline: `${kind} headline`,
+    short: `${kind}`,
     detail: "detail",
     values: {},
   };

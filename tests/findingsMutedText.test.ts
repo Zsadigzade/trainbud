@@ -12,6 +12,7 @@ const finding: Finding = {
   severity: "warn",
   date: "2026-09-12",
   headline: "Resting heart rate 5 bpm above your 28-day baseline, 3 days running",
+  short: "RHR +5 bpm",
   detail: "Easy training or a rest day is the low-risk call until it settles.",
   values: { deltaBpm: 5 },
 };

@@ -2,7 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 2026-09-12
+## [Unreleased] — 2026-09-15
+
+### Fixed — watch 2.0.4: the glance, drawn properly on every device
+
+Reported on a Forerunner 70 as "sometimes not rendered properly": text cut off,
+sometimes an empty strip, sometimes old numbers. A seeded simulator run found
+five separate faults behind it.
+
+- **An out-of-memory crash on the 32 KB devices.** The glance read the whole
+  cached `/api/watch` summary out of Storage — twice per draw — and on the
+  Forerunner 55 the simulator reproduced `Out Of Memory Error` at that read with
+  an ordinary two-finding payload. On the wrist that is the icon beside an empty
+  strip. The widget now writes a small pre-formatted record (`GlanceData`) and
+  the glance reads nothing else: 23.2 KB of 28.6 KB on the Forerunner 55, and
+  18.4 KB against 22.7 KB before on the Forerunner 70.
+- **Headlines elided to nothing.** Findings gained a `short` line of at most 14
+  characters ("Load 2.3x avg"), sent to the watch beside the headline; the
+  glance prefers it and falls back to wrapping the headline over two lines.
+- **Text under the bezel.** The glance rectangle runs under the round edge at the
+  top of the screen and under the Instinct 3 Solar's sub-display. Line widths
+  and the left edge are now measured against the visible screen.
+- **A black rectangle over the device's glance card**, from clearing to
+  `COLOR_BLACK` on devices that theme the selected glance.
+- **Old numbers with no date.** The title reads "TrainBud 3h ago" once the
+  record is two hours old, and recovery is coloured by the server-graded state
+  rather than by thresholds the glance kept for itself.
 
 ### Added — feedback you can justify, and the watch cannot
 

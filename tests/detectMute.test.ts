@@ -13,6 +13,7 @@ function finding(kind: Finding["kind"], date: string): Finding {
     severity: "notice",
     date,
     headline: `${kind} happened`,
+    short: `${kind}`,
     detail: "detail",
     values: {},
   };

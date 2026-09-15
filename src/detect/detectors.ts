@@ -146,6 +146,7 @@ export function detectRestingHrElevation(input: DetectorInput): Finding | null {
     severity: deltaBpm >= 6 ? "warn" : "notice",
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
     headline: `Resting heart rate ${deltaBpm} bpm above your ${baseline.count}-day baseline, ${RECENT_DAYS} days running`,
+    short: `RHR +${Math.round(deltaBpm)} bpm`,
     detail:
       "A run like this usually means the last few sessions have not been absorbed yet. Easy training or a rest day is the low-risk call until it settles.",
     values: {
@@ -212,6 +213,7 @@ export function detectSleepDebt(input: DetectorInput): Finding | null {
     severity: debtHours >= 6 ? "warn" : "notice",
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
     headline: `${debtHours} h of sleep short of your usual ${round(baseline.median / 3600)} h over the last ${recentPoints.length} nights`,
+    short: `Sleep -${debtHours}h`,
     detail:
       "Short weeks blunt what hard sessions give back. Worth protecting the next few nights before the next quality session.",
     values: {
@@ -266,6 +268,7 @@ function buildHrvFinding(
     severity: dropPercent >= 20 ? "warn" : "notice",
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
     headline: `Overnight HRV ${dropPercent}% below your ${baseline.count}-day baseline across ${recentPoints.length} nights`,
+    short: `HRV -${Math.round(dropPercent)}%`,
     detail:
       "A multi-night drop is the usual sign that recovery is lagging the training. Keep the next session easy and see whether it comes back.",
     values: {
@@ -351,6 +354,7 @@ export function detectLoadRatio(input: DetectorInput): Finding | null {
     headline: isHigh
       ? `This week's training load is ${ratio}x your four-week average`
       : `This week's training load is down to ${ratio}x your four-week average`,
+    short: `Load ${round(ratio, 1)}x avg`,
     detail: isHigh
       ? `Jumps this size are where injuries tend to come from. Holding the next week nearer the average is the low-risk call. ${provenance}`
       : `A drop this size for more than a week or two starts costing fitness rather than building it. ${provenance}`,
