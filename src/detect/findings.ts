@@ -19,7 +19,8 @@ export type FindingKind =
   | "sleep_debt"
   | "hrv_trend_break"
   | "load_ratio_high"
-  | "load_ratio_low";
+  | "load_ratio_low"
+  | "recovery_strain";
 
 /**
  * The same list at runtime, because a mute arrives as a string from an MCP
@@ -32,6 +33,7 @@ export const FINDING_KINDS: FindingKind[] = [
   "hrv_trend_break",
   "load_ratio_high",
   "load_ratio_low",
+  "recovery_strain",
 ];
 
 /** `"*"` mutes every kind -- "I know why everything is off this week". */
@@ -56,6 +58,16 @@ export interface Finding {
    * that got cut. Written here, by the code that knows which number matters.
    */
   short: string;
+  /**
+   * The rule this fired on, with the numbers in force -- at most 160 characters.
+   *
+   * "Transparency about metrics is helpful" was the reply that mattered in the
+   * first thread anyone left on this project. A finding that states a
+   * measurement and hides the bar it cleared is the same black box as the score
+   * it was built to get around, so every finding carries its own rule, and
+   * that rule reads from the user's profile rather than from a constant.
+   */
+  why: string;
   /** What it means for training. Never medical. */
   detail: string;
   /** The numbers behind the headline, for a surface that wants to render them. */
@@ -99,4 +111,39 @@ export interface DetectorInput {
    * dozens of them in a lifetime, not thousands.
    */
   context: () => ContextEntry[];
+  /**
+   * The bars every detector clears before it says anything. Omitted means the
+   * shipping defaults; buildDetectorInput always passes the user's own, and a
+   * test holds it to that.
+   */
+  rules?: DetectorRules;
 }
+
+/**
+ * Where each detector draws its line, editable from the dashboard.
+ *
+ * These were constants in detectors.ts. The defaults below are exactly those
+ * constants, so nobody's findings change on upgrade until they choose to move a
+ * bar -- and the validation in profile.ts keeps a bar from being moved somewhere
+ * that makes every day, or no day, a finding.
+ */
+export interface DetectorRules {
+  /** A run of `days` days, each at least `minBpm` and `minZ` deviations above the median. */
+  restingHr: { days: number; minZ: number; minBpm: number };
+  /** Hours of shortfall over seven nights, measured below the user's own floor. */
+  sleepDebt: { hours: number };
+  /** Deviations below the median the recent nights' median has to fall. Positive. */
+  hrv: { dropZ: number };
+  /** Acute:chronic TRIMP ratio above `high` or below `low`. */
+  load: { high: number; low: number };
+  /** Resting HR, overnight HRV and sleep stress all `z` deviations the wrong way for `days` days. */
+  strain: { enabled: boolean; days: number; z: number };
+}
+
+export const DEFAULT_DETECTOR_RULES: DetectorRules = {
+  restingHr: { days: 3, minZ: 2, minBpm: 3 },
+  sleepDebt: { hours: 3 },
+  hrv: { dropZ: 2 },
+  load: { high: 1.5, low: 0.8 },
+  strain: { enabled: true, days: 2, z: 1.5 },
+};

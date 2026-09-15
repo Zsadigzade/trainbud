@@ -14,6 +14,7 @@ function finding(kind: Finding["kind"], date: string): Finding {
     date,
     headline: `${kind} happened`,
     short: `${kind}`,
+    why: `${kind} rule`,
     detail: "detail",
     values: {},
   };

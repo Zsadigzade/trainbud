@@ -79,6 +79,8 @@ export interface DashboardFinding {
   severity: string;
   headline: string;
   detail: string;
+  /** The rule it fired on, with the numbers in force. */
+  why: string;
 }
 
 export interface DashboardMutedFinding extends DashboardFinding {
@@ -313,11 +315,13 @@ export function getDashboardData(publicUrl?: string): DashboardData {
       severity: finding.severity,
       headline: finding.headline,
       detail: finding.detail,
+      why: finding.why,
     })),
     mutedFindings: detection.muted.map((finding) => ({
       severity: finding.severity,
       headline: finding.headline,
       detail: finding.detail,
+      why: finding.why,
       reason: finding.mutedBy.text,
       entryId: finding.mutedBy.id,
     })),

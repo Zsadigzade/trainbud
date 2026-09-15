@@ -1,5 +1,5 @@
 import { buildBaseline, meanOf, median, robustZ, type Baseline } from "./baseline.js";
-import type { DetectorInput, Finding } from "./findings.js";
+import { DEFAULT_DETECTOR_RULES, type DetectorInput, type DetectorRules, type Finding } from "./findings.js";
 import type { MetricPoint } from "../history/store.js";
 import { dailyTrimp, estimateHrProfile } from "./trimp.js";
 import type { DateTime } from "luxon";
@@ -16,16 +16,14 @@ const BASELINE_DAYS = 28;
 const RECENT_DAYS = 3;
 const SLEEP_WEEK_DAYS = 7;
 
-/** Robust-z at which a run of days stops looking like night-to-night noise. */
-const ELEVATION_Z = 2;
+// The bars themselves -- the z at which a run of days stops looking like noise,
+// the bpm floor below which a statistically large move is physiologically
+// meaningless, the hours of sleep debt, the HRV drop, the load ratios -- live in
+// DetectorRules now, and default to the values that were constants here.
 
-/**
- * A statistically large move can still be physiologically meaningless. Without
- * this floor, a very consistent sleeper gets flagged over 1 bpm.
- */
-const ELEVATION_MIN_BPM = 3;
-
-const SLEEP_DEBT_HOURS = 3;
+function rulesOf(input: DetectorInput): DetectorRules {
+  return input.rules ?? DEFAULT_DETECTOR_RULES;
+}
 
 /**
  * How far below the median a night has to fall before it counts as short at
@@ -33,7 +31,6 @@ const SLEEP_DEBT_HOURS = 3;
  * note in detectSleepDebt for the measurement that made this necessary.
  */
 const SLEEP_NOISE_FLOOR_SECONDS = 30 * 60;
-const HRV_DROP_Z = -2;
 
 interface Split {
   baselinePoints: MetricPoint[];
@@ -111,10 +108,11 @@ export function restingHrDeltaBpm(input: DetectorInput): number | null {
 }
 
 export function detectRestingHrElevation(input: DetectorInput): Finding | null {
-  const points = input.series("resting_hr", BASELINE_DAYS + RECENT_DAYS);
-  const { baselinePoints, recentPoints } = split(points, RECENT_DAYS, input.now);
+  const rule = rulesOf(input).restingHr;
+  const points = input.series("resting_hr", BASELINE_DAYS + rule.days);
+  const { baselinePoints, recentPoints } = split(points, rule.days, input.now);
 
-  if (recentPoints.length < RECENT_DAYS) {
+  if (recentPoints.length < rule.days) {
     return null;
   }
 
@@ -127,7 +125,7 @@ export function detectRestingHrElevation(input: DetectorInput): Finding | null {
   // inside the run means it is not a run.
   const elevated = recentPoints.every((point) => {
     const z = robustZ(point.value, baseline);
-    return z !== null && z >= ELEVATION_Z && point.value - baseline.median >= ELEVATION_MIN_BPM;
+    return z !== null && z >= rule.minZ && point.value - baseline.median >= rule.minBpm;
   });
 
   if (!elevated) {
@@ -145,12 +143,13 @@ export function detectRestingHrElevation(input: DetectorInput): Finding | null {
     kind: "rhr_elevated",
     severity: deltaBpm >= 6 ? "warn" : "notice",
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
-    headline: `Resting heart rate ${deltaBpm} bpm above your ${baseline.count}-day baseline, ${RECENT_DAYS} days running`,
+    headline: `Resting heart rate ${deltaBpm} bpm above your ${baseline.count}-day baseline, ${rule.days} days running`,
     short: `RHR +${Math.round(deltaBpm)} bpm`,
+    why: `Each of the last ${rule.days} days was at least ${rule.minBpm} bpm and ${rule.minZ} deviations above your ${baseline.count}-day median of ${round(baseline.median)} bpm.`,
     detail:
       "A run like this usually means the last few sessions have not been absorbed yet. Easy training or a rest day is the low-risk call until it settles.",
     values: {
-      days: RECENT_DAYS,
+      days: rule.days,
       recentBpm: round(recentMean),
       baselineBpm: round(baseline.median),
       deltaBpm,
@@ -204,7 +203,8 @@ export function detectSleepDebt(input: DetectorInput): Finding | null {
   }, 0);
 
   const debtHours = round(debtSeconds / 3600);
-  if (debtHours < SLEEP_DEBT_HOURS) {
+  const rule = rulesOf(input).sleepDebt;
+  if (debtHours < rule.hours) {
     return null;
   }
 
@@ -214,6 +214,7 @@ export function detectSleepDebt(input: DetectorInput): Finding | null {
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
     headline: `${debtHours} h of sleep short of your usual ${round(baseline.median / 3600)} h over the last ${recentPoints.length} nights`,
     short: `Sleep -${debtHours}h`,
+    why: `Nights short of your usual ${round(baseline.median / 3600)} h, less your normal spread, added up to ${rule.hours} h or more over ${recentPoints.length} nights.`,
     detail:
       "Short weeks blunt what hard sessions give back. Worth protecting the next few nights before the next quality session.",
     values: {
@@ -247,8 +248,9 @@ export function detectHrvTrendBreak(input: DetectorInput): Finding | null {
     return null;
   }
 
+  const rule = rulesOf(input).hrv;
   const z = robustZ(recentMedian, baseline);
-  if (z === null || z > HRV_DROP_Z) {
+  if (z === null || z > -rule.dropZ) {
     return null;
   }
 
@@ -269,6 +271,7 @@ function buildHrvFinding(
     date: lastDate(recentPoints, input.now.toISODate() ?? ""),
     headline: `Overnight HRV ${dropPercent}% below your ${baseline.count}-day baseline across ${recentPoints.length} nights`,
     short: `HRV -${Math.round(dropPercent)}%`,
+    why: `The middle of your last ${recentPoints.length} nights was ${rulesOf(input).hrv.dropZ} or more deviations below your ${baseline.count}-day HRV median of ${round(baseline.median)} ms.`,
     detail:
       "A multi-night drop is the usual sign that recovery is lagging the training. Keep the next session easy and see whether it comes back.",
     values: {
@@ -288,8 +291,6 @@ function buildHrvFinding(
 
 const ACUTE_DAYS = 7;
 const CHRONIC_DAYS = 28;
-const RATIO_HIGH = 1.5;
-const RATIO_LOW = 0.8;
 
 /**
  * A chronic average taken over a hole in the store makes every ratio look
@@ -338,12 +339,13 @@ export function detectLoadRatio(input: DetectorInput): Finding | null {
   }
 
   const ratio = round(acute / chronicWeekly, 2);
+  const rule = rulesOf(input).load;
 
-  if (ratio <= RATIO_HIGH && ratio >= RATIO_LOW) {
+  if (ratio <= rule.high && ratio >= rule.low) {
     return null;
   }
 
-  const isHigh = ratio > RATIO_HIGH;
+  const isHigh = ratio > rule.high;
   const provenance =
     "This load is TRIMP, computed here from duration and heart rate, so it will not match the training load Connect shows.";
 
@@ -355,6 +357,9 @@ export function detectLoadRatio(input: DetectorInput): Finding | null {
       ? `This week's training load is ${ratio}x your four-week average`
       : `This week's training load is down to ${ratio}x your four-week average`,
     short: `Load ${round(ratio, 1)}x avg`,
+    why: isHigh
+      ? `Your 7-day TRIMP of ${round(acute)} was over ${rule.high}x your 28-day weekly average of ${round(chronicWeekly)}.`
+      : `Your 7-day TRIMP of ${round(acute)} was under ${rule.low}x your 28-day weekly average of ${round(chronicWeekly)}.`,
     detail: isHigh
       ? `Jumps this size are where injuries tend to come from. Holding the next week nearer the average is the low-risk call. ${provenance}`
       : `A drop this size for more than a week or two starts costing fitness rather than building it. ${provenance}`,
@@ -362,6 +367,99 @@ export function detectLoadRatio(input: DetectorInput): Finding | null {
       ratio,
       acuteLoad: round(acute),
       chronicWeeklyLoad: round(chronicWeekly),
+    },
+  };
+}
+
+// SECTION: Several recovery signals at once
+//
+// One elevated resting heart rate is a warm bedroom as often as it is anything.
+// Resting heart rate up, overnight HRV down AND sleep stress up, together, on
+// every day of the window, is a stronger statement than any of the three alone
+// -- and it is still only a statement about measurements. A reply on
+// r/GarminWatches hoped this app would "forecast sickness"; the data cannot tell
+// an infection from a hard week or a glass of wine, findings.ts forbids naming a
+// cause, and this finding does not.
+
+interface SignalCheck {
+  kind: "resting_hr" | "hrv_overnight" | "sleep_stress";
+  /** +1 when higher is the wrong way, -1 when lower is. */
+  direction: 1 | -1;
+}
+
+const STRAIN_SIGNALS: SignalCheck[] = [
+  { kind: "resting_hr", direction: 1 },
+  { kind: "hrv_overnight", direction: -1 },
+  { kind: "sleep_stress", direction: 1 },
+];
+
+export function detectRecoveryStrain(input: DetectorInput): Finding | null {
+  const rule = rulesOf(input).strain;
+  if (!rule.enabled) {
+    return null;
+  }
+
+  const readings: Record<string, { recent: number; baseline: number }> = {};
+  let latest = "";
+
+  for (const signal of STRAIN_SIGNALS) {
+    const points = input.series(signal.kind, BASELINE_DAYS + rule.days);
+    const { baselinePoints, recentPoints } = split(points, rule.days, input.now);
+
+    if (recentPoints.length < rule.days) {
+      return null;
+    }
+
+    const baseline = buildBaseline(baselinePoints);
+    if (!baseline) {
+      return null;
+    }
+
+    // Every day in the window, every signal. One ordinary day means the three
+    // did not move together, which is the whole claim.
+    const allOff = recentPoints.every((point) => {
+      const z = robustZ(point.value, baseline);
+      return z !== null && signal.direction * z >= rule.z;
+    });
+    if (!allOff) {
+      return null;
+    }
+
+    const recentMean = meanOf(recentPoints);
+    if (recentMean === null) {
+      return null;
+    }
+
+    readings[signal.kind] = { recent: round(recentMean), baseline: round(baseline.median) };
+    const last = lastDate(recentPoints, "");
+    latest = last > latest ? last : latest;
+  }
+
+  const rhr = readings.resting_hr;
+  const hrv = readings.hrv_overnight;
+  const stress = readings.sleep_stress;
+  if (!rhr || !hrv || !stress) {
+    return null;
+  }
+
+  return {
+    kind: "recovery_strain",
+    severity: "warn",
+    date: latest || (input.now.toISODate() ?? ""),
+    headline: `Resting HR, HRV and sleep stress all off your baseline together, ${rule.days} days running`,
+    short: "RHR+HRV+stress",
+    why: `Resting HR, overnight HRV and sleep stress were each ${rule.z}+ deviations the wrong way from their 28-day medians on all of the last ${rule.days} days.`,
+    detail:
+      `Resting HR ${rhr.recent} (usual ${rhr.baseline}), HRV ${hrv.recent} ms (usual ${hrv.baseline}), sleep stress ${stress.recent} (usual ${stress.baseline}). ` +
+      "When several recovery signals move together it is a stronger sign than any one alone: keep training easy until they settle.",
+    values: {
+      days: rule.days,
+      restingHr: rhr.recent,
+      restingHrBaseline: rhr.baseline,
+      hrv: hrv.recent,
+      hrvBaseline: hrv.baseline,
+      sleepStress: stress.recent,
+      sleepStressBaseline: stress.baseline,
     },
   };
 }

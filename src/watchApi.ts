@@ -102,6 +102,8 @@ export interface WatchFinding {
   headline: string;
   /** At most 14 characters, for the glance strip. Watches before 2.0.4 ignore it. */
   short: string;
+  /** The rule it fired on, at most 160 characters. Shown behind "Why?" from 2.1.0. */
+  why: string;
 }
 
 export interface WatchCoverage {
@@ -385,6 +387,7 @@ export function toWatchFindings(findings: Finding[]): WatchFinding[] {
     severity: finding.severity,
     headline: finding.headline,
     short: finding.short,
+    why: finding.why,
   }));
 }
 

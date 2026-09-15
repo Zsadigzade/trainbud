@@ -2,9 +2,11 @@ import { DateTime } from "luxon";
 import { allContext } from "../history/context.js";
 import type { MetricKind } from "../history/schema.js";
 import { getActivitiesBetween, getMetricSeries } from "../history/store.js";
+import { getProfile } from "../profile.js";
 import {
   detectHrvTrendBreak,
   detectLoadRatio,
+  detectRecoveryStrain,
   detectRestingHrElevation,
   detectSleepDebt,
 } from "./detectors.js";
@@ -138,6 +140,9 @@ export function buildDetectorInput(now: DateTime = DateTime.local()): DetectorIn
       return getActivitiesBetween(start, end);
     },
     context: () => allContext(),
+    // The user's own bars. Read here, where every production caller gets its
+    // input, so no surface can run the detectors on the defaults by accident.
+    rules: getProfile().detectorRules,
   };
 }
 
@@ -169,9 +174,15 @@ export function runDetectors(input: DetectorInput = buildDetectorInput()): Detec
       ? Number.MAX_SAFE_INTEGER
       : Math.max(0, Math.round(today.diff(DateTime.fromISO(throughDate).startOf("day"), "days").days));
 
+  const strain = detectRecoveryStrain(input);
+
   const raised = [
-    detectRestingHrElevation(input),
-    detectHrvTrendBreak(input),
+    strain,
+    // When all three recovery signals moved together, the strain finding already
+    // says the resting HR and HRV halves of it, with their numbers. Repeating
+    // them as two more warnings is three alarms for one fact.
+    strain ? null : detectRestingHrElevation(input),
+    strain ? null : detectHrvTrendBreak(input),
     detectLoadRatio(input),
     detectSleepDebt(input),
   ].filter((finding): finding is Finding => finding !== null);

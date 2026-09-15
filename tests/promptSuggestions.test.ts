@@ -15,6 +15,7 @@ function finding(kind: FindingKind): Finding {
     date: "2026-08-19",
     headline: `${kind} headline`,
     short: `${kind}`,
+    why: `${kind} rule`,
     detail: "detail",
     values: {},
   };

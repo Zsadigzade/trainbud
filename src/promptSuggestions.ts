@@ -1,6 +1,7 @@
 import { describeFindingsCoverage, type DetectionResult } from "./detect/index.js";
 import type { Finding, FindingKind } from "./detect/findings.js";
 import type { ContextEntry } from "./history/context.js";
+import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptLimits.js";
 
 // SECTION: Ask prompts
 //
@@ -15,9 +16,9 @@ import type { ContextEntry } from "./history/context.js";
 // had changed when it had not.
 
 /** Anything longer wraps or clips on a 390 px round screen. */
-const MAX_LENGTH = 32;
+const MAX_LENGTH = PROMPT_MAX_LENGTH;
 
-const PROMPT_COUNT = 5;
+const PROMPT_COUNT = PROMPT_SLOTS;
 
 const FROM_FINDING: Record<FindingKind, string> = {
   rhr_elevated: "Why is my resting HR up?",
@@ -25,6 +26,7 @@ const FROM_FINDING: Record<FindingKind, string> = {
   hrv_trend_break: "Why is my HRV dropping?",
   load_ratio_high: "Am I ramping up too fast?",
   load_ratio_low: "Have I lost fitness?",
+  recovery_strain: "Why is my recovery off?",
 };
 
 /**
@@ -171,7 +173,4 @@ export function buildPromptSuggestions(
  * for the profile schema, which refuses to store a question the menu could
  * never show. This file owns both numbers: the menu is what they describe.
  */
-export const PROMPT_MAX_LENGTH = MAX_LENGTH;
-
-/** How many the watch draws. Also the cap on how many the user may write. */
-export const PROMPT_SLOTS = PROMPT_COUNT;
+export { PROMPT_MAX_LENGTH, PROMPT_SLOTS };

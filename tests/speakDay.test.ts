@@ -75,8 +75,8 @@ describe("composeSpokenDay", () => {
     const spoken = composeSpokenDay(
       summary({
         findings: [
-          { kind: "rhr", severity: "warn", headline: "Resting heart rate up 4 bpm", short: "RHR +4 bpm" },
-          { kind: "load", severity: "info", headline: "Load steady", short: "Load steady" },
+          { kind: "rhr", severity: "warn", headline: "Resting heart rate up 4 bpm", short: "RHR +4 bpm", why: "rule" },
+          { kind: "load", severity: "info", headline: "Load steady", short: "Load steady", why: "rule" },
         ],
       })
     );
@@ -116,7 +116,7 @@ describe("composeSpokenDay", () => {
       summary({
         recovery: { score: 41, label: "poor" },
         sleep: { hours: 5.4, score: 58, label: "short" },
-        findings: [{ kind: "load", severity: "warn", headline: "Load 1.8x your average, +40%", short: "Load 1.8x avg" }],
+        findings: [{ kind: "load", severity: "warn", headline: "Load 1.8x your average, +40%", short: "Load 1.8x avg", why: "rule" }],
       })
     );
     assert.ok(!/[%+]/.test(spoken.text), `symbol survived: ${spoken.text}`);

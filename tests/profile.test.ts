@@ -253,3 +253,30 @@ describe("the user's own Ask questions", () => {
     assert.deepEqual(saved.ai.customPrompts, ["Is my knee ok?"]);
   });
 });
+
+describe("detector rules", () => {
+  it("defaults to the bars the detectors shipped with", async () => {
+    const { DEFAULT_DETECTOR_RULES } = await import("../src/detect/findings.js");
+    assert.deepEqual(profile.getProfile().detectorRules, DEFAULT_DETECTOR_RULES);
+  });
+
+  it("saves a moved bar and leaves the others alone", () => {
+    const saved = profile.updateProfile({ detectorRules: { restingHr: { minBpm: 5 } } });
+    assert.equal(saved.detectorRules.restingHr.minBpm, 5);
+    assert.equal(saved.detectorRules.restingHr.days, 3);
+    assert.equal(saved.detectorRules.load.high, 1.5);
+  });
+
+  it("refuses a bar that would make every day a finding", () => {
+    assert.throws(() => profile.updateProfile({ detectorRules: { load: { high: 1 } } }), /load/);
+    assert.throws(() => profile.updateProfile({ detectorRules: { restingHr: { days: 30 } } }), /restingHr/);
+  });
+
+  // The fault this guards: rules a user saved in the dashboard and a detector
+  // that never read them. Every production caller builds its input here.
+  it("reaches the detectors through buildDetectorInput", async () => {
+    profile.updateProfile({ detectorRules: { sleepDebt: { hours: 1.5 } } });
+    const { buildDetectorInput } = await import("../src/detect/index.js");
+    assert.equal(buildDetectorInput().rules?.sleepDebt.hours, 1.5);
+  });
+});

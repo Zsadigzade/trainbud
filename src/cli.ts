@@ -236,6 +236,7 @@ async function runFindings(): Promise<void> {
   for (const finding of result.findings) {
     console.log(`[${finding.severity}] ${finding.headline}`);
     console.log(`  ${finding.detail}`);
+    console.log(`  Rule: ${finding.why}`);
     console.log("");
   }
 

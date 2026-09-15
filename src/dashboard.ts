@@ -1,6 +1,6 @@
 import { CARD_IDS } from "./profile.js";
 import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptSuggestions.js";
-import { FINDING_KINDS, type FindingKind } from "./detect/findings.js";
+import { FINDING_KINDS, type DetectorRules, type FindingKind } from "./detect/findings.js";
 import { CONTEXT_KINDS } from "./history/schema.js";
 import { appConfig } from "./config.js";
 import { columnChart, dumbbellChart, lineChart } from "./dashboardCharts.js";
@@ -101,7 +101,81 @@ const MUTE_LABELS: Record<FindingKind, string> = {
   hrv_trend_break: "HRV dropping",
   load_ratio_high: "training load being high",
   load_ratio_low: "training load being low",
+  recovery_strain: "several recovery signals being off together",
 };
+
+interface RuleField {
+  name: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+}
+
+/**
+ * The detector rules as number inputs, bounded by the same ranges the profile
+ * schema enforces, so the browser refuses the value the server would.
+ */
+function renderRuleFields(rules: DetectorRules): string {
+  const groups: Array<{ title: string; hint: string; fields: RuleField[] }> = [
+    {
+      title: "Resting heart rate up",
+      hint: "a run of days above your median",
+      fields: [
+        { name: "restingHr.days", label: "Days in a row", value: rules.restingHr.days, min: 2, max: 7, step: 1 },
+        { name: "restingHr.minBpm", label: "At least (bpm)", value: rules.restingHr.minBpm, min: 1, max: 20, step: 0.5 },
+        { name: "restingHr.minZ", label: "At least (deviations)", value: rules.restingHr.minZ, min: 0.5, max: 5, step: 0.1 },
+      ],
+    },
+    {
+      title: "Sleep debt",
+      hint: "shortfall over seven nights",
+      fields: [{ name: "sleepDebt.hours", label: "Hours short", value: rules.sleepDebt.hours, min: 0.5, max: 20, step: 0.5 }],
+    },
+    {
+      title: "HRV down",
+      hint: "last three nights against your median",
+      fields: [{ name: "hrv.dropZ", label: "Deviations below", value: rules.hrv.dropZ, min: 0.5, max: 5, step: 0.1 }],
+    },
+    {
+      title: "Training load",
+      hint: "7-day TRIMP against your 28-day weekly average",
+      fields: [
+        { name: "load.high", label: "High above (x)", value: rules.load.high, min: 1.05, max: 5, step: 0.05 },
+        { name: "load.low", label: "Low below (x)", value: rules.load.low, min: 0.1, max: 0.95, step: 0.05 },
+      ],
+    },
+    {
+      title: "Several signals together",
+      hint: "resting HR, HRV and sleep stress all off at once",
+      fields: [
+        { name: "strain.days", label: "Days in a row", value: rules.strain.days, min: 1, max: 7, step: 1 },
+        { name: "strain.z", label: "At least (deviations)", value: rules.strain.z, min: 0.5, max: 5, step: 0.1 },
+      ],
+    },
+  ];
+
+  return groups
+    .map(
+      (group) => `<h3>${group.title} <span class="muted-dim">${group.hint}</span></h3>
+      <div class="grid2">
+        ${group.fields
+          .map(
+            (field) => `<label class="field"><span>${field.label}</span>
+          <input type="number" name="${field.name}" value="${field.value}" min="${field.min}" max="${field.max}" step="${field.step}"></label>`
+          )
+          .join("")}
+        ${
+          group.title === "Several signals together"
+            ? `<label class="field"><span>Raise it</span>
+          <input type="checkbox" name="strain.enabled" ${rules.strain.enabled ? "checked" : ""}></label>`
+            : ""
+        }
+      </div>`
+    )
+    .join("");
+}
 
 function severityWord(severity: string): string {
   return severity === "warn" ? "hard" : severity === "notice" ? "caution" : "good";
@@ -129,6 +203,7 @@ function renderToday(data: DashboardData): string {
             (finding) => `<div class="finding">
         <div class="finding-head"><span class="dot dot-${severityWord(finding.severity)}"></span>${escapeHtml(finding.headline)}</div>
         <p class="muted">${escapeHtml(finding.detail)}</p>
+        <p class="muted-dim finding-why">Rule: ${escapeHtml(finding.why)}</p>
       </div>`
           )
           .join("");
@@ -542,6 +617,20 @@ export function renderDashboard(publicUrl?: string): string {
       </details>
 
       <details>
+        <summary>Detector rules</summary>
+        <div class="body">
+          <p class="muted" style="margin-bottom:12px">The bar each finding has to clear before it is raised. Every finding shows the rule it fired on. A "deviation" is measured against your own history's spread, so 2 means "clearly unusual for you", not a fixed number.</p>
+          <form id="rules-form">
+            ${renderRuleFields(profile.detectorRules)}
+            <div class="actions">
+              <button type="submit" class="btn-primary">Save</button>
+              <button type="button" id="rules-reset">Reset to defaults</button>
+            </div>
+          </form>
+        </div>
+      </details>
+
+      <details>
         <summary>Watch cards</summary>
         <div class="body">
           <p class="muted" style="margin-bottom:12px">The carousel on your wrist, in this order. Live on the watch's next fetch — no Connect IQ settings, no store update.</p>
@@ -885,6 +974,27 @@ export function renderDashboard(publicUrl?: string): string {
         thresholds[parts[0]][parts[1]] = Number(input.value);
       });
       saveProfile({ thresholds: thresholds }, 'Thresholds saved');
+    });
+
+    document.getElementById('rules-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var rules = {};
+      Array.prototype.forEach.call(e.target.querySelectorAll('input[name*="."]'), function (input) {
+        var parts = input.name.split('.');
+        rules[parts[0]] = rules[parts[0]] || {};
+        rules[parts[0]][parts[1]] = input.type === 'checkbox' ? input.checked : Number(input.value);
+      });
+      saveProfile({ detectorRules: rules }, 'Rules saved');
+    });
+
+    document.getElementById('rules-reset').addEventListener('click', function () {
+      fetch('/api/profile', { headers: authHeaders({ 'Accept': 'application/json' }) })
+        .then(function (r) { return r.json(); })
+        .then(function (body) {
+          return saveProfile({ detectorRules: body.defaults.detectorRules }, 'Rules reset');
+        })
+        .then(function () { location.reload(); })
+        .catch(function (e) { toast(e.message, true); });
     });
 
     document.getElementById('thresholds-reset').addEventListener('click', function () {

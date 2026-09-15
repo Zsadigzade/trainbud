@@ -48,6 +48,7 @@ function finding(severity: Finding["severity"]): Finding {
     date: "2026-09-03",
     headline: "headline",
     short: "short",
+    why: "why",
     detail: "detail",
     values: {},
   };

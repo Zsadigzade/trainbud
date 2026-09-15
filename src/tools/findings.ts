@@ -37,7 +37,7 @@ export function renderFindingsText(payload: FindingsPayload): string {
       : `${payload.findings.length} finding(s) across ${payload.coverage.days} days of history:`,
     ...(payload.findings.length > 0 ? [""] : []),
     ...payload.findings.map((finding) =>
-      [`[${finding.severity}] ${finding.headline}`, `  ${finding.detail}`].join("\n")
+      [`[${finding.severity}] ${finding.headline}`, `  ${finding.detail}`, `  Rule: ${finding.why}`].join("\n")
     ),
     ...(payload.muted.length > 0
       ? [

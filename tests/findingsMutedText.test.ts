@@ -13,6 +13,7 @@ const finding: Finding = {
   date: "2026-09-12",
   headline: "Resting heart rate 5 bpm above your 28-day baseline, 3 days running",
   short: "RHR +5 bpm",
+  why: "Each of the last 3 days was at least 3 bpm and 2 deviations above your 28-day median of 50 bpm.",
   detail: "Easy training or a rest day is the low-risk call until it settles.",
   values: { deltaBpm: 5 },
 };
@@ -21,6 +22,16 @@ const muted: MutedFinding = {
   ...finding,
   mutedBy: { id: 3, kind: "note", text: "travelling, hotel beds" },
 };
+
+describe("the rule a finding fired on", () => {
+  // "Transparency about metrics is helpful." The model gets the rule so it can
+  // answer "why is it telling me this" with the bar that was cleared, not a guess.
+  it("is given to the model with every live finding", () => {
+    const text = renderFindingsText({ findings: [finding], muted: [], coverage: READY });
+
+    assert.match(text, /Rule: Each of the last 3 days was at least 3 bpm/);
+  });
+});
 
 describe("what a muted finding does to the sentence the model is given", () => {
   // The failure this guards against is the one this codebase has already paid

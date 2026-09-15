@@ -3,7 +3,8 @@ import { getSetting, setSetting } from "./appDb.js";
 // The Ask menu's own limits. Imported rather than restated: a second copy of
 // "five" and "32" here would drift from the file that decides what the watch
 // draws, and the drift would look like a working setting.
-import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptSuggestions.js";
+import { PROMPT_MAX_LENGTH, PROMPT_SLOTS } from "./promptLimits.js";
+import { DEFAULT_DETECTOR_RULES } from "./detect/findings.js";
 
 // SECTION: Profile — everything TrainBud knows about you that Garmin does not
 //
@@ -75,6 +76,34 @@ const thresholdsSchema = z.object({
   restingHrDelta: bandSchema,
 });
 
+/**
+ * Where each detector draws its line.
+ *
+ * Bounded so that no setting makes every day a finding or no day ever one: a
+ * resting-HR floor of 0 bpm would fire on noise, a load ceiling of 1.0 would
+ * fire every week, and a window of 30 days would never fill. The bounds are
+ * wide enough to be a real choice and narrow enough that the app still means
+ * something afterwards.
+ */
+const detectorRulesSchema = z.object({
+  restingHr: z.object({
+    days: z.number().int().min(2).max(7),
+    minZ: z.number().min(0.5).max(5),
+    minBpm: z.number().min(1).max(20),
+  }),
+  sleepDebt: z.object({ hours: z.number().min(0.5).max(20) }),
+  hrv: z.object({ dropZ: z.number().min(0.5).max(5) }),
+  load: z.object({
+    high: z.number().min(1.05).max(5),
+    low: z.number().min(0.1).max(0.95),
+  }),
+  strain: z.object({
+    enabled: z.boolean(),
+    days: z.number().int().min(1).max(7),
+    z: z.number().min(0.5).max(5),
+  }),
+});
+
 const profileSchema = z.object({
   displayName: z.string().max(60).nullable(),
   units: z.enum(["metric", "imperial"]),
@@ -87,6 +116,7 @@ const profileSchema = z.object({
     minutes: z.number().int().min(0).max(10_000).nullable(),
   }),
   thresholds: thresholdsSchema,
+  detectorRules: detectorRulesSchema,
   cards: z.object({
     order: z.array(z.string()),
     hidden: z.array(z.string()),
@@ -135,6 +165,7 @@ export const DEFAULT_PROFILE: TrainBudProfile = {
     stress: { good: 25, caution: 50 },
     restingHrDelta: { good: 2, caution: 5 },
   },
+  detectorRules: DEFAULT_DETECTOR_RULES,
   cards: { order: [...CARD_IDS], hidden: [] },
   // Haiku by default: these answers are two or three sentences read on a
   // watch, and the user pays for every one of them out of their own key.

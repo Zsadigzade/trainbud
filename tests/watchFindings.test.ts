@@ -12,6 +12,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     date: "2026-08-19",
     headline: "Resting heart rate 5 bpm above your 28-day baseline, 3 days running",
     short: "RHR +5 bpm",
+    why: "Each of the last 3 days was at least 3 bpm and 2 deviations above your 28-day median of 50 bpm.",
     detail: "Easy training or a rest day is the low-risk call until it settles.",
     values: { deltaBpm: 5 },
     ...overrides,
@@ -63,6 +64,14 @@ describe("findings on the watch payload", () => {
     const mapped = toWatchFindings([finding()]);
 
     assert.equal(mapped[0]?.short, "RHR +5 bpm");
+  });
+
+  // Shown behind "Why?" on the Today card, so a finding on the wrist can say
+  // which bar it cleared without a phone.
+  it("carries the rule the finding fired on", () => {
+    const mapped = toWatchFindings([finding()]);
+
+    assert.match(mapped[0]?.why ?? "", /at least 3 bpm/);
   });
 
   // The watch cannot wrap arbitrary text well -- a fixed-font activity name
