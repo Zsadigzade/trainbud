@@ -2,7 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 2026-09-15
+## [0.8.0] — server 0.8.0 · watch 2.1.0 — 2026-09-15
+
+### Added — the rule behind every finding, and the bars moved into your hands
+
+Three replies on r/GarminWatches, acted on.
+
+- **Every finding carries `why`**: the rule it fired on with the numbers in force
+  ("Each of the last 3 days was at least 3 bpm and 2 deviations above your 28-day
+  median of 48 bpm"). Shown on the dashboard, in `trainbud findings`, in the
+  `get_findings` text as `Rule:`, and behind START on the watch's Today card (2.1.0).
+- **Detector rules are editable** (`profile.detectorRules`, dashboard section
+  *Detector rules*): the resting-HR run, bpm floor and deviations, the sleep-debt hours,
+  the HRV drop, the load ratios. Defaults equal the old constants, so nothing moves on
+  upgrade; bounds keep any setting from making every day, or no day, a finding.
+- **`recovery_strain`**: resting HR up, overnight HRV down and sleep stress up, all off
+  their 28-day medians on every day of the window. It stands in for the single-signal
+  findings it covers rather than raising three alarms for one fact, and like every
+  finding it states measurements, never a cause.
+
+### Added — which parts of last night moved
+
+- Deep, REM, light and awake count are stored as measurements. They sat in the raw
+  archive for every night and no baseline could reach them; `trainbud serve` re-derives
+  them once from the archive (no Garmin request) and `trainbud rederive` does it on demand.
+- The newest night's score, duration, deep, REM, awakenings, sleep stress and HRV are
+  compared with your last 28 nights and the unusual ones named, biggest first — in
+  `get_sleep_data` (explicitly not as an explanation of Garmin's score), on the dashboard,
+  and on the watch's Sleep card as `sleep.moved`.
+
+### Added — mute from the wrist
+
+- **`POST /api/mute`** silences one finding kind for three days from the watch. Never
+  `*`; a second press reuses the active entry.
+
+### Changed — the watch payload is shaped for the watch asking
+
+- `findings[].why` and `sleep.moved` go only to watch builds 2.1.0+, and never to a watch
+  that sends `lite=1`. The Forerunner 55 widget has 64 KB and 2.0.4 used 51.5 KB before the
+  cached summary was read; the new fields ran it out of memory in the simulator.
+- `PROMPT_MAX_LENGTH` and `PROMPT_SLOTS` moved to `src/promptLimits.ts`, breaking an import
+  cycle that made the profile unreadable from the detectors.
+
+### Fixed — watch 2.1.0
+
+- BACK on an AI answer closed the widget: `onBack` compared a card position with a card id.
+- The stale label was drawn through every card title and counted only minutes.
+- The Forerunner 55 build compiles the finding detail, mute and sleep line out, drops the
+  old summary before fetching, and is built at optimization level 2: it now loads at
+  55.3/59.9 kB, below 2.0.4.
+- The dashboard's week chart drew long value labels ("310 TRIMP") over this week's dot.
+
 
 ### Fixed — watch 2.0.4: the glance, drawn properly on every device
 

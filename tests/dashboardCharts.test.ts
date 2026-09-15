@@ -212,6 +212,21 @@ describe("week-over-week dumbbell", () => {
     assert.equal(dataDots.length, 2);
   });
 
+  it("leaves room for a long value label beside the dot at the end of the track", () => {
+    // "310 TRIMP" was drawn across this week's dot: the value is right-anchored
+    // at the chart edge, a fixed 46px was reserved for it, and the larger week's
+    // dot sits at the very end of the track.
+    const width = 320;
+    const svg = dumbbellChart([{ label: "Load", unit: " TRIMP", current: 310, previous: 134 }], { width });
+    const thisWeek = /<circle cx="([\d.]+)"[^>]*r="5"[^>]*><title>This week/.exec(svg);
+    assert.ok(thisWeek, "this week's dot not found");
+    const labelStart = width - "310 TRIMP".length * 6.3;
+    assert.ok(
+      Number(thisWeek[1]) + 5 + 4 <= labelStart,
+      `dot right edge ${Number(thisWeek[1]) + 5} runs into a label starting near ${labelStart}`
+    );
+  });
+
   it("says so when there is nothing to compare at all", () => {
     const svg = dumbbellChart([{ label: "Load", unit: "", current: null, previous: null }]);
     assert.match(svg, /Not enough history/);

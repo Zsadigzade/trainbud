@@ -23,7 +23,7 @@ Health & Fitness
 
 ## Version
 
-2.0.4
+2.1.0
 
 ## Short description
 
@@ -160,6 +160,23 @@ list and it rewrites `monkey.jungle` to match. The previous set was a large lett
 > .\ciq\build.ps1 -Device fr70 -Screens -NoLabel
 > .\scripts\capture-store-shots.ps1 -Device fr70
 > ```
+
+## What changed in 2.1.0
+
+- **Why a finding fired.** Press START (or tap) on the Today card and the top finding opens
+  to the rule it fired on, with your own numbers: "Each of the last 3 days was at least 3 bpm
+  and 2 deviations above your 28-day median of 48 bpm". UP and DOWN step through findings.
+  The rules themselves can be changed in the companion dashboard.
+- **Mute a finding from the watch.** From that screen, START again and confirm to silence
+  that one finding for three days - for when you know why and the watch does not.
+- **What moved last night.** The Sleep card names the part of the night that was unusual
+  for you, with your usual in brackets: "Deep 40m (1h24m)".
+- **The age of stale numbers sits beside the card title** ("Today 6m ago") instead of over
+  it, and is given in hours or days once it is that old.
+- **Fixed: BACK on an AI answer closed the app** instead of returning to the question list.
+- These need companion server 0.8.0 or later. On an older server the watch behaves as 2.0.4.
+  On the Forerunner 55 the finding detail, mute and sleep line are left out to keep the app
+  within that watch's memory; everything else in this release applies.
 
 ## What changed in 2.0.4
 

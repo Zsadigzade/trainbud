@@ -358,8 +358,8 @@ export function detectLoadRatio(input: DetectorInput): Finding | null {
       : `This week's training load is down to ${ratio}x your four-week average`,
     short: `Load ${round(ratio, 1)}x avg`,
     why: isHigh
-      ? `Your 7-day TRIMP of ${round(acute)} was over ${rule.high}x your 28-day weekly average of ${round(chronicWeekly)}.`
-      : `Your 7-day TRIMP of ${round(acute)} was under ${rule.low}x your 28-day weekly average of ${round(chronicWeekly)}.`,
+      ? `Your 7-day TRIMP of ${Math.round(acute)} was over ${rule.high}x your 28-day weekly average of ${Math.round(chronicWeekly)}.`
+      : `Your 7-day TRIMP of ${Math.round(acute)} was under ${rule.low}x your 28-day weekly average of ${Math.round(chronicWeekly)}.`,
     detail: isHigh
       ? `Jumps this size are where injuries tend to come from. Holding the next week nearer the average is the low-risk call. ${provenance}`
       : `A drop this size for more than a week or two starts costing fitness rather than building it. ${provenance}`,

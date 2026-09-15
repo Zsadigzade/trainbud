@@ -154,9 +154,25 @@ View recovery, sleep, activity, stress, and VO2 max on your Garmin watch via a C
    - **Server URL** — your tunnel URL (e.g. `https://abc.trycloudflare.com`)
 4. Open the widget on your watch — it shows a pairing code. Approve it in the dashboard (`/dashboard?token=YOUR_API_KEY`) to complete setup. The dashboard swaps that token for a session cookie and drops it from the URL, so the address bar is safe to screenshot afterwards.
 
-The glance shows recovery and sleep from the last cached summary, so it renders without
-waiting on the network. Open it and tap or swipe to cycle through the cards you left switched on in the dashboard. The watch
-calls `GET /api/watch` — a compact JSON summary, not the full MCP protocol.
+The glance shows recovery and sleep, or the top finding in a few characters ("RHR +4 bpm"),
+from the last cached summary, so it renders without waiting on the network; once that is more
+than two hours old it says so. Open it and tap or swipe to cycle through the cards you left
+switched on in the dashboard. The watch calls `GET /api/watch` — a compact JSON summary, not
+the full MCP protocol.
+
+On the Today card, **START (or tap) opens a finding to the rule it fired on** — "Each of the
+last 3 days was at least 3 bpm and 2 deviations above your 28-day median of 48 bpm" — and from
+there it can be **muted for three days** (`POST /api/mute`). The Sleep card names what moved
+last night against your own nights ("Deep 40m (1h24m)"). On the Forerunner 55, whose widget has
+64 KB, those two are compiled out so the rest still fits.
+
+## Detector rules
+
+Every finding fires on a rule you can see and move. The dashboard's **Detector rules**
+section holds the bars — resting HR days/bpm/deviations, sleep-debt hours, HRV drop, the
+training-load ratios, and "several signals together" (resting HR up, HRV down and sleep
+stress up at once) — bounded so no setting makes every day, or no day, a finding. Every
+surface shows the rule a finding fired on, with the numbers that were in force.
 
 ## Voice (`/voice`)
 
@@ -236,14 +252,14 @@ Restart your MCP client, then start asking questions.
 |------|-----------------|
 | `get_latest_activity` | Your most recent workout — distance, pace, HR, elevation |
 | `get_activities_range` | Activities between two dates |
-| `get_sleep_data` | Sleep duration, stages, score, awakenings |
+| `get_sleep_data` | Sleep duration, stages, score, awakenings — and which parts of last night were unusual for you |
 | `get_heart_rate_trends` | Resting, max, and average HR over time |
 | `get_recovery_status` | Recovery score from HRV, sleep, stress, resting HR |
 | `get_body_composition` | Weight, body fat, and muscle mass trends |
 | `get_stress_levels` | Daily stress averages and trends |
 | `get_vo2_max_trends` | VO2 max fitness trends over time |
 | `get_training_insights` | Combined weekly summary (activities, sleep, recovery, stress) |
-| `get_findings` | What stands out against **your own** 28-day baselines, not a population average |
+| `get_findings` | What stands out against **your own** 28-day baselines, with the rule each finding fired on |
 | `get_week_review` | This week against last, the load forecast, sleep debt, and your next race |
 | `compare_workouts` | One workout against your own earlier efforts of the same type and distance |
 | `remember_context` | Record a goal, a race and its date, an injury, or a note |
@@ -258,7 +274,8 @@ trainbud serve          # Remote HTTP MCP for web AI (claude.ai, ChatGPT)
 trainbud check          # Live diagnostics against all tools
 trainbud doctor         # What the watch would see: public URL, AI key, history depth
 trainbud backfill       # Pull Garmin history into the local store (resumable)
-trainbud findings       # What stands out against your own baselines
+trainbud findings       # What stands out against your own baselines, and the rule each fired on
+trainbud rederive       # Rebuild sleep measurements (deep, REM, awakenings) from the local archive — no Garmin requests
 trainbud start          # Start the MCP server (stdio)
 trainbud auth           # Force re-authentication
 trainbud cache clear    # Clear cached data

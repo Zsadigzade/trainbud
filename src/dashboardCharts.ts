@@ -340,7 +340,15 @@ export function dumbbellChart(rows: DumbbellRow[], options: { width?: number } =
   const firstRowY = 34;
   const height = usable.length * rowHeight + firstRowY + 6;
   const labelWidth = 96;
-  const padRight = 46;
+  // Room for the widest value label, not a fixed 46px. "310 TRIMP" at 11px is
+  // about 55px, so the label was drawn across this week's dot whenever this week
+  // was the larger value -- the dot sits at the right end of the track exactly
+  // then. ~6.3px per character is the 11px UI font's average advance, plus the
+  // dot's radius and a gap.
+  const widestValue = Math.max(
+    ...usable.map((row) => `${String(row.current)}${row.unit}`.length)
+  );
+  const padRight = Math.max(46, Math.ceil(widestValue * 6.3) + 14);
   const trackWidth = width - labelWidth - padRight;
 
   const body = usable

@@ -149,6 +149,29 @@ Example response:
 
 Each field is `null` if that metric is unavailable — the widget shows "No data" for that card.
 
+Query parameters the widget sends:
+
+| Parameter | Meaning |
+|---|---|
+| `card` | The card on screen when it synced, counted locally and nowhere else |
+| `build` | The watch build. `findings[].why` and `sleep.moved` are sent only to 2.1.0 and later |
+| `lite=1` | Sent by a watch with under 100 KB of app memory (the Forerunner 55). The server leaves out `why` and `sleep.moved` whatever the build, because every field costs memory there whether it is drawn or not |
+
+Findings carry `kind`, `severity`, `headline`, `short` (at most 14 characters, for the
+glance) and, for 2.1.0+, `why` — the rule the finding fired on, with the numbers in force.
+
+```http
+POST /api/mute
+Authorization: Bearer YOUR_TRAINBUD_API_KEY
+Content-Type: application/json
+
+{ "kind": "rhr_elevated" }
+```
+
+Silences one finding kind for three days (`{ "ok": true, "kind": "rhr_elevated", "until": "2026-09-18" }`,
+`until` being the first day it is heard again). Never `*` from a watch. Used by the Today
+card's "Mute 3 days"; the next sync no longer carries the finding.
+
 ## Troubleshooting
 
 Every negative code below is a **Connect IQ constant, not an HTTP status**.

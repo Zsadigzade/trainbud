@@ -48,7 +48,7 @@ class TrainBudApp extends Application.AppBase {
     // Stamped into pairing telemetry so the server log names the exact binary
     // that is running. Guessing which build the simulator had loaded wasted
     // several cycles.
-    const BUILD_ID = "2.0.4";
+    const BUILD_ID = "2.1.0";
 
     // Console tracing. The simulator's CIQ_LOG.YML records crashes only, but
     // System.println goes to the monkeydo console, which nobody had been
