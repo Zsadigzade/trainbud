@@ -50,6 +50,7 @@ import {
 import { renderDashboard, renderPairSuccess, renderPairError, getDashboardStatus } from "./dashboard.js";
 import { runSelfTest } from "./selfTest.js";
 import { addContextEntry, closeContextEntry } from "./history/context.js";
+import { muteFromWatch } from "./watchMute.js";
 import { parseMuteTargets } from "./detect/mute.js";
 import { CONTEXT_KINDS, type ContextKind } from "./history/schema.js";
 
@@ -945,6 +946,43 @@ export function createHttpMcpServer(): HttpMcpServer {
 
           const result = submitPrompt(prompt);
           sendJson(res, 202, result);
+          return;
+        }
+
+        // --- Mute from the watch ---
+        //
+        // The Today card's "Mute 3 days". The same bearer credential as every
+        // other watch request, one finding kind per call, and the watch summary
+        // cache dropped so the next sync stops drawing the finding at once
+        // rather than five minutes later.
+        if (pathname === "/api/mute" && req.method === "POST") {
+          if (!isAuthorized(req)) {
+            res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
+            sendJson(res, 401, { error: "Unauthorized" });
+            return;
+          }
+
+          let body: unknown;
+          try {
+            body = await readJsonBody(req);
+          } catch {
+            sendJson(res, 400, { error: "Invalid JSON body" });
+            return;
+          }
+
+          const kind =
+            typeof body === "object" && body !== null && typeof (body as Record<string, unknown>)["kind"] === "string"
+              ? ((body as Record<string, unknown>)["kind"] as string).trim()
+              : "";
+
+          try {
+            const result = muteFromWatch(kind);
+            recordFeature("watch.mute");
+            watchApiCache = null;
+            sendJson(res, 200, { ok: true, kind: result.kind, until: result.until });
+          } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : "Could not mute that." });
+          }
           return;
         }
 

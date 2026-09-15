@@ -53,6 +53,39 @@ describe("http MCP server", () => {
     assert.equal(response.status, 401);
   });
 
+  it("rejects a watch mute without bearer token", async () => {
+    const response = await fetch(`${baseUrl}/api/mute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "rhr_elevated" }),
+    });
+    assert.equal(response.status, 401);
+  });
+
+  it("refuses to mute a finding kind it does not know", async () => {
+    const response = await fetch(`${baseUrl}/api/mute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-api-key-123" },
+      body: JSON.stringify({ kind: "*" }),
+    });
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as { error: string };
+    assert.match(body.error, /Unknown finding/);
+  });
+
+  it("mutes one finding kind from the watch for three days", async () => {
+    const response = await fetch(`${baseUrl}/api/mute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-api-key-123" },
+      body: JSON.stringify({ kind: "sleep_debt" }),
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; kind: string; until: string };
+    assert.equal(body.ok, true);
+    assert.equal(body.kind, "sleep_debt");
+    assert.match(body.until, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("rejects watch API requests without bearer token", async () => {
     const response = await fetch(`${baseUrl}/api/watch`);
     assert.equal(response.status, 401);
