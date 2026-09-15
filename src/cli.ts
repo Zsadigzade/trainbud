@@ -11,7 +11,7 @@ import { protectStdout } from "./utils/stdio.js";
 import { packageVersion } from "./version.js";
 import { runSetup } from "./setup.js";
 import { withGarminClient } from "./garmin/client.js";
-import { DEFAULT_SOURCES, runIngest } from "./history/ingest.js";
+import { DEFAULT_SOURCES, ensureSleepStagesDerived, rederiveSleepFromArchive, runIngest } from "./history/ingest.js";
 import { GarminApiError } from "./garmin/types.js";
 import { startHistoryScheduler } from "./history/scheduler.js";
 import {
@@ -354,6 +354,20 @@ async function runServe(): Promise<void> {
   });
 
   await server.start();
+
+  // Once per database, on the first start of a build that stores sleep stages:
+  // the history already on disk gets its deep/REM/awake measurements from the
+  // raw archive, with no request to Garmin. A failure here costs the sleep
+  // breakdown and nothing else, so it must not stop the server.
+  try {
+    const nights = ensureSleepStagesDerived();
+    if (nights > 0) {
+      logger.info({ nights }, "Derived sleep stages from the raw archive");
+    }
+  } catch (error) {
+    logger.warn({ error }, "Could not derive sleep stages from the raw archive");
+  }
+
   stopHistory = startHistoryScheduler();
 
   console.log(`TrainBud HTTP MCP server running at http://${appConfig.mcpHost}:${appConfig.mcpPort}/mcp`);
@@ -460,6 +474,20 @@ export function createCliProgram(): Command {
         await runBackfill(options);
       } catch (error) {
         reportCliFailure(error, "Backfill failed");
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("rederive")
+    .description("Rebuild sleep measurements (including deep, REM and awakenings) from the local raw archive, with no Garmin requests")
+    .action(() => {
+      try {
+        const nights = rederiveSleepFromArchive();
+        console.log(`Re-derived ${nights} night(s) of sleep from the raw archive.`);
+        closeHistoryDb();
+      } catch (error) {
+        reportCliFailure(error, "Re-derive failed");
         process.exitCode = 1;
       }
     });

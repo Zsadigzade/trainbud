@@ -15,6 +15,14 @@ export type MetricKind =
   | "sleep_score"
   | "hrv_overnight"
   | "sleep_stress"
+  // The stage breakdown, stored as measurements from 0.8.0. It was archived in
+  // raw JSON for every night and never reached daily_metric, so no baseline
+  // could be built from it and "why did my sleep score drop" had nothing to
+  // compare against. rederiveSleepFromArchive fills the history back in.
+  | "sleep_deep_seconds"
+  | "sleep_rem_seconds"
+  | "sleep_light_seconds"
+  | "sleep_awake_count"
   | "resting_hr"
   | "max_hr"
   | "stress_avg"

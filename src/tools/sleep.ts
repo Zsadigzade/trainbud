@@ -5,6 +5,8 @@ import { fetchSleepDay, mapSleepData } from "../garmin/daily.js";
 import type { SleepData } from "../garmin/garminApiTypes.js";
 import type { SleepNightSummary, ToolResult } from "../garmin/types.js";
 import type { SleepPayload, StoredProvenance } from "./payloads.js";
+import { buildDetectorInput } from "../detect/index.js";
+import { whatMovedLastNight, type SleepMoved } from "../detect/sleepMoved.js";
 import type { ToolDefinition } from "./types.js";
 import { fetchEachDay } from "../garmin/partial.js";
 import {
@@ -128,9 +130,32 @@ export function renderSleepText(payload: SleepPayload): string {
     payload.averageScore !== null ? `Average sleep score: ${payload.averageScore}` : "",
     "",
     ...payload.nights.map(formatSleepNight),
+    renderMoved(payload.moved),
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * The parts of the newest night that were unusual for this person.
+ *
+ * Deliberately not phrased as an explanation of Garmin's score: the score is a
+ * black box, and "your score dropped because deep sleep was short" would be a
+ * claim about its inputs this app cannot see. Each line is a measurement
+ * against the user's own median, which is checkable.
+ */
+function renderMoved(moved: SleepMoved | undefined): string {
+  if (!moved || moved.date === null) {
+    return "";
+  }
+  if (moved.movers.length === 0) {
+    return `\nWhat moved on ${moved.date}: nothing unusual against the user's own last 28 nights.`;
+  }
+  return [
+    "",
+    `What moved on ${moved.date}, against the user's own last 28 nights (these are measurements, not an explanation of Garmin's score):`,
+    ...moved.movers.map((mover) => `  ${mover.text}`),
+  ].join("\n");
 }
 
 export async function getSleepDataTool(
@@ -147,6 +172,15 @@ export async function getSleepDataTool(
   );
 
   const payload = buildSleepPayload(fetched.values, nights, fetched.unreachableDays, fetched);
+
+  // A local read, and outside the tool cache on purpose: a cached answer from
+  // an hour ago must not carry movers from before last night was ingested.
+  try {
+    payload.moved = whatMovedLastNight(buildDetectorInput());
+  } catch {
+    // The breakdown is an extra; a store that cannot be read loses it and
+    // nothing else.
+  }
 
   return {
     type: "text",

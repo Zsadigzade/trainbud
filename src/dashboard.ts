@@ -488,6 +488,11 @@ export function renderDashboard(publicUrl?: string): string {
       <div class="tiles" style="margin-top:14px">
         ${data.tiles.map(renderTile).join("")}
       </div>
+      ${
+        data.sleepMoved.length > 0
+          ? `<p class="muted" style="margin-top:10px"><strong style="color:var(--ink);font-weight:550">Last night, against your usual.</strong> ${data.sleepMoved.map(escapeHtml).join(" · ")}</p>`
+          : ""
+      }
       ${data.insight ? `<p class="muted" style="margin-top:14px"><strong style="color:var(--ink);font-weight:550">Today's insight.</strong> ${escapeHtml(data.insight)}</p>` : ""}
     </section>
 

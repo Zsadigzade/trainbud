@@ -3,6 +3,7 @@ import { generateDailyInsight, isAiConfigured } from "./promptApi.js";
 import { DateTime } from "luxon";
 import { buildDetectorInput, runDetectors } from "./detect/index.js";
 import { restingHrDeltaBpm } from "./detect/detectors.js";
+import { whatMovedLastNight, type SleepMoved } from "./detect/sleepMoved.js";
 import {
   getProfile,
   stateFor,
@@ -47,6 +48,13 @@ export interface WatchSleep {
   hours: number;
   score: number | null;
   label: string;
+  /**
+   * Up to two parts of the night that were unusual for this person, each at
+   * most 18 characters -- "Deep 40m (1h24m)". Absent when nothing moved, or
+   * when the analysis is about a different night than the one on the card.
+   * Watches before 2.1.0 ignore it.
+   */
+  moved?: string[];
 }
 
 export interface WatchActivity {
@@ -411,6 +419,22 @@ export interface WatchSummaryParts {
    * and the grading has to be able to tell them apart.
    */
   restingHrDeltaBpm: number | null;
+  /** Which parts of last night were unusual. Optional so older callers keep compiling. */
+  sleepMoved?: SleepMoved | null;
+}
+
+/**
+ * The sleep card, with what moved attached only when the analysis is about the
+ * same night the card shows. A card for Tuesday carrying Wednesday's movers
+ * would explain a night it is not displaying.
+ */
+function withMoved(sleep: WatchSleep | null, parts: WatchSummaryParts): WatchSleep | null {
+  const moved = parts.sleepMoved;
+  const night = parts.sleep?.nights[0]?.date ?? null;
+  if (!sleep || !moved || moved.date === null || moved.date !== night || moved.movers.length === 0) {
+    return sleep;
+  }
+  return { ...sleep, moved: moved.movers.slice(0, 2).map((mover) => mover.short) };
 }
 
 /**
@@ -470,7 +494,7 @@ export function buildWatchSummaryFrom(
   parts: WatchSummaryParts
 ): Omit<WatchSummary, "ai_insight"> {
   const recovery = toWatchRecovery(parts.recovery);
-  const sleep = toWatchSleep(parts.sleep);
+  const sleep = withMoved(toWatchSleep(parts.sleep), parts);
   const stress = toWatchStress(parts.stress);
   const vo2max = toWatchVo2Max(parts.vo2max);
   // Read once. Every grade below has to come from the same profile: reading it
@@ -645,6 +669,7 @@ export async function buildWatchSummary(): Promise<WatchSummary> {
       updatedAt: new Date().toISOString(),
       aiConfigured: isAiConfigured(),
       restingHrDeltaBpm: restingHrDeltaBpm(detectorInput),
+      sleepMoved: whatMovedLastNight(detectorInput),
     }),
     ai_insight: null,
   };

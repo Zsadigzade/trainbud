@@ -3,6 +3,7 @@ import type { ContextEntry, SubjectivePoint } from "../history/context.js";
 import type { SubjectiveKind } from "../history/schema.js";
 import type { Finding, MutedFinding } from "../detect/findings.js";
 import type { Coverage } from "../detect/index.js";
+import type { SleepMoved } from "../detect/sleepMoved.js";
 import type {
   ActivitySummary,
   BodyCompositionEntry,
@@ -44,6 +45,12 @@ export interface StoredProvenance {
 }
 
 export interface SleepPayload {
+  /**
+   * Which parts of the newest night were unusual against this person's own
+   * nights. Optional: a payload built without the store (a test, an older
+   * caller) has nothing to say about it, which is not the same as "nothing moved".
+   */
+  moved?: SleepMoved;
   requestedNights: number;
   recordedNights: number;
   /**

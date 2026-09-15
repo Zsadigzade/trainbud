@@ -7,14 +7,17 @@ import {
   fetchVo2MaxDay,
 } from "../garmin/daily.js";
 import type { GarminConnectInstance } from "../garmin/garminConnect.js";
-import { mapActivity } from "../garmin/daily.js";
+import { mapActivity, mapSleepData } from "../garmin/daily.js";
+import type { SleepData } from "../garmin/garminApiTypes.js";
 import { parseActivityLocalDateTime, parseIsoDate } from "../utils/helpers.js";
-import type { ActivitySummary } from "../garmin/types.js";
+import type { ActivitySummary, SleepNightSummary } from "../garmin/types.js";
 import { logger } from "../utils/logger.js";
 import { GarminApiError } from "../garmin/types.js";
 import { writeFixture } from "./capture.js";
 import {
   appendRawPayload,
+  hasMetricKind,
+  latestRawPayloads,
   listIngestedDates,
   markIngested,
   pruneRawPayloads,
@@ -244,6 +247,69 @@ function collect(
   return metrics;
 }
 
+/**
+ * One night's measurements. Shared by the live ingest and the archive
+ * re-derivation, so the two can never disagree about which field is which.
+ */
+function sleepMetrics(mapped: SleepNightSummary | null): Array<{ kind: MetricKind; value: number }> {
+  return collect([
+    ["sleep_seconds", mapped?.totalSleepSeconds],
+    ["sleep_score", mapped?.sleepScore],
+    ["hrv_overnight", mapped?.avgOvernightHrv],
+    ["sleep_stress", mapped?.avgSleepStress],
+    ["sleep_deep_seconds", mapped?.deepSleepSeconds],
+    ["sleep_rem_seconds", mapped?.remSleepSeconds],
+    ["sleep_light_seconds", mapped?.lightSleepSeconds],
+    ["sleep_awake_count", mapped?.awakeCount],
+  ]);
+}
+
+/**
+ * Rebuild every sleep measurement from the newest archived response per night.
+ *
+ * The stage breakdown was archived for every night and never stored as a
+ * measurement, so there was no baseline to say whether last night's deep sleep
+ * was short for this person. This reads what is already on disk -- no request
+ * to Garmin, which is the account at risk -- and is idempotent, because a
+ * metric row is keyed by date and kind. Returns the nights it wrote.
+ */
+export function rederiveSleepFromArchive(): number {
+  let written = 0;
+
+  for (const revision of latestRawPayloads("sleep")) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(revision.json);
+    } catch {
+      continue;
+    }
+    if (!payload || typeof payload !== "object") {
+      continue;
+    }
+
+    const metrics = sleepMetrics(mapSleepData(parseIsoDate(revision.date), payload as SleepData));
+    if (metrics.length === 0) {
+      continue;
+    }
+
+    putMetrics(revision.date, metrics, revision.fetchedAt);
+    written += 1;
+  }
+
+  return written;
+}
+
+/**
+ * Re-derive once, on the first start of a build that stores sleep stages, so a
+ * user who upgrades gets their history's stages without running anything.
+ */
+export function ensureSleepStagesDerived(): number {
+  if (hasMetricKind("sleep_deep_seconds")) {
+    return 0;
+  }
+  return rederiveSleepFromArchive();
+}
+
 async function fetchSource(
   source: IngestSource,
   client: GarminConnectInstance,
@@ -252,15 +318,7 @@ async function fetchSource(
   switch (source) {
     case "sleep": {
       const { raw, mapped } = await fetchSleepDay(client, date);
-      return {
-        raw,
-        metrics: collect([
-          ["sleep_seconds", mapped?.totalSleepSeconds],
-          ["sleep_score", mapped?.sleepScore],
-          ["hrv_overnight", mapped?.avgOvernightHrv],
-          ["sleep_stress", mapped?.avgSleepStress],
-        ]),
-      };
+      return { raw, metrics: sleepMetrics(mapped) };
     }
     case "heart_rate": {
       const { raw, mapped } = await fetchHeartRateDay(client, date);

@@ -5,6 +5,7 @@ import { appConfig } from "./config.js";
 import { isAiConfigured, getCachedDailyInsight } from "./promptApi.js";
 import { getMetricSeries } from "./history/store.js";
 import { buildDetectorInput, describeFindingsCoverage, runDetectors } from "./detect/index.js";
+import { whatMovedLastNight } from "./detect/sleepMoved.js";
 import { buildWeekReview } from "./detect/week.js";
 import { nextRace } from "./detect/countdown.js";
 import { median } from "./detect/baseline.js";
@@ -101,6 +102,11 @@ export interface DashboardStatus {
 export interface DashboardData extends DashboardStatus {
   profile: TrainBudProfile;
   tiles: DashboardTile[];
+  /**
+   * Parts of the newest night that were unusual for this person, as sentences.
+   * Empty on an ordinary night or without a recent one.
+   */
+  sleepMoved: string[];
   findings: DashboardFinding[];
   /**
    * Findings the user has already explained away with a context entry. Rendered
@@ -311,6 +317,7 @@ export function getDashboardData(publicUrl?: string): DashboardData {
     ...status,
     profile,
     tiles: buildTiles(profile, trends, hrv),
+    sleepMoved: whatMovedLastNight(buildDetectorInput()).movers.map((mover) => mover.text),
     findings: detection.findings.map((finding) => ({
       severity: finding.severity,
       headline: finding.headline,

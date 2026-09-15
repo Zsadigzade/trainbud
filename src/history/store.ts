@@ -203,6 +203,11 @@ export function newestStoredDates(source: IngestSource, limit: number): string[]
   return rows.map((row) => row.date);
 }
 
+/** Whether any row of this kind has ever been stored. */
+export function hasMetricKind(kind: MetricKind): boolean {
+  return getDb().prepare("SELECT 1 FROM daily_metric WHERE kind = ? LIMIT 1").get(kind) !== undefined;
+}
+
 export function getMetricSeries(
   kind: MetricKind,
   startDate: string,
@@ -297,6 +302,25 @@ export function pruneRawPayloads(
 
     return { agedOut, supersededRevisions };
   })();
+}
+
+/** The newest archived revision of every date for one source, oldest date first. */
+export function latestRawPayloads(
+  source: IngestSource
+): Array<{ date: string; fetchedAt: number; json: string }> {
+  return getDb()
+    .prepare(
+      `SELECT date, fetched_at AS fetchedAt, json FROM (
+         SELECT date, fetched_at, json, ROW_NUMBER() OVER (
+           PARTITION BY date ORDER BY fetched_at DESC, id DESC
+         ) AS rank
+         FROM raw_payload
+         WHERE source = ?
+       )
+       WHERE rank = 1
+       ORDER BY date ASC`
+    )
+    .all(source) as Array<{ date: string; fetchedAt: number; json: string }>;
 }
 
 export function rawPayloadRevisions(
