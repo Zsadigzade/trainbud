@@ -21,4 +21,5 @@
 #   .\build.ps1 -Device fr70 -Screens -NoLabel
 #   .\scripts\capture-store-shots.ps1 -Device fr70
 base.sourcePath = $(base.sourcePath);source-screens
-base.excludeAnnotations = glance;screensStub;tourLabel
+base.excludeAnnotations = glance;screensStub;tourLabel;lowMem
+fr55.excludeAnnotations = glance;screensStub;tourLabel;fullUi

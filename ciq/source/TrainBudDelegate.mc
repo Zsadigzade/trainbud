@@ -16,8 +16,15 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
         var app = Application.getApp() as TrainBudApp;
         var promptStatus = app.getPromptStatus();
 
-        // Back from prompt result / error → return to Ask AI menu
-        if (app.getCardIndex() == Cards.ASK_AI && !promptStatus.equals("idle")) {
+        if (backFromToday(app)) { return true; }
+
+        // Back from prompt result / error → return to Ask AI menu.
+        //
+        // This compared getCardIndex(), a position, with Cards.ASK_AI, which
+        // became the string "ask" when cards turned into ids. A Number never
+        // equals a String, so the test was always false and BACK on an answer
+        // left the widget instead of returning to the menu.
+        if (app.currentCardId().equals(Cards.ASK_AI) && !promptStatus.equals("idle")) {
             app.clearPrompt();
             WatchUi.requestUpdate();
             return true;
@@ -107,11 +114,76 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             return;
         }
 
+        // Today card — open a finding, then confirm, then mute.
+        if (cardId.equals(Cards.TODAY) && (status.equals("ready") || status.equals("stale"))
+                && selectOnToday(app)) {
+            return;
+        }
+
         // Normal cards — navigate forward
         if (status.equals("ready") || status.equals("stale")) {
             app.nextCard();
             WatchUi.requestUpdate();
         }
+    }
+
+    // Out of a finding's detail, one level at a time: the confirm returns to
+    // the detail, the detail to the card.
+    (:fullUi)
+    private function backFromToday(app as TrainBudApp) as Boolean {
+        var todayMode = app.getTodayMode();
+        if (todayMode.equals("none")) { return false; }
+        if (todayMode.equals("confirm")) {
+            app.cancelMute();
+        } else if (!todayMode.equals("muting")) {
+            app.closeFindingDetail();
+        }
+        WatchUi.requestUpdate();
+        return true;
+    }
+
+    /** True when START on the Today card was used by the finding detail. */
+    (:fullUi)
+    private function selectOnToday(app as TrainBudApp) as Boolean {
+        var mode = app.getTodayMode();
+        if (mode.equals("detail"))     { app.askToMute(); WatchUi.requestUpdate(); return true; }
+        if (mode.equals("confirm"))    { app.submitMute(); return true; }
+        if (mode.equals("muting"))     { return true; }
+        // The failure screen says "Tap to retry", so a tap retries; BACK is
+        // the way out.
+        if (mode.equals("mute_error")) { app.submitMute(); return true; }
+        if (app.canExplainFindings()) {
+            app.openFindingDetail();
+            WatchUi.requestUpdate();
+            return true;
+        }
+        return false;
+    }
+
+    // The Forerunner 55 build has no finding detail -- see canExplainFindings.
+    (:lowMem) private function backFromToday(app as TrainBudApp) as Boolean { return false; }
+    (:lowMem) private function selectOnToday(app as TrainBudApp) as Boolean { return false; }
+    (:lowMem) private function stepToday(app as TrainBudApp, forward as Boolean) as Boolean { return false; }
+
+    /**
+     * Paging and swiping while a finding is open.
+     *
+     * Returns true when the gesture was used here. In the detail it moves
+     * between findings; on the confirm it cancels, because a page press is not
+     * a "yes"; while muting or on the error it is swallowed so the carousel does
+     * not move underneath a screen that is still up.
+     */
+    (:fullUi)
+    private function stepToday(app as TrainBudApp, forward as Boolean) as Boolean {
+        var mode = app.getTodayMode();
+        if (mode.equals("none")) { return false; }
+        if (mode.equals("detail")) {
+            app.stepFinding(forward);
+        } else if (mode.equals("confirm")) {
+            app.cancelMute();
+        }
+        WatchUi.requestUpdate();
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -141,6 +213,8 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             WatchUi.requestUpdate();
             return true;
         }
+
+        if (stepToday(app, forward)) { return true; }
 
         if (app.currentCardId().equals(Cards.ASK_AI)) {
             // With no key the card shows one message and no menu, so paging
@@ -227,6 +301,10 @@ class TrainBudDelegate extends WatchUi.BehaviorDelegate {
             ScreenTour.step(app,
                 direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP);
             WatchUi.requestUpdate();
+            return true;
+        }
+
+        if (stepToday(app, direction == WatchUi.SWIPE_LEFT || direction == WatchUi.SWIPE_UP)) {
             return true;
         }
 

@@ -33,6 +33,11 @@ class TrainBudApp extends Application.AppBase {
     private var _cardOrder as Array<String> or Null = null;
 
     const FETCH_TIMEOUT_MS  = 10000;
+
+    // Below this total, the watch asks /api/watch for the lean payload. The
+    // Forerunner 55 widget reports 61 KB; every other product in the manifest
+    // has at least 128 KB.
+    const LITE_MEMORY_BYTES = 100000;
     const PAIR_POLL_MS      = 5000;
     const PROMPT_POLL_MS    = 3000;
     const PROMPT_TIMEOUT_MS = 30000;
@@ -144,6 +149,14 @@ class TrainBudApp extends Application.AppBase {
     private var _askMenuIndex     as Number = 0;
 
     private var _fetchTimer as Timer.Timer or Null = null;
+
+    // Finding detail on the Today card (2.1.0): "none", "detail" (the rule the
+    // finding fired on), "confirm" (mute 3 days?), "muting", "mute_error".
+    // Plain values only -- field initializers run in the glance scope too.
+    private var _todayMode     as String = "none";
+    private var _findingIndex  as Number = 0;
+    private var _muteFailClass as Number = Fail.NONE;
+    private var _muteErrorCode as Number or Null = null;
 
     function initialize() {
         AppBase.initialize();
@@ -263,6 +276,14 @@ class TrainBudApp extends Application.AppBase {
         if (_cardIndex >= cardOrder().size()) {
             _cardIndex = 0;
         }
+
+        // The same for the finding being explained: a new summary can carry
+        // fewer findings, or none once one has been muted.
+        var count = getFindings().size();
+        if (_findingIndex >= count) { _findingIndex = 0; }
+        if (count == 0 && (_todayMode.equals("detail") || _todayMode.equals("confirm"))) {
+            _todayMode = "none";
+        }
     }
 
     //
@@ -322,10 +343,12 @@ class TrainBudApp extends Application.AppBase {
     function setCachedAt(v as Number or Null) as Void  { _cachedAt = v; }
 
     function nextCard() as Void {
+        _todayMode = "none";
         _cardIndex = (_cardIndex + 1) % getCardCount();
     }
 
     function prevCard() as Void {
+        _todayMode = "none";
         var count = getCardCount();
         _cardIndex = (_cardIndex + count - 1) % count;
     }
@@ -598,9 +621,24 @@ class TrainBudApp extends Application.AppBase {
         // them to.
         url = url + "?card=" + currentCardId() + "&build=" + BUILD_ID;
 
+        // A watch this short on memory asks for the lean payload: no rule text
+        // on findings, no sleep movers. The Forerunner 55 widget has 64 KB and
+        // 51.5 KB of it is gone before a summary is read; the fields it does
+        // not draw are the difference between loading and running out.
+        if (System.getSystemStats().totalMemory < LITE_MEMORY_BYTES) {
+            url = url + "&lite=1";
+        }
+
         setStatus("loading");
         WatchUi.requestUpdate();
         startFetchTimer();
+
+        // Let go of the summary on screen before the new one arrives. Held
+        // across the request, the old and the new payload are both alive at
+        // the moment the response is parsed, which on the Forerunner 55 is two
+        // summaries in the room for one. The loading screen draws nothing from
+        // it, and a failed fetch reloads the cached copy.
+        _summary = null;
 
         var options = {
             :method  => Communications.HTTP_REQUEST_METHOD_GET,
@@ -1168,6 +1206,143 @@ class TrainBudApp extends Application.AppBase {
         if (_promptPageCount == safe) { return; }
         _promptPageCount = safe;
         if (_promptPageIndex >= safe) { _promptPageIndex = safe - 1; }
+    }
+
+    // -------------------------------------------------------------------------
+    // Finding detail and mute (2.1.0)
+    //
+    // Two replies on r/GarminWatches, on the wrist: "transparency about
+    // metrics is helpful" -- a finding opens to the rule it fired on -- and
+    // "being able to ignore feedback that I can justify but the watch can't" --
+    // from there it can be muted for three days. Two presses, never one: a
+    // single tap on a wrist is too easy to make without meaning it.
+    // -------------------------------------------------------------------------
+
+    function getTodayMode() as String           { return _todayMode; }
+    function getFindingIndex() as Number        { return _findingIndex; }
+    function getMuteFailClass() as Number       { return _muteFailClass; }
+    function getMuteErrorCode() as Number or Null { return _muteErrorCode; }
+
+    /** The findings in the current summary, never null. */
+    function getFindings() as Array {
+        if (_summary == null) { return [] as Array; }
+        var findings = (_summary as Dictionary).get("findings");
+        return (findings != null && findings instanceof Array) ? findings as Array : [] as Array;
+    }
+
+    function getSelectedFinding() as Dictionary or Null {
+        var list = getFindings();
+        if (_findingIndex < 0 || _findingIndex >= list.size()) { return null; }
+        var item = list[_findingIndex];
+        return item instanceof Dictionary ? item as Dictionary : null;
+    }
+
+    /**
+     * Whether the Today card can open a finding.
+     *
+     * Keyed on the server having sent the rule. A server older than 0.8.0 sends
+     * no `why` and has no /api/mute, so offering either would open a screen with
+     * nothing to say and a button that can only fail. On such a server START
+     * keeps its old meaning, next card.
+     */
+    (:fullUi)
+    function canExplainFindings() as Boolean {
+        var list = getFindings();
+        if (list.size() == 0) { return false; }
+        var first = list[0];
+        if (!(first instanceof Dictionary)) { return false; }
+        var why = (first as Dictionary).get("why");
+        return why != null && why instanceof String;
+    }
+
+    // The Forerunner 55 build. Its widget has 64 KB in total and 2.0.4 already
+    // used 55.5 of it with an ordinary payload; the detail and mute screens are
+    // about 7 KB of code and ran it out of memory loading the cached summary.
+    // monkey.jungle compiles those out for that one device, so there START on
+    // the Today card keeps its old meaning.
+    (:lowMem)
+    function canExplainFindings() as Boolean { return false; }
+
+    (:fullUi)
+    function openFindingDetail() as Void {
+        _findingIndex = 0;
+        _todayMode = "detail";
+    }
+
+    (:fullUi)
+    function closeFindingDetail() as Void {
+        _todayMode = "none";
+    }
+
+    (:fullUi)
+    function stepFinding(forward as Boolean) as Void {
+        var count = getFindings().size();
+        if (count <= 1) { return; }
+        _findingIndex = forward
+            ? (_findingIndex + 1) % count
+            : (_findingIndex + count - 1) % count;
+    }
+
+    (:fullUi) function askToMute() as Void   { _todayMode = "confirm"; }
+    (:fullUi) function cancelMute() as Void  { _todayMode = "detail"; }
+
+    (:fullUi)
+    function submitMute() as Void {
+        var finding = getSelectedFinding();
+        var serverUrl = getServerUrl();
+        var apiKey = getApiKey();
+        var kind = finding == null ? null : finding.get("kind");
+        if (kind == null || !(kind instanceof String) || serverUrl == null || apiKey == null) {
+            _todayMode = "detail";
+            return;
+        }
+
+        _todayMode = "muting";
+        WatchUi.requestUpdate();
+
+        var options = {
+            :method  => Communications.HTTP_REQUEST_METHOD_POST,
+            // Same three headers the prompt submit sends, and nothing else:
+            // Connect IQ validates request headers on the device and drops the
+            // whole request for one it dislikes. See Trap -- Connect IQ web
+            // requests fail silently.
+            :headers => {
+                "Authorization" => "Bearer " + apiKey,
+                "Content-Type"  => Communications.REQUEST_CONTENT_TYPE_JSON,
+                "ngrok-skip-browser-warning" => SKIP_INTERSTITIAL
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        Communications.makeWebRequest(buildBaseUrl(serverUrl) + "/api/mute",
+            { "kind" => kind as String }, options, method(:onMuteResponse));
+    }
+
+    (:fullUi)
+    function onMuteResponse(responseCode as Number, data as Dictionary or String or Null) as Void {
+        if (responseCode == 200) {
+            _todayMode = "none";
+            _findingIndex = 0;
+            _muteFailClass = Fail.NONE;
+            _muteErrorCode = null;
+            // The server has already dropped its cached summary, so this fetch
+            // comes back without the finding.
+            fetchSummary();
+            return;
+        }
+
+        _muteErrorCode = responseCode;
+        _muteFailClass = Fail.classify(responseCode);
+        _todayMode = "mute_error";
+        WatchUi.requestUpdate();
+    }
+
+    /** Screen tour hook: put the Today card in a given mode with no server. */
+    function setTodayMode(mode as String, failClass as Number, code as Number or Null) as Void {
+        _todayMode = mode;
+        _findingIndex = 0;
+        _muteFailClass = failClass;
+        _muteErrorCode = code;
     }
 
     // -------------------------------------------------------------------------

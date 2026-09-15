@@ -29,7 +29,7 @@ import { looksLikeDeviceToken } from "./deviceTokens.js";
 import { assertGarminCredentials, assertApiKey, appConfig } from "./config.js";
 import { createMcpServerInstance } from "./server.js";
 import { configureLogger, logger } from "./utils/logger.js";
-import { buildWatchSummary, type WatchSummary } from "./watchApi.js";
+import { buildWatchSummary, shapeForWatch, type WatchSummary } from "./watchApi.js";
 import { requestPairing, checkPairStatus, approvePairing } from "./pairApi.js";
 import {
   submitPrompt,
@@ -1458,7 +1458,12 @@ export function createHttpMcpServer(): HttpMcpServer {
 
           try {
             const summary = await getCachedWatchSummary();
-            sendJson(res, 200, summary);
+            // Shaped per request: the Forerunner 55 cannot afford the fields
+            // it does not draw. See shapeForWatch.
+            sendJson(res, 200, shapeForWatch(summary, {
+              build: url.searchParams.get("build"),
+              lite: url.searchParams.get("lite") === "1",
+            }));
           } catch (error) {
             logger.error({ error }, "Watch API request failed");
             sendJson(res, 500, {

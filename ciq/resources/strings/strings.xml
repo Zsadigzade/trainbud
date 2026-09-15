@@ -134,6 +134,21 @@
          screen. -->
     <string id="RetryTouch">Tap to retry</string>
     <string id="RetryButton">START to retry</string>
+    <!-- 2.1.0: a finding opens to the rule it fired on, and can be muted
+         for three days from there. "Being able to ignore feedback that I can
+         justify but the watch can't" - r/GarminWatches. Two presses to mute,
+         never one: a single tap on a wrist is too easy to make by accident. -->
+    <string id="FindingWhy">Why</string>
+    <string id="WhyHintTouch">Tap for why</string>
+    <string id="WhyHintButton">START for why</string>
+    <string id="MuteHintTouch">Tap to mute</string>
+    <string id="MuteHintButton">START to mute</string>
+    <string id="MuteConfirm">Mute 3 days?</string>
+    <string id="MuteConfirmTouch">Tap again to mute</string>
+    <string id="MuteConfirmButton">START again to mute</string>
+    <string id="MuteCancelHint">BACK to cancel</string>
+    <string id="Muting">Muting...</string>
+    <string id="MuteFailed">Could not mute</string>
     <string id="SelectTouch">Tap to select</string>
     <string id="SelectButton">START to select</string>
 

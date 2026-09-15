@@ -51,7 +51,13 @@ module ScreenTour {
     const SLEEP            = 20;
     const ACTIVITY         = 21;
     const STRESS           = 22;
-    const STATE_COUNT      = 28;
+    // 2.1.0, appended for the same reason as the others: renumbering shifts
+    // every capture filename.
+    const FINDING_WHY      = 28;  // a finding opened to the rule it fired on
+    const MUTE_CONFIRM     = 29;  // "Mute 3 days?"
+    const MUTE_ERROR       = 30;  // the mute request did not reach the server
+    const SLEEP_MOVED      = 31;  // the Sleep card with what moved last night
+    const STATE_COUNT      = 32;
 
     // Where the tour currently is. A module variable rather than a field on the
     // app, so the app carries none of this in a build a user can install.
@@ -93,6 +99,13 @@ module ScreenTour {
     //
     function seedGlance() as Void {
         var summary = sampleSummary(true);
+        // Stored as a lean-payload watch stores it, without the rule text: the
+        // seed is also what the Forerunner 55 memory check loads, and that
+        // watch never receives the rule (see shapeForWatch on the server).
+        var findings = summary.get("findings") as Array;
+        for (var i = 0; i < findings.size(); i += 1) {
+            (findings[i] as Dictionary).remove("why");
+        }
         Application.Storage.setValue("summary", summary);
         Application.Storage.setValue("cached_at", Time.now().value());
         GlanceData.write(summary, Time.now().value() - _glanceAgeS);
@@ -117,7 +130,8 @@ module ScreenTour {
             "ask-thinking", "ask-answer", "ask-job-error", "ask-transport",
             "ask-timeout", "insight", "insight-no-key", "overview",
             "recovery", "sleep", "activity", "stress", "today-cold-start",
-            "week", "week-cold-start", "week-race-week", "ask-budget"
+            "week", "week-cold-start", "week-race-week", "ask-budget",
+            "finding-why", "mute-confirm", "mute-error", "sleep-moved"
         ];
         if (i < 0 || i >= names.size()) { return "?"; }
         return names[i] as String;
@@ -144,6 +158,7 @@ module ScreenTour {
         app.setSummary(null);
         app.setPromptState("idle", null, null, Fail.NONE, null);
         app.setSummaryFailure(Fail.NONE, null);
+        app.setTodayMode("none", Fail.NONE, null);
         app.setPairFailure(Fail.UNREACHABLE, null);
         app.setCardById(Cards.TODAY);
         app.setAskMenuIndex(0);
@@ -237,8 +252,24 @@ module ScreenTour {
             summary.put("coverage", { "days" => 6, "ready" => false });
         }
 
+        // Last night against the usual, as the 0.8.0 server sends it.
+        if (index == SLEEP_MOVED) {
+            (summary.get("sleep") as Dictionary).put("moved", ["Deep 40m (1h24m)", "Stress 33 (20)"]);
+        }
+
         app.setSummary(summary);
         app.setStatus("ready");
+
+        if (index == FINDING_WHY || index == MUTE_CONFIRM || index == MUTE_ERROR) {
+            app.setCardById(Cards.TODAY);
+            if (index == FINDING_WHY)  { app.setTodayMode("detail", Fail.NONE, null); }
+            if (index == MUTE_CONFIRM) { app.setTodayMode("confirm", Fail.NONE, null); }
+            if (index == MUTE_ERROR)   {
+                app.setTodayMode("mute_error", Fail.UNREACHABLE, Communications.BLE_CONNECTION_UNAVAILABLE);
+            }
+            return;
+        }
+        if (index == SLEEP_MOVED) { app.setCardById(Cards.SLEEP); return; }
 
         if (index == TODAY)      { app.setCardById(Cards.TODAY); return; }
         if (index == TODAY_COLD) { app.setCardById(Cards.TODAY); return; }
@@ -331,11 +362,14 @@ module ScreenTour {
             },
             "coverage" => { "days" => 86, "ready" => true },
             "findings" => [
-                { "kind" => "resting_hr", "severity" => "warn",
+                { "kind" => "rhr_elevated", "severity" => "warn",
                   "headline" => "Resting HR 4 bpm above your 30-day median for 3 days",
-                  "short" => "RHR +4 bpm" },
+                  "short" => "RHR +4 bpm",
+                  "why" => "Each of the last 3 days was at least 3 bpm and 2 deviations above your 28-day median of 48 bpm." },
                 { "kind" => "sleep_debt", "severity" => "notice",
-                  "headline" => "Sleep 1.2h below your average across the last week" }
+                  "headline" => "Sleep 1.2h below your average across the last week",
+                  "short" => "Sleep -1.2h",
+                  "why" => "Nights short of your usual 7.2 h, less your normal spread, added up to 3 h or more over 7 nights." }
             ],
             "race" => null,
             "week" => {

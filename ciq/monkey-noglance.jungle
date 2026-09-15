@@ -11,4 +11,5 @@
 #
 # Usage:
 #   monkeyc -f "monkey.jungle;monkey-noglance.jungle" -o bin\TrainBud-noglance.prg ...
-base.excludeAnnotations = glance
+base.excludeAnnotations = glance;lowMem
+fr55.excludeAnnotations = glance;fullUi

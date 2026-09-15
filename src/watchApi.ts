@@ -548,6 +548,53 @@ export function buildWatchSummaryFrom(
   };
 }
 
+/** The first watch build that draws `why` and `sleep.moved`. */
+const DETAIL_BUILD: [number, number, number] = [2, 1, 0];
+
+function parseBuild(build: string | null | undefined): [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(build ?? "");
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function atLeast(version: [number, number, number] | null, floor: [number, number, number]): boolean {
+  if (!version) {
+    return false;
+  }
+  for (let i = 0; i < 3; i += 1) {
+    if (version[i]! !== floor[i]!) {
+      return version[i]! > floor[i]!;
+    }
+  }
+  return true;
+}
+
+/**
+ * The summary as a particular watch should receive it.
+ *
+ * The Forerunner 55 widget has 64 KB, and 2.0.4 used 51.5 KB of it before the
+ * cached summary was read; a summary is held at several times its JSON size, so
+ * every added field costs memory on that watch whether it draws the field or
+ * not. `why` and `sleep.moved` together ran it out of memory in the simulator.
+ * So they go only to a build that draws them (2.1.0+), and not to a watch that
+ * reports itself short on memory (`lite`), whatever its build.
+ *
+ * A copy: the cached summary is shared by every request.
+ */
+export function shapeForWatch(
+  summary: WatchSummary,
+  client: { build: string | null | undefined; lite: boolean }
+): WatchSummary {
+  if (atLeast(parseBuild(client.build), DETAIL_BUILD) && !client.lite) {
+    return summary;
+  }
+
+  return {
+    ...summary,
+    findings: summary.findings.map(({ why: _why, ...rest }) => rest as WatchFinding),
+    sleep: summary.sleep ? (({ moved: _moved, ...rest }) => rest)(summary.sleep) : summary.sleep,
+  };
+}
+
 /**
  * One failing tool must not empty the whole screen -- the watch renders each
  * card independently and shows "No data" for the ones that are missing.

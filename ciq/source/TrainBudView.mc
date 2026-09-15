@@ -9,6 +9,9 @@ import Toybox.WatchUi;
 
 class TrainBudView extends WatchUi.View {
 
+    // How old the cached numbers are when the last fetch failed, or null.
+    private var _staleAge as String or Null = null;
+
     function initialize() {
         View.initialize();
     }
@@ -104,11 +107,16 @@ class TrainBudView extends WatchUi.View {
             return;
         }
 
-        drawCard(dc, cardId, app.getSummary(), isRoundScreen(dc));
-
-        if (status.equals("stale")) {
-            drawStaleIndicator(dc, app.getCachedAt());
+        // A finding opened from the Today card takes the whole screen, without
+        // page dots: it is not a position in the carousel.
+        if (cardId.equals(Cards.TODAY) && drawTodayOverlay(dc, app)) {
+            return;
         }
+
+        // Read by drawCardTitle, which puts the age beside the card's title.
+        _staleAge = status.equals("stale") ? staleAge(app.getCachedAt()) : null;
+
+        drawCard(dc, cardId, app.getSummary(), isRoundScreen(dc));
 
         drawPageDots(dc, cardIndex, app.getCardCount());
     }
@@ -793,21 +801,72 @@ class TrainBudView extends WatchUi.View {
         }
     }
 
-    private function drawStaleIndicator(dc as Dc, cachedAt as Number or Null) as Void {
-        if (cachedAt == null) { return; }
-
-        var minutesAgo = ((Time.now().value() - cachedAt) / 60).toNumber();
-        if (minutesAgo < 1) { minutesAgo = 1; }
-
-        var staleText = WatchUi.loadResource(Rez.Strings.StalePrefix) as String + " " +
-            minutesAgo.toString() + "m " +
-            WatchUi.loadResource(Rez.Strings.StaleSuffix) as String;
-
-        // Amber: stale data is a caution about the data itself.
-        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(dc.getWidth() / 2, 12, Graphics.FONT_XTINY, staleText, Graphics.TEXT_JUSTIFY_CENTER);
+    //
+    // How old the cached numbers are, when the fetch failed.
+    //
+    // This was "Updated 5m ago" drawn on its own line at y = 12, in a font 19 px
+    // tall on the Forerunner 55 -- straight through every card title below it --
+    // and it only ever counted minutes, so two days offline read "Updated 2880m
+    // ago". Moving it to the very top was tried and there is no width there on a
+    // round screen: it drew "1". It now rides beside the card title, where there
+    // is room, in the largest unit that says it.
+    //
+    private function staleAge(cachedAt as Number or Null) as String or Null {
+        if (cachedAt == null) { return null; }
+        var seconds = Time.now().value() - cachedAt;
+        if (seconds < 3600) {
+            var minutes = (seconds / 60).toNumber();
+            return (minutes < 1 ? 1 : minutes).toString() + "m";
+        }
+        if (seconds < 86400) { return (seconds / 3600).toNumber().toString() + "h"; }
+        return (seconds / 86400).toNumber().toString() + "d";
     }
 
+    //
+    // A card's title, with the data's age beside it in amber when it is stale.
+    //
+    // Title and age are centred together as one line. When the pair does not
+    // fit at that height, the age wins and is drawn in the title's place: the
+    // page dots already say which card this is, and nothing else on screen
+    // says the numbers are old.
+    //
+    private function drawCardTitle(dc as Dc, y as Number, title as String) as Void {
+        var cx = dc.getWidth() / 2;
+        var age = _staleAge;
+
+        if (age == null) {
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, y, Graphics.FONT_SMALL, title, Graphics.TEXT_JUSTIFY_CENTER);
+            return;
+        }
+
+        var label = (age as String) + " " + (WatchUi.loadResource(Rez.Strings.StaleSuffix) as String);
+        var titleW = dc.getTextWidthInPixels(title, Graphics.FONT_SMALL);
+        var gap = 6;
+        var ageW = dc.getTextWidthInPixels(label, Graphics.FONT_XTINY);
+        var smallH = dc.getFontHeight(Graphics.FONT_SMALL);
+        // Measured a third of the way down the line, where the capitals start:
+        // the font box above that is empty, and measuring at its top dropped
+        // the title on the Forerunner 70 with 40 px to spare.
+        var room = lineWidthAt(dc, (dc.getHeight() / 2) - y - (smallH / 3));
+
+        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
+        if (titleW + gap + ageW > room) {
+            dc.drawText(cx, y, Graphics.FONT_SMALL, fitLine(dc, label, Graphics.FONT_SMALL, y),
+                Graphics.TEXT_JUSTIFY_CENTER);
+            return;
+        }
+
+        var left = cx - ((titleW + gap + ageW) / 2);
+        // Bottom-aligned with the title's glyphs, so the smaller face does not
+        // float at the top of the line.
+        var ageY = y + (smallH - Graphics.getFontDescent(Graphics.FONT_SMALL))
+            - (dc.getFontHeight(Graphics.FONT_XTINY) - Graphics.getFontDescent(Graphics.FONT_XTINY));
+        dc.drawText(left + titleW + gap, ageY, Graphics.FONT_XTINY, label, Graphics.TEXT_JUSTIFY_LEFT);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(left, y, Graphics.FONT_SMALL, title, Graphics.TEXT_JUSTIFY_LEFT);
+    }
     // -------------------------------------------------------------------------
     // Card routing
     // -------------------------------------------------------------------------
@@ -839,7 +898,7 @@ class TrainBudView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(dc.getWidth() / 2, 28, Graphics.FONT_SMALL, title, Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 28, title);
 
         dc.setColor(valueColor, Graphics.COLOR_TRANSPARENT);
         drawFittedValue(dc, dc.getWidth() / 2, dc.getHeight() / 2 - 8, value);
@@ -887,9 +946,7 @@ class TrainBudView extends WatchUi.View {
         var cy = dc.getHeight() / 2;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, 24, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.CardToday) as String,
-            Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 24, WatchUi.loadResource(Rez.Strings.CardToday) as String);
 
         if (summary == null) {
             drawTodayMessage(dc, cx, cy,
@@ -927,7 +984,171 @@ class TrainBudView extends WatchUi.View {
             return;
         }
 
-        drawFindings(dc, cx, cy, list);
+        var app = Application.getApp() as TrainBudApp;
+        drawFindings(dc, cx, cy, list, app.canExplainFindings());
+    }
+
+    (:fullUi)
+    private function drawTodayOverlay(dc as Dc, app as TrainBudApp) as Boolean {
+        var mode = app.getTodayMode();
+        if (mode.equals("detail"))     { drawFindingDetail(dc, app); return true; }
+        if (mode.equals("confirm"))    { drawMuteConfirm(dc, app); return true; }
+        if (mode.equals("muting"))     { drawMessage(dc, WatchUi.loadResource(Rez.Strings.Muting) as String); return true; }
+        if (mode.equals("mute_error")) {
+            drawRequestFailure(dc, app, app.getMuteFailClass(), app.getMuteErrorCode(), false);
+            return true;
+        }
+        return false;
+    }
+
+    // The Forerunner 55 build has no finding detail -- see canExplainFindings.
+    (:lowMem) private function drawTodayOverlay(dc as Dc, app as TrainBudApp) as Boolean { return false; }
+    (:lowMem) private function movedFootnote(dc as Dc, summary as Dictionary) as String or Null { return null; }
+
+    //
+    // One finding, and the rule it fired on.
+    //
+    // "Transparency about metrics is helpful." The server sends the rule with
+    // the numbers that were in force -- "Each of the last 3 days was at least
+    // 3 bpm and 2 deviations above your 28-day median of 50 bpm" -- and this is
+    // where it is read: the headline, then the rule, then the one action.
+    //
+    (:fullUi)
+    private function drawFindingDetail(dc as Dc, app as TrainBudApp) as Void {
+        var finding = app.getSelectedFinding();
+        if (finding == null) {
+            drawMessage(dc, WatchUi.loadResource(Rez.Strings.TodayNothing) as String);
+            return;
+        }
+
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, 24, Graphics.FONT_SMALL,
+            WatchUi.loadResource(Rez.Strings.FindingWhy) as String,
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        var headline = finding.get("headline");
+        var why = finding.get("why");
+        var hint = WatchUi.loadResource(
+            isTouch() ? Rez.Strings.MuteHintTouch : Rez.Strings.MuteHintButton) as String;
+
+        // The band between the title and the hint, wrapped at its narrowest end
+        // so no line can clip wherever the block lands.
+        var bandTop = 24 + titleH + 2;
+        var bandBot = dc.getHeight() - 30 - (lineH * 2);
+        var bandH   = bandBot - bandTop;
+        var narrow  = (cy - bandTop) > (bandBot - cy) ? (cy - bandTop) : (bandBot - cy);
+        var maxLines = bandH / lineH;
+        if (maxLines < 2) { maxLines = 2; }
+
+        var head = headline instanceof String
+            ? wrapToWidth(dc, headline as String, Graphics.FONT_XTINY, narrow)
+            : [] as Array<String>;
+        var rule = why instanceof String
+            ? wrapToWidth(dc, why as String, Graphics.FONT_XTINY, narrow)
+            : [] as Array<String>;
+
+        // The headline is what the user already saw on the card; the rule is
+        // what they opened this for. When both do not fit, the rule keeps its
+        // lines and the headline gives them up.
+        var headShown = head.size();
+        var gap = (headShown > 0 && rule.size() > 0) ? 1 : 0;
+        if (headShown + gap + rule.size() > maxLines) {
+            headShown = maxLines - gap - rule.size();
+            if (headShown < 1 && head.size() > 0) { headShown = 1; }
+        }
+        var ruleShown = rule.size();
+        if (headShown + gap + ruleShown > maxLines) { ruleShown = maxLines - gap - headShown; }
+        if (ruleShown < 0) { ruleShown = 0; }
+
+        var total = headShown + gap + ruleShown;
+        var y = bandTop + ((bandH - (total * lineH)) / 2);
+
+        dc.setColor(Palette.PRIMARY, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < headShown; i += 1) {
+            var text = head[i] as String;
+            if (i == headShown - 1 && headShown < head.size()) { text = text + "..."; }
+            dc.drawText(cx, y, Graphics.FONT_XTINY, fitLine(dc, text, Graphics.FONT_XTINY, y),
+                Graphics.TEXT_JUSTIFY_CENTER);
+            if (i == 0) {
+                var half = dc.getTextWidthInPixels(fitLine(dc, text, Graphics.FONT_XTINY, y), Graphics.FONT_XTINY) / 2;
+                dc.setColor(severityColor(finding.get("severity")), Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(cx - half - 9, y + (lineH / 2) - Graphics.getFontDescent(Graphics.FONT_XTINY) / 2, 3);
+                dc.setColor(Palette.PRIMARY, Graphics.COLOR_TRANSPARENT);
+            }
+            y += lineH;
+        }
+        y += gap * lineH;
+
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        for (var j = 0; j < ruleShown; j += 1) {
+            var line = rule[j] as String;
+            if (j == ruleShown - 1 && ruleShown < rule.size()) { line = line + "..."; }
+            dc.drawText(cx, y, Graphics.FONT_XTINY, fitLine(dc, line, Graphics.FONT_XTINY, y),
+                Graphics.TEXT_JUSTIFY_CENTER);
+            y += lineH;
+        }
+
+        // A line above the counter, where a round screen still has the width
+        // for it: at the very bottom "Tap: mute 3 days" was cut to "Tap: mute 3 da...".
+        var hintY = dc.getHeight() - 26 - (lineH * 2);
+        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, hintY, Graphics.FONT_XTINY, fitLine(dc, hint, Graphics.FONT_XTINY, hintY),
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        var count = app.getFindings().size();
+        if (count > 1) {
+            dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, dc.getHeight() - 10, Graphics.FONT_XTINY,
+                (app.getFindingIndex() + 1).toString() + "/" + count.toString(),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
+    }
+
+    // The second press. Names what will be silenced, for how long, and how to
+    // back out -- a mute is invisible afterwards on the wrist by design.
+    (:fullUi)
+    private function drawMuteConfirm(dc as Dc, app as TrainBudApp) as Void {
+        var finding = app.getSelectedFinding();
+        var label = "";
+        if (finding != null) {
+            var short = finding.get("short");
+            var headline = finding.get("headline");
+            label = short instanceof String ? short as String
+                : (headline instanceof String ? headline as String : "");
+        }
+
+        var cx = dc.getWidth() / 2;
+        var cy = dc.getHeight() / 2;
+        var titleH = dc.getFontHeight(Graphics.FONT_SMALL);
+        var lineH  = dc.getFontHeight(Graphics.FONT_XTINY);
+        var confirm = WatchUi.loadResource(
+            isTouch() ? Rez.Strings.MuteConfirmTouch : Rez.Strings.MuteConfirmButton) as String;
+        var cancel = WatchUi.loadResource(Rez.Strings.MuteCancelHint) as String;
+
+        var y = cy - ((titleH + (lineH * 3)) / 2);
+
+        dc.setColor(Palette.CAUTION, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_SMALL,
+            fitLine(dc, WatchUi.loadResource(Rez.Strings.MuteConfirm) as String, Graphics.FONT_SMALL, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
+        y += titleH;
+
+        dc.setColor(Palette.PRIMARY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_XTINY, fitLine(dc, label, Graphics.FONT_XTINY, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
+        y += lineH;
+
+        dc.setColor(dimColor(), Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, y, Graphics.FONT_XTINY, fitLine(dc, confirm, Graphics.FONT_XTINY, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
+        y += lineH;
+        dc.drawText(cx, y, Graphics.FONT_XTINY, fitLine(dc, cancel, Graphics.FONT_XTINY, y),
+            Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     private function drawTodayMessage(
@@ -1012,7 +1233,7 @@ class TrainBudView extends WatchUi.View {
     // which of your health findings you are allowed to see is worse than one
     // that shows fewer and says so.
     //
-    private function drawFindings(dc as Dc, cx as Number, cy as Number, list as Array) as Void {
+    private function drawFindings(dc as Dc, cx as Number, cy as Number, list as Array, explainable as Boolean) as Void {
         // Findings live in the band between the card title and the page dots,
         // and they are centred in that band rather than on the screen.
         //
@@ -1049,6 +1270,10 @@ class TrainBudView extends WatchUi.View {
         // not fit.
         var maxLines = bandH / lineH;
         if (list.size() > 1 && maxLines > 2) { maxLines -= 1; }
+        // And one for "START for why", on a server that sends the rule. The
+        // detail screen is otherwise undiscoverable: START on this card used
+        // to mean "next card", and nothing on it said that had changed.
+        if (explainable && maxLines > 2) { maxLines -= 1; }
 
         var lines    = [] as Array<String>;
         var markers  = [] as Array<Number>;   // severity colour, or -1 for none
@@ -1086,9 +1311,15 @@ class TrainBudView extends WatchUi.View {
 
         // `hidden` is a reserved access modifier in Monkey C.
         var notShown = list.size() - rendered;
+        var footerFrom = lines.size();
         if (notShown > 0) {
             lines.add(notShown.toString() + " "
                 + (WatchUi.loadResource(Rez.Strings.FindingsMore) as String));
+            markers.add(-1);
+        }
+        if (explainable) {
+            lines.add(WatchUi.loadResource(
+                isTouch() ? Rez.Strings.WhyHintTouch : Rez.Strings.WhyHintButton) as String);
             markers.add(-1);
         }
 
@@ -1100,7 +1331,7 @@ class TrainBudView extends WatchUi.View {
             if (text.length() == 0) { continue; }
 
             var y = startY + i * lineH;
-            var isFooter = notShown > 0 && i == lines.size() - 1;
+            var isFooter = i >= footerFrom;
 
             dc.setColor(isFooter ? Palette.SECONDARY : Palette.PRIMARY,
                 Graphics.COLOR_TRANSPARENT);
@@ -1145,9 +1376,7 @@ class TrainBudView extends WatchUi.View {
         var cy = dc.getHeight() / 2;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, 24, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.CardWeek) as String,
-            Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 24, WatchUi.loadResource(Rez.Strings.CardWeek) as String);
 
         var week = summary == null ? null : summary.get("week");
         if (week == null || !(week instanceof Dictionary)) {
@@ -1317,9 +1546,7 @@ class TrainBudView extends WatchUi.View {
         var cy = dc.getHeight() / 2;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, 20, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.CardAiInsight) as String,
-            Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 20, WatchUi.loadResource(Rez.Strings.CardAiInsight) as String);
 
         // "No insight today" is a claim about today. It was also what a user
         // with no API key saw, every day, forever -- ai_insight is null in both
@@ -1352,9 +1579,7 @@ class TrainBudView extends WatchUi.View {
 
     private function drawOverviewCard(dc as Dc, summary as Dictionary or Null) as Void {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(dc.getWidth() / 2, 24, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.CardOverview) as String,
-            Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 24, WatchUi.loadResource(Rez.Strings.CardOverview) as String);
 
         // "No data" is too wide for a quarter of the screen: four of them drew
         // over each other and over their own labels. The glance has always used
@@ -1467,9 +1692,7 @@ class TrainBudView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(dc.getWidth() / 2, 24, Graphics.FONT_SMALL,
-            WatchUi.loadResource(Rez.Strings.CardRecovery) as String,
-            Graphics.TEXT_JUSTIFY_CENTER);
+        drawCardTitle(dc, 24, WatchUi.loadResource(Rez.Strings.CardRecovery) as String);
 
         var color = hasScore ? stateColor("recovery") : Palette.PRIMARY;
         var cx = dc.getWidth() / 2;
@@ -1834,6 +2057,17 @@ class TrainBudView extends WatchUi.View {
                     result[:footnote] = note;
                 }
             }
+
+            // What moved last night, when the server found something (0.8.0+).
+            //
+            // "Knowing why my sleep score dropped would make it easier to
+            // pinpoint causes." The server compares each part of the night with
+            // this person's own last 28 and sends the biggest two as
+            // "Deep 40m (1h24m)": last night, then the usual in brackets. It
+            // takes the footnote over from the habitual figure, because on a
+            // night where a part moved, which part is the more useful sentence.
+            var moved = movedFootnote(dc, summary);
+            if (moved != null) { result[:footnote] = moved; }
             return result;
         }
 
@@ -1923,6 +2157,28 @@ class TrainBudView extends WatchUi.View {
     // -------------------------------------------------------------------------
     // Text helpers
     // -------------------------------------------------------------------------
+
+    /** The two biggest parts of last night that moved, as one line if they fit. */
+    (:fullUi)
+    private function movedFootnote(dc as Dc, summary as Dictionary) as String or Null {
+        var sleepDict = summary.get("sleep");
+        if (sleepDict == null || !(sleepDict instanceof Dictionary)) { return null; }
+        var moved = (sleepDict as Dictionary).get("moved");
+        if (moved == null || !(moved instanceof Array) || (moved as Array).size() == 0
+                || !((moved as Array)[0] instanceof String)) {
+            return null;
+        }
+        var list = moved as Array;
+        var line = list[0] as String;
+        if (list.size() > 1 && list[1] instanceof String) {
+            var both = line + " · " + (list[1] as String);
+            if (dc.getTextWidthInPixels(both, Graphics.FONT_XTINY)
+                    <= lineWidthAt(dc, (dc.getHeight() / 2) - 36)) {
+                line = both;
+            }
+        }
+        return line;
+    }
 
     private function parseNumber(text as String) as Number or Null {
         var noData = WatchUi.loadResource(Rez.Strings.NoData) as String;
