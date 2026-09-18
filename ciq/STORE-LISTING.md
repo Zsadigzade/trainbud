@@ -32,8 +32,8 @@ Sees what stands out in your training history — resting heart rate, sleep debt
 ## Full description
 
 Your watch already shows you today's numbers. TrainBud's companion server keeps a year
-of them, and tells you what actually stands out — measured against your own baseline,
-not a population average.
+of them on your own machine, and tells you what actually stands out — with the rule
+that decided it written out, so you can read it and change it.
 
 TrainBud opens on Today: the things worth knowing, in plain language.
 • "Resting heart rate 4 bpm above your 28-day baseline, 3 days running"

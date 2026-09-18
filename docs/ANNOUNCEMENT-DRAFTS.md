@@ -109,8 +109,8 @@ can ask about, so I built an MCP server for it.
 
 `npx trainbud setup` walks you through credentials, authenticates, and writes
 your Claude Desktop or Cursor config. After that you can ask "am I recovered
-enough to train hard tomorrow" and get an answer computed from *your* 28-day
-baselines rather than a population average.
+enough to train hard tomorrow" and get an answer computed in code from *your*
+28-day baselines — with the rule it fired on shown alongside it.
 
 Three decisions that shaped the whole thing:
 
@@ -155,8 +155,8 @@ can ask about, so I built an MCP server for it.
 
 `npx trainbud setup` walks you through credentials, authenticates, and writes
 your Claude Desktop or Cursor config. After that you can ask things like "am I
-recovered enough to train hard tomorrow" and get an answer computed from *your*
-28-day baselines rather than a population average.
+recovered enough to train hard tomorrow" and get an answer computed in code from
+*your* 28-day baselines — with the rule it fired on shown alongside it.
 
 Fifteen tools: activities, sleep, heart rate, recovery, body composition,
 stress, VO2 max, a weekly review, a comparison of one workout against your own
@@ -269,7 +269,7 @@ sleep, load and recovery in plain English.
 `npx trainbud setup`
 
 **2/**
-It answers against *your* baselines, not a population average.
+It answers against *your* baselines, and shows the rule it used.
 
 "Resting heart rate 4 bpm above your 28-day baseline, 3 days running."
 
@@ -452,7 +452,8 @@ Garmin Ltd. Garmin Connect is a trademark of Garmin Ltd.
    without reading that leaves a one-star review.
 2. **One paragraph on what it shows on the wrist.** Today screen naming what
    stands out, then Overview / Recovery / Sleep / Activity / Stress.
-3. **Why baselines rather than population averages**, in one sentence.
+3. **Why the rule is readable and the history is yours**, in one sentence — NOT
+   "your baseline vs a population average"; see the dead-hook warning above.
 4. **The disclosures**: you are the developer, it is free, AI-assisted not
    AI-generated, not affiliated with Garmin.
 5. **The moderator permission**, quoted, one line.
@@ -493,9 +494,12 @@ widget that opens on a Today screen naming what stands out in my recent data:
 "this week's load is 1.6x your four-week average". Overview, Recovery, Sleep,
 Activity and Stress are one swipe away if you want the raw numbers.
 
-The reason it compares you against **your own baseline** rather than a
-population average is that a population average has never met you. A resting
-heart rate of 48 is not news; 48 when you normally sit at 44 is. And when it
+Your watch already measures most of this against you rather than against a
+population, so that is not the difference. The difference is that **the rule is
+readable and the history is yours**: "three days running, each at least 3 bpm and
+two deviations above your 28-day median" is a line you can open and change if you
+think the threshold is wrong, and the history it reads sits in a file on your own
+machine. And when it
 doesn't have enough history to compare anything, it says so instead of showing a
 number that means nothing — a new watch has no baseline for a couple of weeks
 and it tells you that. A night you didn't wear the watch reads as unknown, not
