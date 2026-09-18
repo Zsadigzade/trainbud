@@ -1,6 +1,7 @@
 import { appConfig, watchSetupReadError } from "./config.js";
 import { isAiConfigured } from "./promptApi.js";
 import { getPendingPairings } from "./pairApi.js";
+import { getMasterKeyWatch, isMasterKeyWatchActive } from "./appDb.js";
 import { runDetectors } from "./detect/index.js";
 
 // SECTION: Self test
@@ -44,6 +45,26 @@ export interface SelfTestResult {
   publicUrl: string;
   checks: CheckLine[];
   ok: boolean;
+}
+
+/**
+ * Which of the three states a check is in, for whoever draws it.
+ *
+ * Both surfaces asked `ok` first and `warning` second -- `check.ok ? "✓" :
+ * check.warning ? "!" : "✗"` in the CLI, the same shape in the dashboard -- and
+ * every warning this file produces sets BOTH. So a warning drew as a plain tick
+ * and said "ok", and the `warning` field, the `!` glyph and the dashboard's
+ * `warn` class had never once been reached. The state that exists to say "not
+ * wrong yet, but it will bite" was the one state that could not be displayed.
+ *
+ * `ok` still decides the exit code. This decides only what is drawn, which is
+ * why it is a separate question with a separate answer.
+ */
+export type CheckState = "ok" | "warning" | "failed";
+
+export function checkState(check: CheckLine): CheckState {
+  if (check.warning) return "warning";
+  return check.ok ? "ok" : "failed";
 }
 
 /**
@@ -293,6 +314,27 @@ export async function runSelfTest(
       warning: true,
       detail: `${pending} pairing code(s) waiting for approval.`,
       fix: "Approve the code shown on your watch in the Pairing section.",
+    });
+  }
+
+  // A watch paired before 0.5.2 syncs with the master key, has no row in
+  // `devices`, and cannot be revoked without rotating the key out from under
+  // the dashboard and every MCP client. Nothing reported it, because there is
+  // nothing to look at -- only the moment it authenticates, which the server
+  // now records. This is the surface the user actually reads.
+  const legacyWatch = isMasterKeyWatchActive() ? getMasterKeyWatch() : null;
+  if (legacyWatch) {
+    const when = new Date(legacyWatch.last_seen_at * 1000).toISOString().slice(0, 16).replace("T", " ");
+    const build = legacyWatch.build ? ` (build ${legacyWatch.build})` : "";
+    checks.push({
+      name: "Watch credential",
+      ok: true,
+      warning: true,
+      detail:
+        `A watch${build} is syncing with the master API key, last seen ${when}. ` +
+        "It was paired before 0.5.2, so it is not in `trainbud devices list`, " +
+        "cannot be revoked on its own, and rotating the key will stop it working.",
+      fix: "Re-pair it from the watch's setup screen; it then carries a token of its own.",
     });
   }
 

@@ -7,7 +7,13 @@ import {
   getEnvFilePath,
   setEnvValue,
 } from "./config.js";
-import { deleteSetting, getSetting, setSetting } from "./appDb.js";
+import {
+  deleteSetting,
+  getMasterKeyWatch,
+  getSetting,
+  isMasterKeyWatchActive,
+  setSetting,
+} from "./appDb.js";
 import { logger } from "./utils/logger.js";
 
 // SECTION: Secret rotation
@@ -134,12 +140,39 @@ export function rotateApiKey(explicitKey?: string): RotationOutcome {
       "     new key as the bearer token in each one.",
       "  3. Your dashboard bookmark carries the old token. Open it once with",
       "     ?token=<the new key> and it will set a fresh cookie.",
-      "  4. A watch paired BEFORE 0.5.2 holds this master key rather than its own",
-      "     per-device token and will stop working. `trainbud devices list` shows",
-      "     what is paired; anything missing from that list is on the master key.",
-      "     Re-pair it from the watch.",
+      ...legacyWatchLines(),
     ],
   };
+}
+
+/**
+ * What rotating just did to a watch that holds the master key.
+ *
+ * This used to be four fixed lines ending "anything missing from that list is
+ * on the master key" -- an instruction to deduce a live credential from an
+ * empty list, printed identically whether or not such a watch existed. The
+ * server now records the master key turning up on a watch route, so this can
+ * report which case the reader is actually in.
+ */
+function legacyWatchLines(): string[] {
+  const seen = isMasterKeyWatchActive() ? getMasterKeyWatch() : null;
+  if (!seen) {
+    return [
+      "  4. No watch has used this key to sync in the last week, so nothing on a",
+      "     wrist should be affected. A watch paired before 0.5.2 would have been:",
+      "     those hold the master key rather than a token of their own.",
+    ];
+  }
+
+  const when = new Date(seen.last_seen_at * 1000).toISOString().slice(0, 16).replace("T", " ");
+  const build = seen.build ? ` (build ${seen.build})` : "";
+  return [
+    `  4. A WATCH JUST STOPPED WORKING${build}. It last synced at ${when} using this`,
+    "     master key, which means it was paired before 0.5.2 and holds the key",
+    "     itself rather than a token of its own. Re-pair it from the watch's setup",
+    "     screen with the new key; it will then appear in `trainbud devices list`",
+    "     and be revocable on its own.",
+  ];
 }
 
 /**

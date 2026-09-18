@@ -24,7 +24,13 @@ import {
 import { describeFindingsCoverage, runDetectors } from "./detect/index.js";
 import type { IngestSource } from "./history/schema.js";
 import { printLiveCheckResults, runLiveCheck } from "./check.js";
-import { listDeviceTokens, revokeAllDeviceTokens, revokeDeviceToken } from "./appDb.js";
+import {
+  getMasterKeyWatch,
+  isMasterKeyWatchActive,
+  listDeviceTokens,
+  revokeAllDeviceTokens,
+  revokeDeviceToken,
+} from "./appDb.js";
 
 // SECTION: Bootstrap
 //
@@ -540,14 +546,16 @@ export function createCliProgram(): Command {
     .description("Check what the watch would see: public URL, AI key, history depth")
     .action(async () => {
       try {
-        const { runSelfTest } = await import("./selfTest.js");
+        const { checkState, runSelfTest } = await import("./selfTest.js");
         const result = await runSelfTest();
+
+        const MARKS = { ok: "✓", warning: "!", failed: "✗" } as const;
 
         console.log("");
         console.log("TrainBud doctor");
         console.log("");
         for (const check of result.checks) {
-          const mark = check.ok ? "✓" : check.warning ? "!" : "✗";
+          const mark = MARKS[checkState(check)];
           console.log(`  ${mark}  ${check.name}`);
           console.log(`     ${check.detail}`);
           if (check.fix) {
@@ -601,7 +609,13 @@ export function createCliProgram(): Command {
     .description("Show paired watches, newest first")
     .action(() => {
       const devices = listDeviceTokens();
-      if (devices.length === 0) {
+      // A watch paired before 0.5.2 has no row here at all, so an empty list
+      // used to print "No paired watches" while one sat on a wrist syncing.
+      // The server writes down the master key turning up on a watch route
+      // precisely so this command can say so instead of showing nothing.
+      const legacy = isMasterKeyWatchActive() ? getMasterKeyWatch() : null;
+
+      if (devices.length === 0 && !legacy) {
         console.log("No paired watches. Pair one from the watch app's setup screen.");
         return;
       }
@@ -612,6 +626,16 @@ export function createCliProgram(): Command {
           : "never";
         console.log(`${String(device.id).padStart(3)}  ${device.label}  paired ${created}  last seen ${seen}`);
       }
+      if (legacy) {
+        const seen = new Date(legacy.last_seen_at * 1000).toISOString().slice(0, 16).replace("T", " ");
+        const build = legacy.build ? ` build ${legacy.build}` : "";
+        if (devices.length > 0) console.log("");
+        console.log(`  -  a watch on the MASTER KEY${build}  last seen ${seen}`);
+        console.log("     It was paired before 0.5.2, so it holds TRAINBUD_API_KEY itself.");
+        console.log("     It cannot be revoked from here, and `trainbud rotate api-key`");
+        console.log("     will stop it working. Re-pair it from the watch's setup screen");
+        console.log("     and it becomes a row above, revocable on its own.");
+      }
     });
 
   devicesCommand
@@ -620,8 +644,19 @@ export function createCliProgram(): Command {
     .option("--all", "Revoke every paired watch")
     .action((id: string | undefined, options: { all?: boolean }) => {
       if (options.all) {
+        // Asked before the deletion: "Revoked 2 watches" while a third keeps
+        // syncing on the master key is the most expensive kind of wrong answer
+        // this command can give, because the reader stops looking.
+        const legacy = isMasterKeyWatchActive();
         const count = revokeAllDeviceTokens();
         console.log(count === 0 ? "Nothing to revoke." : `Revoked ${count} watch${count === 1 ? "" : "es"}.`);
+        if (legacy) {
+          console.log("");
+          console.log("NOT revoked: a watch holding the master key, which has no token to take");
+          console.log("away. It keeps working. `trainbud devices list` shows when it last synced;");
+          console.log("re-pair it, or rotate the key with `trainbud rotate api-key` to cut it off");
+          console.log("along with every MCP client and the dashboard.");
+        }
         return;
       }
       const numericId = Number(id);

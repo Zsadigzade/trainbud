@@ -22,6 +22,7 @@ import {
   closeAppDb,
   findDeviceTokenId,
   reconcilePromptJobsOnStartup,
+  recordMasterKeyWatch,
   setSetting,
   touchDeviceToken,
 } from "./appDb.js";
@@ -316,17 +317,34 @@ function applySecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
   }
 }
 
-function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
+/**
+ * Which credential let the request through, or null if none did.
+ *
+ * Every caller until now only wanted the yes/no, and `isAuthorized` still hands
+ * that back. The watch routes want the rest: a watch paired before 0.5.2 is
+ * carrying the master key, which is unrevocable and invisible -- it has no
+ * `device_tokens` row, so the only place that fact can be observed is the
+ * moment it authenticates.
+ */
+type AuthKind = "master" | "device" | "session";
+
+function authenticate(req: IncomingMessage, queryToken?: string): AuthKind | null {
   const header = req.headers.authorization;
   const headerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
   const token = headerToken ?? queryToken ?? null;
   if (token !== null && matchesApiKey(token)) {
-    return true;
+    return "master";
   }
+  // matchesDeviceToken updates last_seen_at, so the order here is load-bearing:
+  // the master key is checked first and never reaches the database.
   if (token !== null && matchesDeviceToken(token)) {
-    return true;
+    return "device";
   }
-  return hasValidSession(req);
+  return hasValidSession(req) ? "session" : null;
+}
+
+function isAuthorized(req: IncomingMessage, queryToken?: string): boolean {
+  return authenticate(req, queryToken) !== null;
 }
 
 /**
@@ -956,10 +974,16 @@ export function createHttpMcpServer(): HttpMcpServer {
         // cache dropped so the next sync stops drawing the finding at once
         // rather than five minutes later.
         if (pathname === "/api/mute" && req.method === "POST") {
-          if (!isAuthorized(req)) {
+          const muteAuth = authenticate(req);
+          if (muteAuth === null) {
             res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             sendJson(res, 401, { error: "Unauthorized" });
             return;
+          }
+          // Watch-only, like /api/watch. No build parameter on this route, so
+          // the sighting keeps whichever build the last sync reported.
+          if (muteAuth === "master") {
+            recordMasterKeyWatch(null);
           }
 
           let body: unknown;
@@ -1437,13 +1461,24 @@ export function createHttpMcpServer(): HttpMcpServer {
             return;
           }
 
-          if (!isAuthorized(req)) {
+          const watchAuth = authenticate(req);
+          if (watchAuth === null) {
             res.setHeader("WWW-Authenticate", 'Bearer realm="trainbud"');
             sendJson(res, 401, {
               error: "Unauthorized",
               message: "Missing or invalid Authorization: Bearer token.",
             });
             return;
+          }
+
+          // Only a watch calls this route, so the master key arriving on it
+          // means a watch is still carrying the master key -- paired before
+          // 0.5.2, absent from `devices`, and unrevocable without rotating the
+          // key out from under the dashboard and every MCP client. That is
+          // otherwise invisible: there is no row to look at, and the old advice
+          // was to deduce it from `devices list` being empty.
+          if (watchAuth === "master") {
+            recordMasterKeyWatch(url.searchParams.get("build"));
           }
 
           // Which card the watch was showing. It rides along on a request the

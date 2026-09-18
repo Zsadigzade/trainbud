@@ -835,8 +835,13 @@ export function renderDashboard(publicUrl?: string): string {
         label.className = 'label';
         label.textContent = check.name;
         var state = document.createElement('span');
-        state.className = check.ok ? 'ok' : (check.warning ? 'warn' : 'err');
-        state.textContent = check.ok ? 'ok' : (check.warning ? 'warning' : 'failed');
+        // Warning first. Asking check.ok first meant a check that set BOTH --
+        // which is every warning the server produces -- drew as a plain tick
+        // reading "ok", and the warn class had never once been used. See
+        // checkState() in selfTest.ts; this is the same decision, client-side.
+        var st = check.warning ? 'warning' : (check.ok ? 'ok' : 'failed');
+        state.className = st === 'ok' ? 'ok' : (st === 'warning' ? 'warn' : 'err');
+        state.textContent = st;
         row.appendChild(label); row.appendChild(state); host.appendChild(row);
 
         var detail = document.createElement('p');

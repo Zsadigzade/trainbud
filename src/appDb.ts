@@ -289,6 +289,107 @@ export function revokeAllDeviceTokens(): number {
   return getDb().prepare("DELETE FROM device_tokens").run().changes;
 }
 
+// Watches still on the master key
+
+/**
+ * A watch paired before 0.5.2 carries `TRAINBUD_API_KEY` itself, not a token of
+ * its own, and there was no way to see that from inside the product. It has no
+ * `device_tokens` row, so `trainbud devices list` printed "No paired watches"
+ * while a watch on a wrist polled `/api/watch` every few seconds; `rotate
+ * api-key` could only tell the reader to infer it from that empty list. An
+ * absence stood in for a credential that cannot be revoked.
+ *
+ * So the master key's use ON A WATCH ROUTE is written down. Nothing else can
+ * produce it: the dashboard has a cookie, MCP clients call `/mcp`, and a device
+ * token is a different string with a different prefix.
+ *
+ * Two keys rather than one JSON blob, so a half-written value can never make
+ * the whole record unreadable.
+ */
+const MASTER_KEY_WATCH_SEEN = "master_key_watch.last_seen_at";
+const MASTER_KEY_WATCH_BUILD = "master_key_watch.build";
+
+/**
+ * How long after the last sighting the warning should stop.
+ *
+ * Re-pairing is the fix, and a re-paired watch simply stops sending the master
+ * key -- there is no event to catch and nothing to call `clearMasterKeyWatch`.
+ * The record therefore has to expire on its own, or the warning outlives the
+ * problem and teaches the reader to ignore it. A week is long enough to survive
+ * a watch left on the charger over a holiday.
+ */
+export const MASTER_KEY_WATCH_STALE_SECONDS = 7 * 24 * 60 * 60;
+
+export interface MasterKeyWatch {
+  last_seen_at: number;
+  build: string | null;
+}
+
+/**
+ * `build` arrives on a public query string and is printed back in a warning, so
+ * only a plain dotted version is kept. Anything else is dropped rather than
+ * echoed into a terminal.
+ */
+function cleanBuild(build: string | null | undefined): string | null {
+  if (!build) return null;
+  return /^\d+(\.\d+){0,3}$/.test(build) ? build : null;
+}
+
+/**
+ * Records that the master key was used by a watch, at most once a minute.
+ *
+ * The throttle is the one `touchDeviceToken` uses and exists for the same
+ * reason: the watch polls, and the column is never read more precisely than
+ * "today". A request that carries no build keeps whichever one is already
+ * stored -- `/api/mute` and `/api/ask` do not send one, and letting them blank
+ * the field would make the warning name a version or not depending on which
+ * endpoint the watch happened to call last.
+ */
+export function recordMasterKeyWatch(
+  build: string | null,
+  now = Math.floor(Date.now() / 1000)
+): void {
+  const previous = getSetting(MASTER_KEY_WATCH_SEEN);
+  const last = previous === null ? null : Number(previous);
+  const fresh = last !== null && Number.isFinite(last) && now - last < 60;
+
+  const cleaned = cleanBuild(build);
+  if (cleaned !== null && cleaned !== getSetting(MASTER_KEY_WATCH_BUILD)) {
+    // A version change is the one thing worth writing through the throttle: it
+    // means the watch was updated, and that is the fact the warning reports.
+    setSetting(MASTER_KEY_WATCH_BUILD, cleaned);
+  }
+
+  if (fresh) return;
+  setSetting(MASTER_KEY_WATCH_SEEN, String(now));
+}
+
+export function getMasterKeyWatch(): MasterKeyWatch | null {
+  const stored = getSetting(MASTER_KEY_WATCH_SEEN);
+  if (stored === null) return null;
+  const last = Number(stored);
+  if (!Number.isFinite(last)) return null;
+  return { last_seen_at: last, build: cleanBuild(getSetting(MASTER_KEY_WATCH_BUILD)) };
+}
+
+/**
+ * True while a watch is still turning up with the master key.
+ *
+ * This, not the bare record, is what a warning should ask: a sighting from last
+ * spring says the problem was fixed, not that it is live.
+ */
+export function isMasterKeyWatchActive(now = Math.floor(Date.now() / 1000)): boolean {
+  const seen = getMasterKeyWatch();
+  if (seen === null) return false;
+  return now - seen.last_seen_at < MASTER_KEY_WATCH_STALE_SECONDS;
+}
+
+/** Forgets the sighting. For tests, and for `devices revoke --all`. */
+export function clearMasterKeyWatch(): void {
+  deleteSetting(MASTER_KEY_WATCH_SEEN);
+  deleteSetting(MASTER_KEY_WATCH_BUILD);
+}
+
 // Prompt jobs
 
 /** Kept long enough to answer "what did it say earlier today", not forever. */

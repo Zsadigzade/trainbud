@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { probePublicUrl } from "../src/selfTest.js";
+import { checkState, probePublicUrl } from "../src/selfTest.js";
 
 // The reported bug, as a test.
 //
@@ -189,5 +189,40 @@ describe("what doctor says about the history it has", () => {
     assert.equal(line.ok, false);
     assert.match(line.detail, /14 are needed/);
     assert.doesNotMatch(line.detail, /stops at/);
+  });
+});
+
+// A check has three states and the drawing code could only ever produce two.
+// Both surfaces asked `ok` first: `check.ok ? "✓" : check.warning ? "!" : "✗"`
+// in the CLI and the same shape in the dashboard. Every warning runSelfTest
+// builds sets ok AND warning, so it drew as a plain tick reading "ok" -- the
+// `!` glyph and the dashboard's `warn` class were unreachable code.
+describe("which state a check is drawn in", () => {
+  it("draws a warning as a warning even though the check passed", () => {
+    // This is the shape every warning in this file actually has, including the
+    // pairing check that has shipped since 0.5.2.
+    assert.equal(checkState({ name: "Pairing", ok: true, warning: true, detail: "" }), "warning");
+  });
+
+  it("draws a warning as a warning when the check also failed", () => {
+    // Not enough history yet: `ok` is false because no detector can run, but
+    // waiting is the fix, and "✗ History depth" reads as something broken.
+    assert.equal(checkState({ name: "History depth", ok: false, warning: true, detail: "" }), "warning");
+  });
+
+  it("leaves a plain pass and a plain failure alone", () => {
+    assert.equal(checkState({ name: "Public URL", ok: true, detail: "" }), "ok");
+    assert.equal(checkState({ name: "Public URL", ok: false, detail: "" }), "failed");
+    assert.equal(checkState({ name: "Public URL", ok: true, warning: false, detail: "" }), "ok");
+  });
+
+  it("does not change what decides the exit code", () => {
+    // `ok` is still the field runSelfTest reduces over. A warning that passed
+    // must not start failing `trainbud doctor`.
+    const checks = [
+      { name: "a", ok: true, warning: true, detail: "" },
+      { name: "b", ok: true, detail: "" },
+    ];
+    assert.equal(checks.every((check) => check.ok), true);
   });
 });
