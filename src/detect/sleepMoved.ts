@@ -30,6 +30,38 @@ const MAX_NIGHT_AGE_DAYS = 2;
 
 const MAX_MOVERS = 3;
 
+/**
+ * How wide the watch line may be.
+ *
+ * A budget, not a guarantee: TrainBudView measures the real pixel width with
+ * getTextWidthInPixels before it joins two of these with " · ", so this only
+ * has to keep the common case from needing that fallback.
+ */
+const MAX_SHORT = 18;
+
+/**
+ * "Deep 40m (1h24m)", or "Sleep 12h35m" when the pair will not fit.
+ *
+ * This was `\`${label} ${value} (${usual})\`.slice(0, MAX_SHORT)`, and a cut
+ * string is not a shorter string. "Sleep 7h30m (8h05m)" is nineteen characters,
+ * so the most ordinary sleep line there is reached the wrist as
+ * "Sleep 7h30m (8h05m" -- one over budget, closing bracket gone. Every night
+ * where sleep duration moved and ran to hours and minutes drew that, which is
+ * most of them. The test that was supposed to cover this asked only that the
+ * result was at most eighteen characters, and the broken output was.
+ *
+ * Dropping the comparison loses something real, so it is the second choice. It
+ * is still the right one: the label and the measurement are the part the reader
+ * cannot reconstruct, and an unclosed bracket reads as a bug in the product.
+ */
+function shortLine(label: string, value: string, usual: string): string {
+  const full = `${label} ${value} (${usual})`;
+  if (full.length <= MAX_SHORT) return full;
+  // At most "Stress 100" or "Sleep 12h35m" -- twelve characters, so there is
+  // nothing left to truncate and nothing here ever needs to be.
+  return `${label} ${value}`;
+}
+
 interface Part {
   kind: MetricKind;
   label: string;
@@ -141,7 +173,7 @@ export function whatMovedLastNight(input: DetectorInput): SleepMoved {
       z: Math.round(z * 10) / 10,
       better,
       text: `${part.label} ${value}, ${higher ? "up" : "down"} from your usual ${usual}`,
-      short: `${part.label} ${part.compact(tonight.value)} (${part.compact(baseline.median)})`.slice(0, 18),
+      short: shortLine(part.label, part.compact(tonight.value), part.compact(baseline.median)),
     });
   }
 

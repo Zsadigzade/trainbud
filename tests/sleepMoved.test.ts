@@ -262,3 +262,67 @@ describe("what moved, on the surfaces that show it", () => {
     assert.match(text, /not an explanation of Garmin's score/);
   });
 });
+// The watch line was built with `.slice(0, 18)`, and a cut string is not a
+// shorter string. "Sleep 7h30m (8h05m)" is nineteen characters, so the most
+// ordinary sleep line there is arrived on the wrist as "Sleep 7h30m (8h05m" --
+// one character over, closing bracket gone. The existing test asked only that
+// the line was at most eighteen characters, which the broken output satisfied.
+describe("the short line the watch draws", () => {
+  function shortFor(lastNight: Partial<Record<MetricKind, number>>, kind: MetricKind): string {
+    const moved = whatMovedLastNight(input(usualWith(lastNight)));
+    const mover = moved.movers.find((m) => m.kind === kind);
+    assert.ok(mover, `no mover for ${kind}: got ${moved.movers.map((m) => m.kind).join(", ") || "none"}`);
+    return mover.short;
+  }
+
+  it("never ships an unbalanced bracket", () => {
+    // 7h30m against a usual of about 7h: the exact case that overflowed.
+    const short = shortFor({ sleep_seconds: 5 * 3600 }, "sleep_seconds");
+    assert.equal(
+      (short.match(/\(/g) ?? []).length,
+      (short.match(/\)/g) ?? []).length,
+      `unbalanced: "${short}"`
+    );
+    assert.ok(short.length <= 18, `too long: "${short}"`);
+  });
+
+  it("drops the usual rather than cutting into it", () => {
+    // A double-digit hour count on both sides is the widest this can get.
+    const short = shortFor({ sleep_seconds: 12 * 3600 + 35 * 60 }, "sleep_seconds");
+    assert.ok(short.startsWith("Sleep "), `lost the label: "${short}"`);
+    // Either the whole thing fits, or the parenthetical is gone entirely --
+    // never half of it.
+    assert.ok(
+      /^Sleep \S+$/.test(short) || /^Sleep \S+ \(\S+\)$/.test(short),
+      `neither whole nor bare: "${short}"`
+    );
+  });
+
+  it("keeps the usual whenever it fits", () => {
+    // Nothing here should have become terser than it was: the lines that were
+    // already inside the budget must still carry their comparison.
+    const short = shortFor({ sleep_stress: 33 }, "sleep_stress");
+    assert.match(short, /^Stress \d+ \(\d+\)$/);
+  });
+
+  it("holds for every part, not only the one that overflowed", () => {
+    const moved = whatMovedLastNight(
+      input(
+        usualWith({
+          sleep_seconds: 11 * 3600 + 45 * 60,
+          sleep_deep_seconds: 10 * 3600 + 24 * 60,
+          sleep_rem_seconds: 10 * 3600 + 2 * 60,
+        })
+      )
+    );
+    assert.ok(moved.movers.length > 0, "nothing moved");
+    for (const mover of moved.movers) {
+      assert.ok(mover.short.length <= 18, `too long: "${mover.short}"`);
+      assert.equal(
+        (mover.short.match(/\(/g) ?? []).length,
+        (mover.short.match(/\)/g) ?? []).length,
+        `unbalanced: "${mover.short}"`
+      );
+    }
+  });
+});
