@@ -79,9 +79,15 @@ if ($stale) {
     # denied"). That is a feature: the thing nobody can close by accident is also
     # the thing this script cannot casually kill.
     #
-    # It does not matter, because run-server.ps1 frees the port from INSIDE the
-    # task, where it has rights over its own session. Measured: a stale session-0
-    # listener was replaced cleanly on the next start.
+    # It USUALLY does not matter, because run-server.ps1 frees the port from
+    # INSIDE the task, where it has rights over its own session. Measured: a
+    # stale session-0 listener was replaced cleanly on the next start.
+    #
+    # It matters when the listener is ORPHANED -- outside the task's process
+    # tree, so Task Scheduler still counts it as a running instance and never
+    # runs the action again. run-server.ps1 is then never reached and cannot
+    # free anything. See the failure branch at the bottom, which detects that
+    # case by the port still belonging to the process we set out to replace.
     Write-Host "  PID $stale still holds port $port; the incoming instance will clear it"
     Stop-Process -Id $stale -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
@@ -112,7 +118,39 @@ while ((Get-Date) -lt $deadline) {
 $result = (Get-ScheduledTask -TaskName $TaskName | Get-ScheduledTaskInfo).LastTaskResult
 $hex = "{0:X}" -f $result
 $logPath = Join-Path $RepoRoot ".trainbud\logs\server.log"
+$finalPid = Get-PortOwnerPid -Port $port
+
 Write-Host "Did not come back within $TimeoutSeconds s. Last task result: $result (0x$hex)." -ForegroundColor Red
-Write-Host "  A result of 1 usually means the action exited immediately. Read the end of:"
-Write-Host "  $logPath"
+
+# Two different failures land here and they need opposite responses. Saying
+# only "did not come back" sent 2026-09-18 looking down the second path for a
+# while, because the log it names had nothing wrong in it -- there was nothing
+# in it at all from the new process, which was the actual evidence.
+if ($finalPid -and $finalPid -eq $previousPid) {
+    # THE ORPHANED LISTENER. The server is still up and serving on the old
+    # build; nothing is broken, and nothing started either. A node process that
+    # has outlived the cmd.exe the task launched is no longer inside the task's
+    # process tree, so Stop-ScheduledTask and `schtasks /end` both report
+    # SUCCESS without touching it -- and Task Scheduler goes on counting it as a
+    # running instance, which makes Start-ScheduledTask a no-op that also
+    # reports success. Three green calls, nothing run: the task's own action
+    # never executes, so run-server.ps1 never gets the chance to free the port
+    # from inside session 0 the way it normally does.
+    #
+    # Under S4U that process is in session 0, and an unelevated caller cannot
+    # end it. This is the one case that needs an elevated prompt.
+    Write-Host ""
+    Write-Host "  PID $finalPid still owns port $port -- the SAME process this script tried to replace." -ForegroundColor Yellow
+    Write-Host "  It is an orphaned listener: outside the task's process tree, so stopping the task"
+    Write-Host "  cannot reach it, and Task Scheduler still counts it as running -- which is why the"
+    Write-Host "  start above reported success and did nothing. The server is UP on the old build."
+    Write-Host ""
+    Write-Host "  It is in session 0 under S4U, so ending it needs elevation. In an ADMIN terminal:"
+    Write-Host "    Stop-Process -Id $finalPid -Force; Start-ScheduledTask -TaskName '$TaskName'"
+    Write-Host ""
+    Write-Host "  Then re-run this script to confirm a different PID owns the port."
+} else {
+    Write-Host "  A result of 1 usually means the action exited immediately. Read the end of:"
+    Write-Host "  $logPath"
+}
 exit 1
