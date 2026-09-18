@@ -61,6 +61,87 @@ function Get-TunnelService {
     return $null
 }
 
+function Get-TunnelReadyConnections {
+    <#
+        How many connections cloudflared holds open to Cloudflare's edge, read
+        from its own metrics endpoint, or $null when there is no such endpoint
+        (ngrok, or cloudflared started with metrics off).
+
+        cloudflared binds its metrics server to the first free port from 20241
+        to 20245, and /ready answers {"readyConnections": N}. It is the tunnel's
+        own account of whether it is connected, and -- unlike the public probe --
+        it does not depend on this machine being able to resolve or reach the
+        public hostname.
+    #>
+    foreach ($port in 20241..20245) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port/ready" -UseBasicParsing -TimeoutSec 3
+            $body = $response.Content | ConvertFrom-Json
+            if ($null -ne $body.readyConnections) { return [int]$body.readyConnections }
+        } catch {
+            # A 503 from /ready means the endpoint exists and the tunnel is not
+            # connected: that is an answer, zero, not an absence.
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 503) { return 0 }
+        }
+    }
+    return $null
+}
+
+function Get-LocalDnsAnswer([string]$Url) {
+    <# What this machine's resolver says the public hostname is, for the log. #>
+    try {
+        $hostName = ([Uri]$Url).Host
+        # No -Type: a sinkholing resolver answers with a CNAME to its sinkhole,
+        # and the name is the useful half of that evidence. But the reply also
+        # carries the authority section -- NS and SOA records for the zone --
+        # and against api.trainbud.site that is eighteen entries of Cloudflare
+        # nameservers wrapped around the four that answer the question. Keep the
+        # address and alias records only; the rest is the zone, not the answer.
+        $records = @(Resolve-DnsName -Name $hostName -ErrorAction SilentlyContinue |
+            Where-Object { $_.QueryType -in @("A", "AAAA", "CNAME") })
+
+        # Follow the CNAME chain out from the name we asked about, and keep only
+        # records on it. Filtering by record TYPE is not enough: the reply's
+        # additional section carries A records for the zone's own nameservers,
+        # which is how this line first printed sixteen Cloudflare addresses that
+        # said nothing about where api.trainbud.site resolves to.
+        $chain = @($hostName)
+        foreach ($pass in 1..8) {
+            $grew = $false
+            foreach ($record in $records) {
+                $names = $record.PSObject.Properties.Name
+                if ($names -contains "NameHost" -and $record.NameHost -and
+                    ($chain -contains $record.Name) -and -not ($chain -contains $record.NameHost)) {
+                    $chain += $record.NameHost
+                    $grew = $true
+                }
+            }
+            if (-not $grew) { break }
+        }
+
+        $answers = $records |
+            Where-Object { $chain -contains $_.Name } |
+            # StrictMode is on (trainbud-env.ps1): a CNAME record has no IPAddress
+            # property at all, and reading one throws rather than returning null.
+            ForEach-Object {
+                $names = $_.PSObject.Properties.Name
+                if ($names -contains "IPAddress" -and $_.IPAddress) { "$($_.Name) $($_.IPAddress)" }
+                elseif ($names -contains "NameHost" -and $_.NameHost) { "$($_.Name) -> $($_.NameHost)" }
+            } |
+            Where-Object { $_ }
+        if (-not $answers) { return "no answer" }
+        # A sinkhole is one or two records; a healthy CDN name is a handful. Past
+        # six the line stops being evidence and starts being a wall of addresses.
+        $unique = @($answers | Select-Object -Unique)
+        if ($unique.Count -gt 6) {
+            return (($unique | Select-Object -First 6) -join ", ") + ", +$($unique.Count - 6) more"
+        }
+        return $unique -join ", "
+    } catch {
+        return "no answer"
+    }
+}
+
 # --- the server half -------------------------------------------------------
 
 $localOk = Test-TrainBudLocalHealth -Port $Port
@@ -115,7 +196,18 @@ switch ($reach) {
         # server makes the tunnel serve its error page quite correctly.
         Write-Line "public $($reach.ToUpper())  $PublicUrl/health did not return TrainBud JSON"
 
-        if (-not $localOk) {
+        # Unreachable FROM HERE is not the same claim as unreachable. On
+        # 2026-09-14 a corporate VPN came up on this laptop and its resolver
+        # answered api.trainbud.site with a Palo Alto sinkhole; the probe failed
+        # every five minutes, and this script restarted a perfectly healthy
+        # tunnel 243 times in 29 hours -- each restart dropping every watch
+        # request for ten seconds. The tunnel's own metrics say whether it is
+        # connected to Cloudflare, and they do not go through this machine's DNS.
+        $ready = if ($reach -eq "unreachable" -and $localOk) { Get-TunnelReadyConnections } else { $null }
+        if ($null -ne $ready -and $ready -gt 0) {
+            Write-Line ("public UNVERIFIED  this machine cannot reach it (local DNS answers {0}), but the tunnel reports {1} ready connection(s) to Cloudflare. A local network or VPN block, not a dead tunnel. Not restarting." -f (Get-LocalDnsAnswer $PublicUrl), $ready)
+            $reach = "unverified"
+        } elseif (-not $localOk) {
             Write-Line "public HOLD  local is down too; fixing the server first, not restarting the tunnel"
         } elseif ($WhatIfOnly) {
             Write-Line "public SKIP  -WhatIfOnly, would have restarted the tunnel service"
@@ -138,5 +230,7 @@ switch ($reach) {
 # A non-zero exit is what makes this visible in Task Scheduler's Last Run
 # Result column, so a watchdog that keeps failing is legible without opening
 # the log.
-if (-not $localOk -or ($reach -ne "ok" -and -not $SkipPublic)) { exit 1 }
+# "unverified" is not a failure of this stack -- the tunnel says it is connected
+# and only this machine's network cannot confirm it from the outside.
+if (-not $localOk -or ($reach -ne "ok" -and $reach -ne "unverified" -and -not $SkipPublic)) { exit 1 }
 exit 0

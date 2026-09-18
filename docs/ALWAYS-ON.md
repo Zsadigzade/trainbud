@@ -290,6 +290,7 @@ commit to it:
 | Task shows `0x1` in Last Run Result | The server exited | `.trainbud/logs/server.log` |
 | A blank terminal tab appears | The task is **Interactive**, not S4U | Re-run the installer elevated; check `LogonType` and that `node` is in `SessionId 0` |
 | `0xC000013A` in Last Run Result | `STATUS_CONTROL_C_EXIT` — a console was closed under it, not a crash | Should be impossible under S4U; if you see it, the task reverted to Interactive |
+| Watchdog logs `public UNVERIFIED ... Not restarting`; `doctor` says the watch cannot reach the server | **This machine** cannot see the hostname — typically a corporate VPN whose resolver sinkholes it (`local DNS answers sinkhole...`). The tunnel itself reports ready connections to Cloudflare, so phones and watches outside that network are fine | Nothing to fix on the stack. Before 2026-09-15 the watchdog restarted the tunnel every five minutes in this state (243 times in 29 hours), dropping watch requests on each restart. To check from outside, use your phone off Wi-Fi |
 | Watchdog logs `no tunnel service installed` | The tunnel is running in a terminal, not as a service | Install it as a service (Section 1), or run the watchdog with `-SkipPublic` |
 | Everything green, watch still shows nothing | Widget URL points at the old hostname | Garmin Connect → widget settings. A sideloaded build has the host **baked in** at `ciq/resources-dev/settings/properties.xml` and needs a rebuild |
 
