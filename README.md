@@ -9,7 +9,7 @@ TrainBud is an open-source MCP server that connects your Garmin Connect fitness 
 [![npm](https://img.shields.io/npm/v/trainbud)](https://www.npmjs.com/package/trainbud)
 [![CI](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml/badge.svg)](https://github.com/Zsadigzade/trainbud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node 22+](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.nvmrc)
+[![Node 22.12+](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](.nvmrc)
 [![Trainbud MCP server — quality and maintenance score on Glama](https://img.shields.io/endpoint?url=https%3A%2F%2Fglama.ai%2Fmcp%2Fservers%2FZsadigzade%2Ftrainbud%2Fbadges%2Fshields.json)](https://glama.ai/mcp/servers/Zsadigzade/trainbud)
 
 [![Trainbud MCP server — license, quality, and maintenance card on Glama](https://glama.ai/mcp/servers/Zsadigzade/trainbud/badges/card.svg)](https://glama.ai/mcp/servers/Zsadigzade/trainbud)
@@ -50,7 +50,7 @@ npm install -g trainbud
 trainbud setup
 ```
 
-Needs Node 22+. Full walkthrough: [QUICKSTART.md](./QUICKSTART.md)
+Needs Node 22.12+. Full walkthrough: [QUICKSTART.md](./QUICKSTART.md)
 
 <details>
 <summary><b>From source</b> (for contributors, or to run an unreleased commit)</summary>
