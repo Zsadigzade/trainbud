@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] — server 0.9.0 · watch 2.1.0 — 2026-09-18
+
+**The watch app is unchanged at 2.1.0.** Everything here is server-side, which means
+the sleep-line fix below reaches a wrist without a store update.
+
+### Security — the credential you could not see, and a policy that now means something
+
+- **A watch still on the master key is named.** One paired before 0.5.2 carries
+  `TRAINBUD_API_KEY` itself and has no `device_tokens` row, so `trainbud devices list`
+  printed "No paired watches" while a watch synced every few seconds, `devices revoke
+  --all` reported everything revoked while that one kept working, and `rotate api-key`
+  could only tell you to deduce it from an empty list. The master key arriving on a
+  watch-only route is now recorded — after the auth check, throttled to once a minute —
+  and `devices list`, `doctor`, `revoke --all` and `rotate api-key` all say which case
+  you are in. The record expires a week after the last sighting, because a re-paired
+  watch simply stops using the key and there is no event to catch.
+- **`rotate api-key` forgets that watch**, instead of warning for a week about a
+  credential the rotation itself revoked.
+- **`script-src` no longer allows inline script.** It carries a fresh nonce per
+  response. The old allowance rested on inline event handlers that do not exist in
+  either page. `style-src` keeps `'unsafe-inline'` deliberately — inline `style`
+  attributes cannot be nonce-covered — and a test pins the difference.
+
+### Fixed
+
+- **The watch's sleep line lost its closing bracket.** `"Sleep 7h30m (8h05m)"` is
+  nineteen characters and was cut to eighteen, so the most ordinary sleep line there is
+  arrived as `"Sleep 7h30m (8h05m"`. The budget was never a hard limit — the watch
+  measures real pixel width — so the comparison is now dropped whole rather than cut
+  into: `"Sleep 12h35m"`.
+- **The `!` warning state could not be drawn.** Both the CLI and the dashboard tested
+  `ok` before `warning`, and every warning sets both, so warnings rendered as a plain
+  tick reading "ok". `ok` still decides the exit code.
+- **The watchdog restarted a healthy tunnel.** A VPN whose resolver sinkholes the
+  hostname made the public probe fail; it restarted the tunnel 243 times in 29 hours,
+  dropping watch requests each time. Unreachable *from here* is not unreachable: the
+  tunnel's own metrics are consulted, and a filter that serves a block page counts too.
+- **The watchdog could stop itself.** Reading a missing property under
+  `Set-StrictMode -Version Latest` throws rather than returning null, which ended the
+  script before it ever checked the tunnel.
+- **`restart-server.ps1` blamed the wrong thing** when an orphaned listener left the
+  task's process tree — stop and start both report success and run nothing. It now names
+  that state and prints the one elevated command that clears it.
+
+### Changed
+
+- `profile.timezone` **removed**. It was validated, defaulted, persisted and read by
+  nothing. Not a missing feature: every day boundary comes from `DateTime.local()`, and
+  that is what makes the day asked of Connect the day you lived. Existing profiles load
+  unchanged; the key is stripped.
+- `@anthropic-ai/sdk` 0.124 → 0.126, and three `hono` advisories cleared through the
+  lock file without touching the manifest. `npm audit` is clean.
+- Docs: the README advertised **Node 20+** in one place and 22 in another while
+  `engines` enforces **22.12**; a test now walks every stated floor in every document.
+
 ## [0.8.0] — server 0.8.0 · watch 2.1.0 — 2026-09-15
 
 ### Added — the rule behind every finding, and the bars moved into your hands
