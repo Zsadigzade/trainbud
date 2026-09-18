@@ -70,7 +70,11 @@ describe("everything agrees on which Node this needs", () => {
     // engines enforces (`>=22.12`), and the suite below requires the latter.
     // Pinning `${expected}-` here forbade the more precise of the two.
     assert.match(read("README.md"), new RegExp(`node-%3E%3D${expected}(?![0-9])`));
-    assert.match(read("QUICKSTART.md"), new RegExp(`Node[.]js ${expected} or newer`));
+    // Allows "22 or newer" or the exact floor "22.12 or newer"; the suite
+    // below requires the latter. The escapes are doubled because this is a
+    // template literal: a single `\.` in source is just `.` in the string, which
+    // would make this match "Node.js 22x12 or newer".
+    assert.match(read("QUICKSTART.md"), new RegExp(`Node[.]js ${expected}(\\.\\d+)? or newer`));
   });
 });
 
@@ -100,6 +104,39 @@ describe("the README states the floor npm actually enforces", () => {
       readme.includes(`Needs Node ${minor}+`),
       `README should say "Needs Node ${minor}+", the version npm enforces, not the bare major`
     );
+  });
+
+  // The README carried "**Works everywhere** — Windows, macOS, Linux (Node.js
+  // 20+)" straight through the commit whose stated purpose was to advertise the
+  // real floor. The badge was checked, the prose line beside it was not, and 20
+  // is the floor this project already established could not install at all. So
+  // check every stated floor in every document rather than the two strings
+  // somebody thought to pin.
+  it("names no floor below engines, in any document", () => {
+    const floor = enginesFloor().split(".").map(Number);
+    const files = ["README.md", "QUICKSTART.md", "docs/ALWAYS-ON.md", "docs/WEB-MCP.md", "docs/RELEASING.md"];
+    // Only forms that STATE A REQUIREMENT. Prose like "from Node 22 onward" or
+    // "22.0 through 22.11 installs nothing" describes rather than advertises.
+    const stated = /Node(?:\.js)? (\d+)(?:\.(\d+))?(?:\+| or newer)/g;
+
+    for (const file of files) {
+      let text: string;
+      try {
+        text = read(file);
+      } catch {
+        continue; // A document that does not exist cannot overclaim.
+      }
+      for (const match of text.matchAll(stated)) {
+        const stated_ = [Number(match[1]), Number(match[2] ?? 0)];
+        const below =
+          stated_[0]! < floor[0]! || (stated_[0] === floor[0] && stated_[1]! < floor[1]!);
+        assert.equal(
+          below,
+          false,
+          `${file} advertises "${match[0]}", below the ${enginesFloor()} engines enforces`
+        );
+      }
+    }
   });
 
   it("does not advertise a version npm would refuse", () => {

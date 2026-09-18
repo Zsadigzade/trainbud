@@ -29,7 +29,7 @@ See [examples/prompts.md](./examples/prompts.md) for more ideas.
 
 - **Private** — credentials stay in your local `.env`; data is cached on your machine
 - **Local-first** — SQLite cache, session tokens in `.trainbud/`
-- **Works everywhere** — Windows, macOS, Linux (Node.js 20+)
+- **Works everywhere** — Windows, macOS, Linux (Node.js 22.12+)
 - **Any MCP client** — Claude Desktop, Cursor, and other stdio-compatible clients
 - **Smart fetching** — batched API calls and automatic re-auth when sessions expire
 

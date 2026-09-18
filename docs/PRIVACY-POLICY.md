@@ -56,8 +56,8 @@ Everything in this section lives in `.trainbud/` on the machine running the serv
 of it is transmitted anywhere. There is no endpoint to send it to.
 
 - **Your fitness history** — `history.db`, the measurements the server has fetched from
-  Connect, so it can compare today against your own baseline rather than against a
-  population average
+  Connect, so it can compare today against your own recent baselines and show you the
+  rule it used
 - **Your profile** — name, units, primary sport, weekly goal, the thresholds at which a
   number turns amber or red, your watch card order, and your AI preferences. All of it is
   optional and all of it is set by you, in the dashboard
