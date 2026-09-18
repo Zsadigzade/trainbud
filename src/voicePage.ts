@@ -38,6 +38,7 @@ export interface VoicePageOptions {
   aiConfigured: boolean;
   /** The person's name, for the spoken summary. */
   name: string;
+  scriptNonce?: string;
 }
 
 function escapeHtml(value: string): string {
@@ -49,7 +50,9 @@ function escapeHtml(value: string): string {
 }
 
 export function renderVoicePage(options: VoicePageOptions): string {
-  const { transcriptionConfigured, aiConfigured, name } = options;
+  const { transcriptionConfigured, aiConfigured, name, scriptNonce } = options;
+  // Must match this response's own CSP nonce; see renderDashboard.
+  const nonceAttr = scriptNonce ? ` nonce="${scriptNonce}"` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -202,7 +205,7 @@ export function renderVoicePage(options: VoicePageOptions): string {
   </footer>
 </main>
 
-<script>
+<script${nonceAttr}>
 (function () {
   "use strict";
 

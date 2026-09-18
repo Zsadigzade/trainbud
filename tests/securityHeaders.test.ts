@@ -143,12 +143,83 @@ describe("security headers and device token auth", () => {
   });
 
   it("keeps the policy free of any remote origin", async () => {
-    // The dashboard is server-rendered with inline handlers, so 'unsafe-inline'
-    // is documented debt. A remote host in the policy would be something else:
-    // a page that can pull script or style from off the machine.
+    // A remote host in the policy would be a page that can pull script or style
+    // from off the machine.
     const csp = (await fetch(`${baseUrl}/health`)).headers.get("content-security-policy") ?? "";
 
     assert.match(csp, /default-src 'self'/);
     assert.doesNotMatch(csp, /https?:\/\//);
+  });
+
+  // 'unsafe-inline' on script-src was carried as documented debt on the grounds
+  // that "the dashboard is server-rendered HTML with one inline script and
+  // inline handlers, and a nonce-based policy is a rewrite of the page". Half of
+  // that was not true: there is not one inline event handler in either page, so
+  // the only thing the allowance ever covered was the single <script> block
+  // each of them carries -- exactly what a nonce is for.
+  describe("the script policy", () => {
+    it("names a nonce and does not allow inline script", async () => {
+      const csp = (await fetch(`${baseUrl}/health`)).headers.get("content-security-policy") ?? "";
+      const scriptSrc = csp.split(";").map((part) => part.trim()).find((part) => part.startsWith("script-src"));
+
+      assert.ok(scriptSrc, `no script-src in "${csp}"`);
+      assert.match(scriptSrc, /'nonce-[A-Za-z0-9+/=_-]{16,}'/);
+      assert.doesNotMatch(scriptSrc, /'unsafe-inline'/);
+      assert.doesNotMatch(scriptSrc, /'unsafe-eval'/);
+    });
+
+    it("issues a different nonce every response", async () => {
+      // A nonce reused across responses is a constant an attacker can read off
+      // one page and put in the next, which is the whole allowance back again.
+      const read = async (): Promise<string> => {
+        const csp = (await fetch(`${baseUrl}/health`)).headers.get("content-security-policy") ?? "";
+        return /'nonce-([^']+)'/.exec(csp)?.[1] ?? "";
+      };
+
+      const seen = new Set<string>();
+      for (let i = 0; i < 5; i += 1) seen.add(await read());
+
+      assert.equal(seen.size, 5, `repeated a nonce: ${[...seen].join(", ")}`);
+      assert.equal(seen.has(""), false, "a response carried no nonce");
+    });
+
+    it("keeps style-src permissive, and says so on purpose", async () => {
+      // The pages carry inline style attributes, which a nonce cannot cover --
+      // that needs 'unsafe-hashes' or moving every one into a class. script-src
+      // is the half that matters for script injection and the half being fixed;
+      // this pins the other half so the difference stays deliberate.
+      const csp = (await fetch(`${baseUrl}/health`)).headers.get("content-security-policy") ?? "";
+      const styleSrc = csp.split(";").map((part) => part.trim()).find((part) => part.startsWith("style-src"));
+
+      assert.ok(styleSrc);
+      assert.match(styleSrc, /'unsafe-inline'/);
+    });
+
+    it("gives the dashboard's own script tag the nonce from its response", async () => {
+      // The header and the page have to agree or the dashboard simply stops
+      // working, which is the failure mode a nonce introduces and the reason
+      // this is asserted against the real response rather than the renderer.
+      const response = await fetch(`${baseUrl}/dashboard?token=test-api-key-123`, {
+        redirect: "manual",
+      });
+      const nonce = /'nonce-([^']+)'/.exec(response.headers.get("content-security-policy") ?? "")?.[1];
+      assert.ok(nonce, "no nonce on the dashboard response");
+
+      // ?token= answers a 302 and a cookie; follow it with the cookie to get
+      // the page itself, and grade the page that a browser would actually run.
+      const cookie = response.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const page = await fetch(`${baseUrl}/dashboard`, { headers: { cookie } });
+      const pageNonce = /'nonce-([^']+)'/.exec(page.headers.get("content-security-policy") ?? "")?.[1];
+      const html = await page.text();
+
+      assert.ok(pageNonce, "no nonce on the dashboard page response");
+      assert.ok(
+        html.includes(`<script nonce="${pageNonce}">`),
+        `the page's script tag does not carry its own response's nonce`
+      );
+      // And nothing else may: a second script without one is script the browser
+      // will now refuse to run.
+      assert.equal((html.match(/<script/g) ?? []).length, (html.match(/<script nonce="/g) ?? []).length);
+    });
   });
 });

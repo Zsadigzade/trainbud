@@ -290,7 +290,16 @@ function money(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-export function renderDashboard(publicUrl?: string): string {
+/**
+ * `scriptNonce` has to match the nonce in this response's own
+ * Content-Security-Policy, or the browser refuses to run the page's script
+ * and the dashboard renders as static HTML with every control dead. It is
+ * optional only so the renderer stays callable from a test without standing
+ * up a server; a page rendered without one carries no nonce and is meant for
+ * inspection, not for serving.
+ */
+export function renderDashboard(publicUrl?: string, scriptNonce?: string): string {
+  const nonceAttr = scriptNonce ? ` nonce="${scriptNonce}"` : "";
   const data = getDashboardData(publicUrl);
   const serverUrl = data.public_url || `http://localhost:${appConfig.mcpPort}`;
   const tunnelConfigured = data.public_url.length > 0;
@@ -787,7 +796,7 @@ export function renderDashboard(publicUrl?: string): string {
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script>
+  <script${nonceAttr}>
     // The page is reached with ?token=..., and every endpoint accepts that same
     // value as a Bearer header. Held in memory so no link or form has to carry
     // it: the old redirect-after-save dropped it and landed on a 401.

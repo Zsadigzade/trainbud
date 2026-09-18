@@ -278,22 +278,38 @@ function sessionCookieHeader(req: IncomingMessage, id: string): string {
  * This server is reachable from the public internet whenever the tunnel the
  * watch needs is up, and it was sending no security headers at all.
  *
- * `script-src` has to keep `'unsafe-inline'`: the dashboard is server-rendered
- * HTML with one inline script and inline handlers, and a nonce-based policy is
- * a rewrite of the page, not a header change. What the policy still buys is
- * real -- no external script or style can load, the page cannot be framed, and
- * `form-action 'self'` stops a submission being retargeted.
+ * `script-src` carried `'unsafe-inline'` as documented debt, on the grounds
+ * that the dashboard is "server-rendered HTML with one inline script and inline
+ * handlers, and a nonce-based policy is a rewrite of the page". Half of that was
+ * never true. There is not one inline event handler in either page -- no
+ * `onclick`, no `onchange`, nothing; both attach every listener from script. So
+ * the only thing the allowance ever covered was the single `<script>` block each
+ * page carries, which is exactly what a nonce is for, and removing it cost a
+ * header and two attributes rather than a rewrite.
+ *
+ * `style-src` keeps `'unsafe-inline'`. The pages carry inline `style`
+ * attributes, and a nonce cannot cover those -- that needs `'unsafe-hashes'` or
+ * moving each one into a class. Injected CSS is a much smaller problem than
+ * injected script, so the two halves are deliberately not the same.
+ *
+ * Returns the nonce, because the page that is about to be rendered has to carry
+ * the same one or the browser refuses to run it.
  *
  * HSTS is conditional on purpose. It is sent only on a request that actually
  * arrived over TLS, because pinning https on a host someone later serves over
  * plain http locally is a self-inflicted outage.
  */
-function applySecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
+function applySecurityHeaders(req: IncomingMessage, res: ServerResponse): string {
+  // Fresh per response. A nonce reused across responses is a constant an
+  // attacker reads off one page and writes into the next, which is the
+  // allowance back again under a longer name.
+  const nonce = randomBytes(16).toString("base64");
+
   res.setHeader(
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'nonce-${nonce}'`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       "connect-src 'self'",
@@ -315,6 +331,8 @@ function applySecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
   if (proto === "https") {
     res.setHeader("Strict-Transport-Security", "max-age=31536000");
   }
+
+  return nonce;
 }
 
 /**
@@ -840,7 +858,7 @@ export function createHttpMcpServer(): HttpMcpServer {
       });
 
       const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-        applySecurityHeaders(req, res);
+        const cspNonce = applySecurityHeaders(req, res);
 
         // A Host that is not a valid authority is not worth a 500: fall back to
         // a name that always parses. The host only matters for reading the path
@@ -1065,6 +1083,7 @@ export function createHttpMcpServer(): HttpMcpServer {
               transcriptionConfigured: isTranscriptionConfigured(),
               aiConfigured: isAiConfigured(),
               name: getProfile().displayName ?? "",
+              scriptNonce: cspNonce,
             })
           );
           return;
@@ -1169,7 +1188,7 @@ export function createHttpMcpServer(): HttpMcpServer {
           }
 
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(renderDashboard(resolvePublicUrl(req)));
+          res.end(renderDashboard(resolvePublicUrl(req), cspNonce));
           return;
         }
 
