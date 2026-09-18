@@ -280,3 +280,40 @@ describe("detector rules", () => {
     assert.equal(buildDetectorInput().rules?.sleepDebt.hours, 1.5);
   });
 });
+// `timezone` sat in the profile schema from the beginning, was validated,
+// defaulted and persisted -- and was read by nothing. Not a missing feature: the
+// whole date pipeline is built on MACHINE-LOCAL day boundaries on purpose, and a
+// user-set override would misalign "today" from the date keys the history is
+// stored under. See the comment on toGarminDate in src/garmin/rawApi.ts, where
+// reading a local midnight in another zone once filed a day the user never lived.
+describe("the profile does not carry a timezone", () => {
+  it("has no timezone field to set", () => {
+    assert.equal("timezone" in profile.DEFAULT_PROFILE, false);
+  });
+
+  it("loads a profile saved when the field still existed, and drops it", () => {
+    // Every profile written before this change carries `"timezone": null`.
+    // Stripping it must be silent -- a throw here would take down every watch
+    // fetch, which is exactly what getProfile's salvage path exists to prevent.
+    appDb.setSetting(
+      "profile",
+      JSON.stringify({ ...profile.DEFAULT_PROFILE, timezone: "Asia/Baku", units: "imperial" })
+    );
+    profile.__resetProfileCacheForTests();
+
+    const loaded = profile.getProfile();
+    assert.equal("timezone" in loaded, false);
+    // The rest of that profile has to survive; dropping one key must not reset
+    // the others to defaults.
+    assert.equal(loaded.units, "imperial");
+  });
+
+  it("ignores an attempt to set one", () => {
+    const before = profile.getProfile();
+    profile.updateProfile({ timezone: "Europe/Prague" } as never);
+    const after = profile.getProfile();
+
+    assert.equal("timezone" in after, false);
+    assert.equal(after.units, before.units);
+  });
+});

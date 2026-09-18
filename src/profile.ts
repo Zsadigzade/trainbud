@@ -104,10 +104,25 @@ const detectorRulesSchema = z.object({
   }),
 });
 
+/**
+ * There is deliberately no `timezone` here.
+ *
+ * One sat in this schema from the beginning -- validated, defaulted, persisted,
+ * and read by nothing, in any surface, ever. Removing it rather than wiring it
+ * up is the decision, because it is not a missing feature: every day boundary in
+ * this product comes from `DateTime.local()`, and that is what makes the day
+ * asked of Connect the day the user actually lived. Reading one of those local
+ * midnights in another zone is precisely the bug documented on `toGarminDate` in
+ * `garmin/rawApi.ts` -- at UTC+4 it filed stress and VO2 max under the previous
+ * day, feeding a recovery score built from a day that never happened.
+ *
+ * A user-set zone would reopen that from the other end: `today` would move while
+ * the date keys the history is stored under would not, so "today" would miss
+ * them. Anyone adding one has to move the whole pipeline together, not a field.
+ */
 const profileSchema = z.object({
   displayName: z.string().max(60).nullable(),
   units: z.enum(["metric", "imperial"]),
-  timezone: z.string().max(64).nullable(),
   primarySport: z
     .enum(["running", "cycling", "swimming", "strength", "mixed"])
     .nullable(),
@@ -156,7 +171,6 @@ export type TrainBudProfile = z.infer<typeof profileSchema>;
 export const DEFAULT_PROFILE: TrainBudProfile = {
   displayName: null,
   units: "metric",
-  timezone: null,
   primarySport: null,
   weeklyGoal: { sessions: null, minutes: null },
   thresholds: {
