@@ -630,11 +630,12 @@ export function createCliProgram(): Command {
         const seen = new Date(legacy.last_seen_at * 1000).toISOString().slice(0, 16).replace("T", " ");
         const build = legacy.build ? ` build ${legacy.build}` : "";
         if (devices.length > 0) console.log("");
-        console.log(`  -  a watch on the MASTER KEY${build}  last seen ${seen}`);
-        console.log("     It was paired before 0.5.2, so it holds TRAINBUD_API_KEY itself.");
+        console.log(`  -  something on the MASTER KEY${build}  last seen ${seen}`);
+        console.log("     A watch paired before 0.5.2 holds TRAINBUD_API_KEY itself.");
         console.log("     It cannot be revoked from here, and `trainbud rotate api-key`");
         console.log("     will stop it working. Re-pair it from the watch's setup screen");
-        console.log("     and it becomes a row above, revocable on its own.");
+        console.log("     and it becomes a row above, revocable on its own. Your own");
+        console.log("     curl against /api/watch with the key looks the same from here.");
       }
     });
 

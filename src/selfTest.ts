@@ -331,9 +331,12 @@ export async function runSelfTest(
       ok: true,
       warning: true,
       detail:
-        `A watch${build} is syncing with the master API key, last seen ${when}. ` +
-        "It was paired before 0.5.2, so it is not in `trainbud devices list`, " +
-        "cannot be revoked on its own, and rotating the key will stop it working.",
+        `Something is syncing with the master API key${build}, last seen ${when}. ` +
+        "A watch paired before 0.5.2 does this: it is not in `trainbud devices " +
+        "list`, cannot be revoked on its own, and rotating the key will stop it " +
+        "working. If you have not paired one, a request you made yourself with " +
+        "the key against /api/watch looks identical from here and this clears " +
+        "itself a week after the last one.",
       fix: "Re-pair it from the watch's setup screen; it then carries a token of its own.",
     });
   }

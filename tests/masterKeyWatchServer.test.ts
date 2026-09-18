@@ -7,9 +7,15 @@ import type { HttpMcpServer } from "../src/httpServer.js";
 
 // masterKeyWatch.test.ts pins the record itself. This pins the wiring: that the
 // server notices the master key arriving on a watch route and writes it down,
-// and -- just as important -- that nothing else produces the same record. A
-// warning that fires for the dashboard or for an MCP client would be noise, and
-// the whole point is that the reader can trust it names a real watch.
+// and that the routes which are NOT watch routes do not.
+//
+// "Nothing else produces this record" would be too strong a claim, and an
+// earlier version of this comment made it while only covering /mcp. A person
+// holding the master key can curl /api/watch themselves -- both README and
+// docs/WEB-MCP.md document the endpoint -- and that is indistinguishable from a
+// watch here. Detection stays deliberately broad, because failing to notice a
+// real unrevocable credential is worse than a warning that expires in a week;
+// the CLI and doctor text say so rather than pretending otherwise.
 describe("recording a watch that syncs on the master key", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "trainbud-masterkey-http-"));
   const originalEnv = {

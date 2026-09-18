@@ -81,7 +81,20 @@ function Get-TunnelReadyConnections {
         } catch {
             # A 503 from /ready means the endpoint exists and the tunnel is not
             # connected: that is an answer, zero, not an absence.
-            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 503) { return 0 }
+            #
+            # StrictMode is on (trainbud-env.ps1), so `$_.Exception.Response` on
+            # an exception type that has no such property does not return null --
+            # it throws PropertyNotFoundException, out of the catch block, out of
+            # this function, and into $ErrorActionPreference = "Stop", which ends
+            # the watchdog before it ever checks the tunnel. Reachable whenever
+            # something other than cloudflared holds one of these ports and
+            # answers 200 with a body ConvertFrom-Json rejects: the parse throws
+            # a RuntimeException, which carries no Response. Same defensive shape
+            # as Get-LocalDnsAnswer below.
+            $exception = $_.Exception
+            if ($exception.PSObject.Properties.Name -contains "Response" -and $exception.Response) {
+                if ([int]$exception.Response.StatusCode -eq 503) { return 0 }
+            }
         }
     }
     return $null
@@ -203,9 +216,26 @@ switch ($reach) {
         # tunnel 243 times in 29 hours -- each restart dropping every watch
         # request for ten seconds. The tunnel's own metrics say whether it is
         # connected to Cloudflare, and they do not go through this machine's DNS.
-        $ready = if ($reach -eq "unreachable" -and $localOk) { Get-TunnelReadyConnections } else { $null }
+        #
+        # Both failing grades, not just "unreachable". A sinkhole that does not
+        # answer grades `unreachable`; a corporate filter that SERVES a block
+        # page grades `not_server`, which is the same false diagnosis from a
+        # different vendor. Gating this on `unreachable` alone let the second one
+        # walk straight back into the restart loop this exists to stop.
+        $ready = if ($localOk -and ($reach -eq "unreachable" -or $reach -eq "not_server")) {
+            Get-TunnelReadyConnections
+        } else {
+            $null
+        }
         if ($null -ne $ready -and $ready -gt 0) {
-            Write-Line ("public UNVERIFIED  this machine cannot reach it (local DNS answers {0}), but the tunnel reports {1} ready connection(s) to Cloudflare. A local network or VPN block, not a dead tunnel. Not restarting." -f (Get-LocalDnsAnswer $PublicUrl), $ready)
+            # Which of the two it was matters to whoever reads this line: a
+            # sinkhole shows in the DNS answer, a block page does not.
+            $how = if ($reach -eq "not_server") {
+                "something on this network answered for it, but not with TrainBud's JSON"
+            } else {
+                "this machine cannot reach it"
+            }
+            Write-Line ("public UNVERIFIED  {0} (local DNS answers {1}), but the tunnel reports {2} ready connection(s) to Cloudflare. A local network or VPN block, not a dead tunnel. Not restarting." -f $how, (Get-LocalDnsAnswer $PublicUrl), $ready)
             $reach = "unverified"
         } elseif (-not $localOk) {
             Write-Line "public HOLD  local is down too; fixing the server first, not restarting the tunnel"

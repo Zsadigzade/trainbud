@@ -8,6 +8,7 @@ import {
   setEnvValue,
 } from "./config.js";
 import {
+  clearMasterKeyWatch,
   deleteSetting,
   getMasterKeyWatch,
   getSetting,
@@ -121,6 +122,9 @@ export function rotateApiKey(explicitKey?: string): RotationOutcome {
   }
 
   const envPath = setEnvValue("TRAINBUD_API_KEY", next);
+
+  const watchLines = reportAndClearLegacyWatch();
+
   logger.info("TrainBud API key rotated");
 
   return {
@@ -140,22 +144,38 @@ export function rotateApiKey(explicitKey?: string): RotationOutcome {
       "     new key as the bearer token in each one.",
       "  3. Your dashboard bookmark carries the old token. Open it once with",
       "     ?token=<the new key> and it will set a fresh cookie.",
-      ...legacyWatchLines(),
+      ...watchLines,
     ],
   };
 }
 
 /**
- * What rotating just did to a watch that holds the master key.
+ * What rotating just did to a watch that holds the master key -- and then forget
+ * that watch.
  *
- * This used to be four fixed lines ending "anything missing from that list is
- * on the master key" -- an instruction to deduce a live credential from an
+ * The report used to be four fixed lines ending "anything missing from that list
+ * is on the master key", an instruction to deduce a live credential from an
  * empty list, printed identically whether or not such a watch existed. The
- * server now records the master key turning up on a watch route, so this can
- * report which case the reader is actually in.
+ * server now records the master key turning up on a watch route, so this reports
+ * which case the reader is actually in.
+ *
+ * Reading and clearing are one step on purpose, and in that order. The record
+ * means "a watch is authenticating with the master key", and the moment the key
+ * is replaced that is false by construction -- the key it was using no longer
+ * exists. Left standing it kept `doctor` and `devices list` warning for a week
+ * about a credential already revoked, and a second rotation inside that week
+ * announced "A WATCH JUST STOPPED WORKING" about a watch that stopped working
+ * the first time. If the watch re-pairs it gets a device token of its own; if
+ * someone types the new master key into it by hand, the next sync writes a fresh
+ * sighting and the warning comes back honestly.
+ *
+ * Exported for tests: rotateApiKey itself writes `.env` at a path fixed to the
+ * project root, so calling it from the suite would rewrite the developer's own
+ * file. This is the half worth pinning and it only touches app.db.
  */
-function legacyWatchLines(): string[] {
+export function reportAndClearLegacyWatch(): string[] {
   const seen = isMasterKeyWatchActive() ? getMasterKeyWatch() : null;
+  clearMasterKeyWatch();
   if (!seen) {
     return [
       "  4. No watch has used this key to sync in the last week, so nothing on a",

@@ -384,7 +384,15 @@ export function isMasterKeyWatchActive(now = Math.floor(Date.now() / 1000)): boo
   return now - seen.last_seen_at < MASTER_KEY_WATCH_STALE_SECONDS;
 }
 
-/** Forgets the sighting. For tests, and for `devices revoke --all`. */
+/**
+ * Forgets the sighting.
+ *
+ * Called by `rotate api-key`, where the record becomes false by construction --
+ * the key that watch was using no longer exists. NOT called by
+ * `devices revoke --all`, which this comment used to claim: revoking device
+ * tokens does nothing to a watch holding the master key, so clearing the record
+ * there would hide a credential that is still working.
+ */
 export function clearMasterKeyWatch(): void {
   deleteSetting(MASTER_KEY_WATCH_SEEN);
   deleteSetting(MASTER_KEY_WATCH_BUILD);
